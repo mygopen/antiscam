@@ -126,12 +126,11 @@
         const Eye = (p) => <IconBase {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>;
         const ArrowRight = (p) => <IconBase {...p}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></IconBase>;
         const ExternalLink = (p) => <IconBase {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></IconBase>;
+        const Shuffle = (p) => <IconBase {...p}><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></IconBase>;
         const UserX = (p) => <IconBase {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></IconBase>;
         const Flag = (p) => <IconBase {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>;
         const Layers = (p) => <IconBase {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></IconBase>;
         const Link = (p) => <IconBase {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></IconBase>;
-     // 放在 const Link = ... 的下面
-        const Shuffle = (p) => <IconBase {...p}><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></IconBase>;
         const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></IconBase>;
         const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
@@ -241,19 +240,7 @@
                 return null;
             }
         };
-// --- 新增：呼叫後端 Trace API (放在 checkTrancoRank 下面) ---
-        const checkUrlTrace = async (url) => {
-            try {
-                // 呼叫後端 API
-                const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
-                // 如果後端沒反應，回傳安全預設值，避免程式掛掉
-                if (!res.ok) return { isHighRisk: false, redirectCount: 0, chain: [] };
-                return await res.json();
-            } catch (e) {
-                console.error("Trace failed", e);
-                return { isHighRisk: false, redirectCount: 0, chain: [] };
-            }
-        };
+
 const fetchRDAPData = async (domain) => {
             try {
                 // 修改重點：直接呼叫我們自己的後端 API，路徑是相對的
@@ -455,8 +442,7 @@ const fetchRDAPData = async (domain) => {
             </svg>
         );
 
-
-const simulateScan = async (targetDomain, fullUrl) => {
+        const simulateScan = async (targetDomain, fullUrl) => {
             let resolvedIp = null;
             try {
                 const dnsRes = await fetch(`https://dns.google/resolve?name=${targetDomain}&type=A`);
@@ -469,11 +455,13 @@ const simulateScan = async (targetDomain, fullUrl) => {
             } catch(e) {}
 
             const domain = targetDomain.toLowerCase();
-            
-            // 定義清單
+            const randTraffic = getPseudoRandom(domain + 'traffic');
+            const randAge = getPseudoRandom(domain + 'age');
+
             const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
-            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
+            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn'];
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
+            const isSuspiciousTLD = domain.endsWith('.info');
             
             const whitelist = [
                 'google.com', 'facebook.com', 'yahoo.com', 'youtube.com', 'wikipedia.org', 
@@ -485,23 +473,68 @@ const simulateScan = async (targetDomain, fullUrl) => {
             ];
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
 
-            // --- 關鍵修改：加入 traceData ---
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
+            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 3500, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 3000, null),
                 withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
-                // 這裡加入轉址追蹤
-                withTimeout(checkUrlTrace(fullUrl), 5000, { isHighRisk: false, redirectCount: 0, chain: [] })
+                new Promise(resolve => setTimeout(resolve, 1500))
             ]);
 
             const rdapDate = rdapData.date;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
-            const isHighTraffic = trancoRank !== null || isWhitelisted || isTrustedTLD;
 
-            // --- 風險計分 ---
+            const isHighTraffic = trancoRank !== null || isWhitelisted || isTrustedTLD;
+            let trafficStatus = 'warning';
+            let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
+            
+            if (trancoRank) {
+                trafficStatus = 'safe';
+                trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
+            } else if (isWhitelisted || isTrustedTLD) {
+                trafficStatus = 'safe';
+                trafficDetails = '受信賴的台灣在地或政府教育網站';
+            }
+
+            // 2. 亂碼偵測 (Entropy)
+            const entropy = calculateEntropy(domain.split('.')[0]);
+            const isHighEntropy = entropy > 4.2; 
+
+            // 4. 轉址偵測 (Redirect Detection)
+            let isRedirected = false;
+            let finalDomain = '';
+            let isKnownShortener = false;
+            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm'];
+
+            if (siteStatusData.finalUrl) {
+                try {
+                    const finalUrlObj = new URL(siteStatusData.finalUrl);
+                    finalDomain = finalUrlObj.hostname.toLowerCase();
+                    const cleanDomain = domain.replace(/^www\./, '');
+                    const cleanFinalDomain = finalDomain.replace(/^www\./, '');
+
+                    if (cleanDomain !== cleanFinalDomain) {
+                        isRedirected = true;
+                        isKnownShortener = shorteners.some(s => cleanDomain.includes(s));
+                    }
+                } catch(e) {}
+            }
+
+            // 5. 註冊商信譽檢查 (High Risk Registrar Check)
+            const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
+            const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
+
+            // 6. 子網域深度檢查
+            const domainParts = domain.split('.').length;
+            const isDeepSubdomain = domainParts >= 5;
+
+            // 7. 敏感參數檢查 (Suspicious Parameters)
+            const suspiciousParamKeys = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='];
+            const hasSuspiciousParams = suspiciousParamKeys.some(key => fullUrl.toLowerCase().includes(key));
+
+            // 風險計分
             let riskScore = 0;
             if (blocklistListed) riskScore = 100; // 黑名單直接滿分
             else {
@@ -509,42 +542,43 @@ const simulateScan = async (targetDomain, fullUrl) => {
                 else if (siteStatusData.status === 'error') riskScore += 75;
                 else if (siteStatusData.status === 'unknown' && !isHighTraffic) riskScore += 40;
 
-                // --- 新增：轉址風險加分 ---
-                if (traceData.isHighRisk) {
-                    riskScore += 80; // 後端判定高風險 (迴圈或惡意轉址)
-                } else if (traceData.redirectCount >= 2 && !isHighTraffic) {
-                    riskScore += 30; // 轉址次數略多
-                }
-
                 if (isVeryHighRiskTLD) riskScore += 75;
-                else if (isSuspiciousTLD = domain.endsWith('.info')) riskScore += 30;
+                else if (isSuspiciousTLD) riskScore += 30;
                 
                 if (siteStatusData.hasIframe) riskScore += 15;
                 
-                // 參數風險
-                const suspiciousParamKeys = ['token=', 'session=', 'auth=', 'verify=', 'login='];
-                if (suspiciousParamKeys.some(key => fullUrl.toLowerCase().includes(key))) riskScore += 40;
+                if (isRedirected) {
+                    riskScore += 20;
+                    if (isKnownShortener) riskScore += 40; // 短網址高風險
+                }
 
-                // 隱私與註冊商
-                if (privacyDetected && !isHighTraffic) riskScore += 15;
-                const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
-                const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
-                if (isHighRiskRegistrar && !isHighTraffic) riskScore += 15;
+                if (privacyDetected && !isHighTraffic) {
+                     riskScore += 15;
+                }
 
-                // 雜項
-                const domainParts = domain.split('.').length;
-                if (domainParts >= 5 && !isHighTraffic) riskScore += 20;
+                // 註冊商風險加分
+                if (isHighRiskRegistrar && !isHighTraffic) {
+                    riskScore += 15;
+                }
+
+                // 子網域深度風險
+                if (isDeepSubdomain && !isHighTraffic) {
+                    riskScore += 20;
+                }
                 
-                const entropy = calculateEntropy(domain.split('.')[0]);
-                if (entropy > 4.2) riskScore += 20;
+                // 參數風險 (High Risk)
+                if (hasSuspiciousParams) {
+                     riskScore += 40;
+                }
                 
                 if (!isHighTraffic) riskScore += 15;
                 
-                // 流量保護 (如果是有名網站，但有惡意轉址，還是要警告)
                 if (isHighTraffic) {
-                    if (isVeryHighRiskTLD && !isWhitelisted) riskScore = 35;
-                    else if (traceData.isHighRisk) riskScore = 90; // 即使是知名網域，有惡意轉址也很怪
-                    else riskScore = 0;
+                    if (isVeryHighRiskTLD && !isWhitelisted) {
+                        riskScore = 35;
+                    } else {
+                        riskScore = 0;
+                    }
                 }
             }
 
@@ -562,14 +596,21 @@ const simulateScan = async (targetDomain, fullUrl) => {
                 ageDetails = `註冊日期: ${dateStr} (約 ${diffYears} 年前)`;
 
                 if (diffDays < 180) { 
-                    ageStatus = 'danger'; ageDetails += ' - 極新網域！'; riskScore += 20; 
+                    ageStatus = 'danger';
+                    ageDetails += ' - 極新網域！';
+                    riskScore += 20; 
                 } else if (diffDays < 365) { 
-                    ageStatus = 'warning'; ageDetails += ' - 網域較新';
+                    ageStatus = 'warning';
+                    ageDetails += ' - 網域較新';
                 } else {
                     ageStatus = 'safe';
                 }
             } else if (isHighTraffic) { 
-                ageStatus = 'safe'; ageDetails = '受信賴的長期網域'; 
+                ageStatus = 'safe'; 
+                ageDetails = '受信賴的長期網域 (歷史悠久)'; 
+            } else if (isVeryHighRiskTLD) { 
+                ageStatus = 'danger'; 
+                ageDetails = '高風險頂級網域 (無法取得日期)'; 
             }
 
             return {
@@ -582,20 +623,10 @@ const simulateScan = async (targetDomain, fullUrl) => {
                     siteStatus: siteStatusData
                 },
                 checks: {
-                    // --- 新增：將轉址結果放入 checks ---
-                    redirectTrace: {
-                        status: traceData.isHighRisk ? 'danger' : (traceData.redirectCount > 1 ? 'warning' : 'safe'),
-                        label: '轉址路徑分析',
-                        details: traceData.isHighRisk 
-                            ? `⚠️ ${traceData.riskReason}` 
-                            : (traceData.redirectCount > 0 
-                                ? `經過 ${traceData.redirectCount} 次跳轉，最終指向: ${new URL(traceData.finalUrl).hostname}` 
-                                : '直接連線 (無轉址)')
-                    },
                     traffic: {
-                        status: trafficStatus = (trancoRank || isWhitelisted) ? 'safe' : 'warning',
+                        status: trafficStatus,
                         label: 'Tranco 流量排名',
-                        details: trancoRank ? `全球排名第 ${trancoRank.toLocaleString()} 名` : '未進入全球熱門排名'
+                        details: trafficDetails
                     },
                     age: {
                         status: ageStatus,
@@ -606,37 +637,52 @@ const simulateScan = async (targetDomain, fullUrl) => {
                     registrar: {
                         status: isHighRiskRegistrar ? 'warning' : 'safe',
                         label: '註冊商信譽',
-                        details: registrarName ? registrarName : '無法辨識'
+                        details: registrarName 
+                            ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站 (統計數據)` : `註冊商: ${registrarName}`) 
+                            : '無法辨識註冊商'
                     },
                     whoisPrivacy: {
                         status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', 
                         label: 'WHOIS 身份隱藏',
-                        details: privacyDetected ? '已開啟隱私保護' : '資訊公開'
+                        details: privacyDetected 
+                            ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') 
+                            : '未偵測到隱私保護服務'
                     },
                     subdomain: {
-                        status: (domainParts >= 5) ? 'warning' : 'safe',
+                        status: isDeepSubdomain ? 'warning' : 'safe',
                         label: '子網域深度',
-                        details: (domainParts >= 5) ? '檢測到多層子網域' : '子網域層級正常'
+                        details: isDeepSubdomain 
+                            ? '檢測到多層子網域 (≥ 3層)，常見於釣魚網站規避偵測'
+                            : '子網域層級正常'
+                    },
+                    redirect: {
+                         status: isRedirected ? (isKnownShortener ? 'warning' : 'safe') : 'safe', 
+                         label: '轉址/短網址',
+                         details: isRedirected 
+                            ? `偵測到轉址至: ${finalDomain} ${isKnownShortener ? '(短網址服務)' : ''}` 
+                            : '未偵測到跨網域轉址',
+                         finalUrl: isRedirected ? siteStatusData.finalUrl : null
                     },
                     params: {
-                        status: (fullUrl.includes('token=') || fullUrl.includes('auth=')) ? 'danger' : 'safe',
+                        status: hasSuspiciousParams ? 'danger' : 'safe',
                         label: '網址參數檢查',
-                        details: (fullUrl.includes('token=') || fullUrl.includes('auth=')) ? '包含敏感參數' : '未發現敏感參數'
+                        details: hasSuspiciousParams 
+                            ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' 
+                            : '未發現敏感追蹤或認證參數'
                     },
                     entropy: {
-                        status: calculateEntropy(domain.split('.')[0]) > 4.2 ? 'warning' : 'safe',
+                        status: isHighEntropy ? 'warning' : 'safe',
                         label: '亂碼/隨機網址',
-                        details: calculateEntropy(domain.split('.')[0]) > 4.2 ? '網域名稱隨機度過高' : '結構正常'
+                        details: isHighEntropy ? '網域名稱隨機度過高，疑似機器生成' : '網域名稱結構正常'
                     },
                     iframe: {
                         status: siteStatusData.hasIframe ? 'warning' : 'safe',
                         label: 'Iframe 偽裝',
-                        details: siteStatusData.hasIframe ? '偵測到隱藏框架' : '未偵測到異常框架'
+                        details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架'
                     }
                 }
             };
         };
-
 
         const RiskMeter = ({ score }) => {
             let color = 'bg-green-500';
@@ -951,15 +997,10 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
 
                                                             // Icon mapping helper
                                                             const renderIcon = () => {
-                                                                // 找到 renderIcon 函式，在第一行加入這個：
-                                                                if (check.label === '轉址路徑分析') return <Shuffle size={20} className={check.status === 'danger' ? 'text-red-500' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
-            
-            // ... 下面接原本的 if (check.label === '註冊商信譽') ...
                                                                 if (check.label === '註冊商信譽') return <Flag size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
-
 
                                                                 // Default Icons
                                                                 return check.status === 'safe' ? 
