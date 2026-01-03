@@ -683,11 +683,13 @@
                             : '子網域層級正常'
                     },
                     redirect: {
-                         status: isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe'), 
+                         status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), 
                          label: '轉址/短網址',
-                         details: isRedirected 
-                            ? redirectDetails 
-                            : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址'),
+                         details: (traceData && traceData.redirectCount >= 3)
+                            ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`
+                            : (isRedirected 
+                                ? redirectDetails 
+                                : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')),
                          finalUrl: isRedirected ? siteStatusData.finalUrl : null
                     },
                     params: {
