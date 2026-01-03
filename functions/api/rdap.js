@@ -1,7 +1,7 @@
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
-  const domain = url.searchParams.get("domain");
+  let domain = url.searchParams.get("domain"); // 使用 let 以便修改
 
   if (!domain) {
     return new Response(JSON.stringify({ error: "Missing domain" }), {
@@ -10,7 +10,17 @@ export async function onRequest(context) {
     });
   }
 
-  // 使用 rdap.org 作為統一入口，它會自動幫我們轉址到正確的註冊局 (例如 Verisign, TWNIC)
+  // --- 關鍵修正開始 ---
+  // 1. 強制轉小寫 (避免大小寫混用造成查詢失敗)
+  domain = domain.toLowerCase();
+
+  // 2. 移除開頭的 www. (RDAP 通常只查根網域)
+  if (domain.startsWith("www.")) {
+    domain = domain.slice(4);
+  }
+  // --- 關鍵修正結束 ---
+
+  // 指向 RDAP 引導服務
   const targetUrl = `https://rdap.org/domain/${domain}`;
 
   try {
@@ -20,22 +30,26 @@ export async function onRequest(context) {
       }
     });
 
-    // 取得資料
+    if (!response.ok) {
+       // 如果查不到，嘗試回傳更清楚的錯誤
+       return new Response(JSON.stringify({ error: "Domain not found in RDAP", checkedDomain: domain }), {
+         status: 404,
+         headers: { "Content-Type": "application/json" }
+       });
+    }
+
     const data = await response.json();
 
-    // 直接回傳給前端 (因為是同源，不需要設定 CORS Header)
     return new Response(JSON.stringify(data), {
       headers: { 
         "Content-Type": "application/json",
-        // 設定快取 1 小時，避免重複查詢浪費資源
-        "Cache-Control": "public, max-age=3600" 
+        "Cache-Control": "public, max-age=3600"
       }
     });
 
   } catch (err) {
-    // 處理查不到或錯誤的情況
-    return new Response(JSON.stringify({ error: "Query failed", details: err.message }), {
-      status: 500, // 或是 404
+    return new Response(JSON.stringify({ error: "Server Error", details: err.message }), {
+      status: 500,
       headers: { "Content-Type": "application/json" }
     });
   }
