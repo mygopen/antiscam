@@ -6,16 +6,13 @@
     <title>詐騙網址幫你查 - 線上即時檢測工具</title>
     <meta name="description" content="輸入網址，快速檢查是否為詐騙網站、惡意連結或釣魚網頁。支援手機與電腦瀏覽。">
     
-    <!-- 載入核心函式庫 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 
-    <!-- 自定義配置 -->
     <script>
         tailwind.config = {
             theme: {
@@ -190,6 +187,7 @@
                 
                 let text = "";
                 let isBlank = false;
+                let hasIframe = false;
                 
                 if (data.contents) {
                     text = data.contents;
@@ -241,17 +239,13 @@
             }
         };
 
-const fetchRDAPData = async (domain) => {
+        const fetchRDAPData = async (domain) => {
             try {
-                // 修改重點：直接呼叫我們自己的後端 API，路徑是相對的
                 const apiUrl = `/api/rdap?domain=${domain}`;
-                
                 const res = await fetch(apiUrl);
                 if (!res.ok) return { date: null, privacyDetected: false, registrarName: null };
-                
                 const data = await res.json();
                 
-                // 以下解析邏輯保持不變
                 const events = data.events || [];
                 let regEvent = events.find(e => e.eventAction === 'registration') || events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
                 const date = (regEvent && regEvent.eventDate) ? regEvent.eventDate : null;
@@ -260,14 +254,12 @@ const fetchRDAPData = async (domain) => {
                 const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact'];
                 
                 let registrarName = null;
-                // 嘗試解析註冊商名稱
                 const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
                 if (registrarEntity && registrarEntity.vcardArray) {
                     const fnEntry = registrarEntity.vcardArray[1]?.find(item => item[0] === 'fn');
                     if (fnEntry) registrarName = fnEntry[3];
                 }
                 
-                // 遞迴檢查隱私保護關鍵字
                 const searchEntities = (entities) => {
                     if (!entities || !Array.isArray(entities)) return;
                     for (const entity of entities) {
@@ -297,6 +289,19 @@ const fetchRDAPData = async (domain) => {
             } catch (e) {
                 console.error("RDAP Error:", e);
                 return { date: null, privacyDetected: false, registrarName: null };
+            }
+        };
+
+        // --- New: Trace API Helper ---
+        const fetchTraceData = async (url) => {
+            try {
+                // 呼叫後端 trace 函式，處理轉址追蹤與短網址識別
+                const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (e) {
+                console.error("Trace API Error:", e);
+                return null;
             }
         };
 
@@ -333,14 +338,12 @@ const fetchRDAPData = async (domain) => {
             const [loading, setLoading] = useState(true);
             const [keyword, setKeyword] = useState(domain);
 
-            // Update keyword when domain changes
             useEffect(() => {
                 setKeyword(domain);
             }, [domain]);
 
             useEffect(() => {
                 const fetchPosts = async () => {
-                    // Fetch latest fraud articles via RSS feed proxy
                     const feedUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://www.mygopen.com/feeds/posts/default/-/詐騙?alt=json&max-results=3')}`;
                     try {
                         const res = await fetch(feedUrl);
@@ -374,7 +377,6 @@ const fetchRDAPData = async (domain) => {
                         建議可進一步查詢相關案例，檢視可能的詐騙手法。
                     </p>
 
-                    {/* Custom Search Keyword Input */}
                     <div className="mb-5">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">自訂搜尋關鍵字</label>
                         <div className="relative group">
@@ -395,7 +397,6 @@ const fetchRDAPData = async (domain) => {
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-3">
-                        {/* Action Button */}
                         <a 
                             href={`https://www.mygopen.com/search?q=${encodeURIComponent(keyword)}`}
                             target="_blank"
@@ -406,18 +407,16 @@ const fetchRDAPData = async (domain) => {
                             <span>在 MyGoPen 搜尋</span>
                         </a>
                         
-                        {/* Google Search Button */}
                          <a 
                             href={`https://www.google.com/search?q="${encodeURIComponent(keyword)}"+詐騙`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex-1 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
                         >
-                            <GoogleIcon size={18} /> {/* Using custom Google Icon */}
+                            <GoogleIcon size={18} />
                             <span>Google 搜尋</span>
                         </a>
 
-                        {/* New 165 Dashboard Button */}
                          <a 
                             href={`https://165dashboard.tw/key-word-search?keyWord=${encodeURIComponent(keyword)}&type=CityCase&typeArr=CityCase`}
                             target="_blank"
@@ -432,7 +431,6 @@ const fetchRDAPData = async (domain) => {
             );
         };
         
-        // Custom Google Icon for the button
         const GoogleIcon = (props) => (
             <svg viewBox="0 0 24 24" width={props.size || 24} height={props.size || 24} {...props}>
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -459,7 +457,7 @@ const fetchRDAPData = async (domain) => {
             const randAge = getPseudoRandom(domain + 'age');
 
             const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
-            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn'];
+            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal']; // Added .gal as suffix check too
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
             
@@ -473,13 +471,18 @@ const fetchRDAPData = async (domain) => {
             ];
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
 
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData] = await Promise.all([
+            // 更新短網址清單，補上 i.gal 和 trace.js 中的項目
+            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
+            const isInputShortener = shorteners.some(s => domain.includes(s));
+
+            // 平行呼叫 API，加入 Trace API (給它較長的 Timeout 避免後端處理過久被切斷)
+            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 3500, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 3000, null),
                 withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
-                new Promise(resolve => setTimeout(resolve, 1500))
+                withTimeout(fetchTraceData(fullUrl), 8000, null) // 呼叫後端追蹤 API
             ]);
 
             const rdapDate = rdapData.date;
@@ -498,15 +501,20 @@ const fetchRDAPData = async (domain) => {
                 trafficDetails = '受信賴的台灣在地或政府教育網站';
             }
 
-            // 2. 亂碼偵測 (Entropy)
             const entropy = calculateEntropy(domain.split('.')[0]);
             const isHighEntropy = entropy > 4.2; 
 
-            // 4. 轉址偵測 (Redirect Detection)
+            // 4. 轉址偵測 (Redirect Detection) - 整合 Trace API
             let isRedirected = false;
             let finalDomain = '';
             let isKnownShortener = false;
-            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm'];
+            let redirectDetails = '未偵測到跨網域轉址';
+            
+            // 優先使用 Trace API 的結果，因為後端追蹤更準確
+            if (traceData && traceData.finalUrl) {
+                // 如果後端有追蹤到最終網址，更新 siteStatusData (讓後面的邏輯也能吃到)
+                siteStatusData.finalUrl = traceData.finalUrl;
+            }
 
             if (siteStatusData.finalUrl) {
                 try {
@@ -518,11 +526,13 @@ const fetchRDAPData = async (domain) => {
                     if (cleanDomain !== cleanFinalDomain) {
                         isRedirected = true;
                         isKnownShortener = shorteners.some(s => cleanDomain.includes(s));
+                        redirectDetails = `偵測到轉址至: ${finalDomain}`;
+                        if (isKnownShortener) redirectDetails += ' (短網址服務)';
                     }
                 } catch(e) {}
             }
 
-            // 5. 註冊商信譽檢查 (High Risk Registrar Check)
+            // 5. 註冊商信譽檢查
             const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
             const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
 
@@ -530,49 +540,66 @@ const fetchRDAPData = async (domain) => {
             const domainParts = domain.split('.').length;
             const isDeepSubdomain = domainParts >= 5;
 
-            // 7. 敏感參數檢查 (Suspicious Parameters)
+            // 7. 敏感參數檢查
             const suspiciousParamKeys = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='];
             const hasSuspiciousParams = suspiciousParamKeys.some(key => fullUrl.toLowerCase().includes(key));
 
-            // 風險計分
+            // --- 風險計分 ---
             let riskScore = 0;
-            if (blocklistListed) riskScore = 100; // 黑名單直接滿分
+            if (blocklistListed) riskScore = 100;
             else {
+                // 基礎狀態檢查
                 if (siteStatusData.status === 'blank') riskScore += 95; 
                 else if (siteStatusData.status === 'error') riskScore += 75;
                 else if (siteStatusData.status === 'unknown' && !isHighTraffic) riskScore += 40;
 
+                // TLD 風險
                 if (isVeryHighRiskTLD) riskScore += 75;
                 else if (isSuspiciousTLD) riskScore += 30;
                 
+                // Iframe
                 if (siteStatusData.hasIframe) riskScore += 15;
                 
+                // 轉址風險
                 if (isRedirected) {
                     riskScore += 20;
-                    if (isKnownShortener) riskScore += 40; // 短網址高風險
+                    if (isKnownShortener) riskScore += 40;
                 }
 
+                // 輸入即為短網址風險 (修正：確保輸入 i.gal 等直接被判定高風險)
+                if (isInputShortener) {
+                    riskScore += 30;
+                }
+
+                // Trace API 特定風險判定 (修正：整合後端判定)
+                if (traceData && traceData.isHighRisk) {
+                    riskScore += 40;
+                    // 如果後端回傳理由，可以附加在報告中
+                }
+
+                // WHOIS 隱私
                 if (privacyDetected && !isHighTraffic) {
                      riskScore += 15;
                 }
 
-                // 註冊商風險加分
+                // 註冊商風險
                 if (isHighRiskRegistrar && !isHighTraffic) {
                     riskScore += 15;
                 }
 
-                // 子網域深度風險
+                // 子網域深度
                 if (isDeepSubdomain && !isHighTraffic) {
                     riskScore += 20;
                 }
                 
-                // 參數風險 (High Risk)
+                // 參數風險
                 if (hasSuspiciousParams) {
                      riskScore += 40;
                 }
                 
                 if (!isHighTraffic) riskScore += 15;
                 
+                // 流量加權調整
                 if (isHighTraffic) {
                     if (isVeryHighRiskTLD && !isWhitelisted) {
                         riskScore = 35;
@@ -656,11 +683,11 @@ const fetchRDAPData = async (domain) => {
                             : '子網域層級正常'
                     },
                     redirect: {
-                         status: isRedirected ? (isKnownShortener ? 'warning' : 'safe') : 'safe', 
+                         status: isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe'), 
                          label: '轉址/短網址',
                          details: isRedirected 
-                            ? `偵測到轉址至: ${finalDomain} ${isKnownShortener ? '(短網址服務)' : ''}` 
-                            : '未偵測到跨網域轉址',
+                            ? redirectDetails 
+                            : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址'),
                          finalUrl: isRedirected ? siteStatusData.finalUrl : null
                     },
                     params: {
@@ -778,7 +805,7 @@ const fetchRDAPData = async (domain) => {
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
                 if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間或字尾異常');
                 if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
-                if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.finalUrl ? '目標: ' + new URL(result.checks.redirect.finalUrl).hostname : '未知目標'})`);
+                if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
                 if (result.checks.whoisPrivacy.status !== 'safe') warnings.push('⚠️ WHOIS 身份已隱藏');
                 if (result.checks.registrar.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${result.checks.registrar.details.split(' ')[1]})`);
                 if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
@@ -836,7 +863,7 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                 <h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">詐騙網址幫你查</h1>
                             </div>
                             <div className="text-xs text-gray-400 font-medium hidden md:block">
-                                v2.0 AI 偵測引擎
+                                v2.1 AI 偵測引擎
                             </div>
                         </div>
                     </header>
@@ -971,9 +998,9 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                         <div className="mb-4 p-4 rounded-xl bg-orange-50 border border-orange-200 flex items-start gap-3">
                                                             <AlertTriangle className="text-orange-600 flex-shrink-0" size={24} />
                                                             <div>
-                                                                <h3 className="font-bold text-orange-800 text-base">⚠️ 發現轉址行為</h3>
+                                                                <h3 className="font-bold text-orange-800 text-base">⚠️ 發現轉址或異常</h3>
                                                                 <p className="text-sm text-orange-700 mt-1">
-                                                                    輸入的網址會跳轉至：<strong>{result.checks.redirect.finalUrl ? new URL(result.checks.redirect.finalUrl).hostname : '不明網址'}</strong>
+                                                                    {result.checks.redirect.details}
                                                                     <br/>跨網域轉址常見於隱藏真實目的地的惡意連結。
                                                                 </p>
                                                                 {/* External Tool Link */}
