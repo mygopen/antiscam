@@ -1,29 +1,21 @@
-// Helper: 自動提取主網域 (處理 .com vs .com.tw 的差異)
+// Helper: 自動提取主網域 (處理 .com.tw, .cn, .uk 等不同層級)
 function getRegisteredDomain(hostname) {
   const parts = hostname.split('.');
-  
-  // 如果只有兩段或更少，直接回傳 (例如 google.com, localhost)
   if (parts.length <= 2) return hostname;
 
-  // 定義常見的雙層後綴 (依需求可擴充)
-  // 遇到這些結尾時，我們要抓最後 3 段 (例如 yahoo.com.tw)
-  // 否則預設抓最後 2 段 (例如 antiscam.showcha.com -> showcha.com)
+  // 定義常見的雙層後綴
   const secondLevelTLDs = [
     "com.tw", "org.tw", "gov.tw", "edu.tw", "net.tw", 
     "co.uk", "org.uk", "gov.uk", 
     "co.jp", "ne.jp", "ac.jp", "go.jp",
     "com.hk", "org.hk",
-    "com.cn", "org.cn", "gov.cn"
+    "com.cn", "org.cn", "gov.cn", "net.cn", "ac.cn"
   ];
 
-  // 取得最後兩段組合起來檢查 (例如檢查 "com.tw")
   const lastTwo = parts.slice(-2).join('.');
-
   if (secondLevelTLDs.includes(lastTwo)) {
-    // 如果是 .com.tw 這種，保留最後 3 段
     return parts.slice(-3).join('.');
   } else {
-    // 一般情況 (.com, .xyz, .net)，保留最後 2 段
     return parts.slice(-2).join('.');
   }
 }
@@ -40,27 +32,60 @@ export async function onRequest(context) {
     });
   }
 
-  // 1. 轉小寫
+  // 1. 格式標準化
   domain = domain.toLowerCase();
+  
+  // 移除 www.
+  if (domain.startsWith("www.")) {
+    domain = domain.slice(4);
+  }
 
-  // 2. 智慧提取主網域 (徹底解決 www, antiscam, shop 等各種子網域問題)
+  // 2. 智慧提取主網域
   const rootDomain = getRegisteredDomain(domain);
 
-  // 指向 RDAP 引導服務
-  const targetUrl = `https://rdap.org/domain/${rootDomain}`;
+  // 3. 取得頂級域名後綴 (TLD)
+  const tld = rootDomain.split('.').pop();
+
+  // 4. 定義特定 TLD 的直連伺服器 (避開 rdap.org 的轉址問題)
+  // 尤其是 .cn, .tw 這些有時會有防火牆或轉址延遲的註冊局
+  const DIRECT_RDAP_SERVERS = {
+    "cn": "https://rdap.cnnic.cn/domain/",
+    "tw": "https://rdap.twnic.tw/rdap/domain/",
+    "jp": "https://rdap.jprs.jp/rdap/domain/",
+    "sg": "https://rdap.sgnic.sg/rdap/domain/"
+  };
+
+  // 決定最終查詢網址：如果有直連清單就用直連，否則用 rdap.org 引導
+  let targetUrl;
+  if (DIRECT_RDAP_SERVERS[tld]) {
+    targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
+  } else {
+    targetUrl = `https://rdap.org/domain/${rootDomain}`;
+  }
 
   try {
+    // 5. 發送請求 (偽裝成瀏覽器)
     const response = await fetch(targetUrl, {
       headers: {
-        "User-Agent": "AntiScam-Tool/2.0"
+        // 使用真實瀏覽器的 User-Agent，降低被 .cn 防火牆擋下的機率
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/rdap+json, application/json"
       }
     });
 
     if (!response.ok) {
+       // 如果直連失敗，針對 .cn 特別回傳說明，方便除錯
+       if (tld === 'cn' && response.status === 403) {
+           return new Response(JSON.stringify({ 
+             error: "Registry Blocked Cloudflare", 
+             details: "CNNIC firewall blocked the request. Please use manual check.",
+             manualCheck: `https://whois.cnnic.cn/`
+           }), { status: 403, headers: { "Content-Type": "application/json" }});
+       }
+
        return new Response(JSON.stringify({ 
-         error: "Domain not found in RDAP", 
-         checkedDomain: rootDomain,
-         originalInput: domain 
+         error: "Domain not found or Registry error", 
+         status: response.status 
        }), {
          status: 404,
          headers: { "Content-Type": "application/json" }
