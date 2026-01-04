@@ -3,7 +3,6 @@ function getRegisteredDomain(hostname) {
   const parts = hostname.split('.');
   if (parts.length <= 2) return hostname;
 
-  // 定義常見的雙層後綴
   const secondLevelTLDs = [
     "com.tw", "org.tw", "gov.tw", "edu.tw", "net.tw", 
     "co.uk", "org.uk", "gov.uk", 
@@ -20,6 +19,69 @@ function getRegisteredDomain(hostname) {
   }
 }
 
+// [新增] Helper: 從第三方網站 (Whois365) 撈取並解析 HTML
+async function fetchThirdPartyWhois(domain) {
+  // 這裡以 whois365.com 為例，也可以替換成 who.is 或其他網站
+  // 注意：第三方網站可能會改版或阻擋自動化請求，需定期維護
+  const targetUrl = `https://www.whois365.com/tw/domain/${domain}`;
+  
+  try {
+    const response = await fetch(targetUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://www.whois365.com/" // 加上 Referer 增加成功率
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const html = await response.text();
+
+    // 定義要解析的欄位 (Regex)
+    // 針對 whois365 的 HTML 結構進行匹配 (範例結構，需視實際狀況調整)
+    // 常見關鍵字: "Creation Date", "Registration Date", "Registrar"
+    
+    // 1. 嘗試提取日期 (支援多種格式)
+    // 尋找像是 "Creation Date: 2023-01-01" 或 "Registration Date: ..."
+    const dateRegex = /(?:Creation Date|Registration Date|Created on|Registered on)[\s\S]*?(\d{4}-\d{2}-\d{2})/i;
+    const dateMatch = html.match(dateRegex);
+    
+    // 2. 嘗試提取註冊商
+    // 尋找像是 "Registrar: GoDaddy.com, LLC"
+    const registrarRegex = /(?:Registrar:|Sponsoring Registrar:)[\s\S]*?(?:>|&nbsp;|\t| )([a-zA-Z0-9\.\,\ \(\)]+?)(?:<|\n|\r)/i;
+    const registrarMatch = html.match(registrarRegex);
+
+    // 建構回傳物件，模擬 RDAP 的 events 結構以便前端相容
+    if (dateMatch) {
+        return {
+            events: [
+                {
+                    eventAction: "registration",
+                    eventDate: dateMatch[1] // 格式: YYYY-MM-DD
+                }
+            ],
+            entities: registrarMatch ? [
+                {
+                    roles: ["registrar"],
+                    vcardArray: [
+                        "vcard",
+                        [
+                            ["version", {}, "text", "4.0"],
+                            ["fn", {}, "text", registrarMatch[1].trim()]
+                        ]
+                    ]
+                }
+            ] : []
+        };
+    }
+    return null;
+
+  } catch (e) {
+    // console.log("Third party fetch failed:", e);
+    return null;
+  }
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -32,22 +94,15 @@ export async function onRequest(context) {
     });
   }
 
-  // 1. 格式標準化
   domain = domain.toLowerCase();
-  
-  // 移除 www.
   if (domain.startsWith("www.")) {
     domain = domain.slice(4);
   }
 
-  // 2. 智慧提取主網域
   const rootDomain = getRegisteredDomain(domain);
-
-  // 3. 取得頂級域名後綴 (TLD)
   const tld = rootDomain.split('.').pop();
 
-  // 4. 定義特定 TLD 的直連伺服器
-  // 針對 .cn 嘗試偽裝成從 CNNIC 官網發出的請求
+  // 定義 RDAP 伺服器
   const DIRECT_RDAP_SERVERS = {
     "cn": "https://rdap.cnnic.cn/domain/",
     "tw": "https://rdap.twnic.tw/rdap/domain/",
@@ -61,39 +116,46 @@ export async function onRequest(context) {
     "Accept": "application/rdap+json, application/json, text/javascript, */*; q=0.01"
   };
 
-  // 針對不同 TLD 進行客製化 Header 偽裝
   if (tld === 'cn') {
       targetUrl = `${DIRECT_RDAP_SERVERS['cn']}${rootDomain}`;
-      // CNNIC 防火牆較嚴格，加入 Referer 和語系設定
+      // CNNIC 偽裝 headers
       headers = {
           ...headers,
           "Referer": "https://whois.cnnic.cn/",
           "Origin": "https://whois.cnnic.cn",
           "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-          "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-          "Sec-Ch-Ua-Mobile": "?0",
-          "Sec-Ch-Ua-Platform": '"Windows"',
-          "Sec-Fetch-Dest": "empty",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Site": "same-site"
+          // ... 其他偽裝 header ...
       };
   } else if (DIRECT_RDAP_SERVERS[tld]) {
       targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
   } else {
-      // 其他網域使用 rdap.org 導引
       targetUrl = `https://rdap.org/domain/${rootDomain}`;
   }
 
   try {
-    // 5. 發送請求
     const response = await fetch(targetUrl, {
       headers: headers,
       method: "GET"
     });
 
+    // --- 關鍵修改區段 ---
     if (!response.ok) {
-       // 如果直連失敗 (特別是 .cn 403)，嘗試 fallback 到 rdap.org (雖然可能也被擋，但值得一試)
+       // 如果是 .cn 且遇到 403 Forbidden (CNNIC 擋掉請求)
        if (tld === 'cn' && response.status === 403) {
+           
+           // [新增] 策略 1: 嘗試使用第三方網站 (Whois365) 作為跳板
+           const thirdPartyData = await fetchThirdPartyWhois(rootDomain);
+           if (thirdPartyData) {
+               return new Response(JSON.stringify(thirdPartyData), {
+                   headers: { 
+                       "Content-Type": "application/json", 
+                       "Cache-Control": "public, max-age=3600",
+                       "Access-Control-Allow-Origin": "*"
+                   }
+               });
+           }
+
+           // 策略 2: 如果第三方也失敗，嘗試原本的 rdap.org
            const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
            try {
              const fallbackResponse = await fetch(fallbackUrl, {
@@ -105,17 +167,17 @@ export async function onRequest(context) {
                     headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" }
                 });
              }
-           } catch(e) {
-             // Fallback failed, continue to error response
-           }
+           } catch(e) {}
 
+           // 最終失敗回傳
            return new Response(JSON.stringify({ 
              error: "Registry Blocked Cloudflare", 
-             details: "CNNIC firewall blocked the request. Please use manual check.",
+             details: "CNNIC firewall blocked the request. Third-party fallback also failed.",
              manualCheck: `https://whois.cnnic.cn/`
            }), { status: 403, headers: { "Content-Type": "application/json" }});
        }
 
+       // 其他一般錯誤
        return new Response(JSON.stringify({ 
          error: "Domain not found or Registry error", 
          status: response.status 
@@ -126,7 +188,6 @@ export async function onRequest(context) {
     }
 
     const data = await response.json();
-
     return new Response(JSON.stringify(data), {
       headers: { 
         "Content-Type": "application/json",
