@@ -131,7 +131,8 @@
         const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></IconBase>;
         const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
-        
+        const ShieldZap = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polygon points="13 10 13 6 8 13 11 13 11 18 16 11 13 11" /></IconBase>;
+
         // --- Logic Helpers ---
         const getPseudoRandom = (str) => {
             let hash = 0;
@@ -314,6 +315,18 @@
             }
         };
 
+        // --- IPQS API Helper ---
+        const fetchIPQSData = async (url) => {
+            try {
+                const res = await fetch(`/api/ipqs?url=${encodeURIComponent(url)}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (e) {
+                console.error("IPQS API Error:", e);
+                return null;
+            }
+        };
+
         const checkCommunityBlocklists = async (domain) => {
             try {
                 const sources = [
@@ -483,14 +496,15 @@
             const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
             const isInputShortener = shorteners.some(s => domain.includes(s));
 
-            // 平行呼叫 API (移除 IPQS)
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
+            // 平行呼叫 API
+            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData, ipqsData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 3500, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 3000, null),
                 withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
-                withTimeout(fetchTraceData(fullUrl), 8000, null)
+                withTimeout(fetchTraceData(fullUrl), 8000, null), 
+                withTimeout(fetchIPQSData(fullUrl), 5000, null)
             ]);
 
             const rdapDate = rdapData.date;
@@ -548,6 +562,9 @@
                 } catch(e) {}
             }
 
+            const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
+            const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
+
             const domainParts = domain.split('.').length;
             const isDeepSubdomain = domainParts >= 5;
 
@@ -562,10 +579,19 @@
             let riskScore = 0;
             if (blocklistListed) riskScore = 100;
             else {
-                // 基礎狀態檢查
-                if (siteStatusData.status === 'blank') riskScore += 95; 
-                else if (siteStatusData.status === 'error') riskScore += 75; // 404/403 等錯誤直接 +75
-                else if (siteStatusData.status === 'unknown' && !isHighTraffic) riskScore += 40;
+                // 基礎狀態檢查 - 強化網站可訪問性風險判定
+                // 網域如果[看不到內容]或[404 Not Found]或[空白]，設定為高風險
+                if (siteStatusData.status === 'blank') {
+                    riskScore += 95; 
+                } else if (siteStatusData.status === 'error') {
+                    riskScore += 80; // 提高分數，確保紅燈 (404/403)
+                } else if (siteStatusData.status === 'unknown') {
+                    if (!isHighTraffic) {
+                        riskScore += 75; // 提高分數，無法連線視為高風險 (原本40)
+                    } else {
+                        riskScore += 30; // 高流量網站例外 (可能是擋爬蟲)
+                    }
+                }
 
                 if (isVeryHighRiskTLD) riskScore += 75;
                 else if (isSuspiciousTLD) riskScore += 30;
@@ -585,8 +611,25 @@
                     riskScore += 40;
                 }
 
+                // IPQS
+                if (ipqsData) {
+                    if (ipqsData.unsafe || ipqsData.phishing || ipqsData.malware) {
+                         riskScore = Math.max(riskScore, 95); 
+                    } else if (ipqsData.risk_score >= 85) {
+                         riskScore = Math.max(riskScore, 90);
+                    } else if (ipqsData.risk_score >= 75) {
+                         riskScore += 40;
+                    } else if (ipqsData.suspicious) {
+                         riskScore += 25;
+                    }
+                }
+
                 if (privacyDetected && !isHighTraffic) {
                      riskScore += 15;
+                }
+
+                if (isHighRiskRegistrar && !isHighTraffic) {
+                    riskScore += 15;
                 }
 
                 if (isDeepSubdomain && !isHighTraffic) {
@@ -610,8 +653,8 @@
                 
                 // 高流量網站若發生 404/Error 則不應降低風險分數
                 if (isHighTraffic) {
-                    // 只有在網站狀態正常，才視為低風險
-                    if (siteStatusData.status === 'ok' && !isFakeGov) {
+                    // 只有在網站狀態正常且沒有被 IPQS 標記為不安全時，才視為低風險
+                    if (siteStatusData.status === 'ok' && !ipqsData?.unsafe && !isFakeGov) {
                         if (isVeryHighRiskTLD && !isWhitelisted) {
                             riskScore = 35;
                         } else {
@@ -652,6 +695,29 @@
                 ageDetails = '高風險特殊網域 (無法取得日期)'; 
             }
 
+            // IPQS Details
+            let ipqsStatus = 'safe';
+            let ipqsDetails = '未偵測到威脅情資';
+            
+            if (!ipqsData || ipqsData.error) {
+                ipqsStatus = 'safe';
+                ipqsDetails = '檢測未執行或 API 尚未設定';
+            } else {
+                if (ipqsData.unsafe) {
+                    ipqsStatus = 'danger';
+                    const threats = [];
+                    if (ipqsData.phishing) threats.push('釣魚');
+                    if (ipqsData.malware) threats.push('惡意軟體');
+                    if (ipqsData.spamming) threats.push('垃圾訊息');
+                    ipqsDetails = `高危險！IPQS 判定為不安全 (${threats.join('/') || '可疑活動'})`;
+                } else if (ipqsData.risk_score >= 75) {
+                    ipqsStatus = 'warning';
+                    ipqsDetails = `風險評分較高 (${ipqsData.risk_score}/100)，請提高警覺`;
+                } else {
+                    ipqsDetails = `IPQS 風險評分: ${ipqsData.risk_score} (安全)`;
+                }
+            }
+
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
@@ -662,12 +728,22 @@
                     siteStatus: siteStatusData
                 },
                 checks: {
+                    siteContent: {
+                        status: (siteStatusData.status === 'ok') ? 'safe' : 'danger',
+                        label: '網站內容狀態',
+                        details: siteStatusData.msg
+                    },
                     domainAnalysis: {
                         status: isFakeGov ? 'danger' : (isFreeHosting ? 'warning' : 'safe'),
                         label: '網域特徵分析',
                         details: isFakeGov 
                             ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' 
                             : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常')
+                    },
+                    ipqs: {
+                        status: ipqsStatus,
+                        label: 'IPQS 威脅情資',
+                        details: ipqsDetails
                     },
                     traffic: {
                         status: trafficStatus,
@@ -679,6 +755,13 @@
                         label: '註冊時間',
                         details: ageDetails,
                         link: `https://who.is/whois/${domain}`
+                    },
+                    registrar: {
+                        status: isHighRiskRegistrar ? 'warning' : 'safe',
+                        label: '註冊商信譽',
+                        details: registrarName 
+                            ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站 (統計數據)` : `註冊商: ${registrarName}`) 
+                            : '無法辨識註冊商'
                     },
                     whoisPrivacy: {
                         status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', 
@@ -813,6 +896,7 @@
                 const riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '🟡 中度風險' : '🟢 低度風險');
                 const warnings = [];
                 if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
+                if (result.checks.ipqs.status === 'danger') warnings.push('⚠️ IPQS 國際情資判定為不安全網站');
                 
                 // 新增特徵檢查
                 if (result.checks.domainAnalysis.status === 'danger') warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
@@ -831,6 +915,7 @@
                 if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
                 if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
                 if (result.checks.whoisPrivacy.status !== 'safe') warnings.push('⚠️ WHOIS 身份已隱藏');
+                if (result.checks.registrar.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${result.checks.registrar.details.split(' ')[1]})`);
                 if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
                 if (result.checks.params.status === 'danger') warnings.push('⚠️ 包含敏感參數 (token/auth/session)');
 
@@ -886,7 +971,7 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                 <h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">詐騙網址幫你查</h1>
                             </div>
                             <div className="text-xs text-gray-400 font-medium hidden md:block">
-                                v2.3 AI 偵測引擎
+                                v2.2.3 AI 偵測引擎
                             </div>
                         </div>
                     </header>
@@ -1016,6 +1101,19 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                         </div>
                                                     )}
 
+                                                    {/* IPQS Alert */}
+                                                    {result.checks.ipqs.status === 'danger' && (
+                                                        <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg mb-4">
+                                                            <div className="flex gap-3">
+                                                                <ShieldZap className="text-red-600 flex-shrink-0" size={24} />
+                                                                <div>
+                                                                    <p className="font-bold text-red-800">嚴重警告：IPQS 國際威脅情資</p>
+                                                                    <p className="text-sm text-red-700 mt-1">{result.checks.ipqs.details}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {/* Redirect Alert Card */}
                                                     {result.checks.redirect.status !== 'safe' && (
                                                         <div className="mb-4 p-4 rounded-xl bg-orange-50 border border-orange-200 flex items-start gap-3">
@@ -1047,6 +1145,9 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
 
                                                             // Icon mapping helper
                                                             const renderIcon = () => {
+                                                                if (check.label === '網站內容狀態') return <Layout size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
+                                                                if (check.label === 'IPQS 威脅情資') return <ShieldZap size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
+                                                                if (check.label === '註冊商信譽') return <Flag size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
