@@ -257,20 +257,56 @@
                 if (!res.ok) return { date: null, privacyDetected: false, registrarName: null };
                 const data = await res.json();
                 
+                // --- 增強日期提取邏輯 ---
                 const events = data.events || [];
-                let regEvent = events.find(e => e.eventAction === 'registration') || events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                let regEvent = 
+                    events.find(e => e.eventAction === 'registration') || 
+                    events.find(e => e.eventAction === 'created') ||  // 部分非標準欄位
+                    events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                
                 const date = (regEvent && regEvent.eventDate) ? regEvent.eventDate : null;
 
+                // --- 隱私保護偵測 ---
                 let privacyDetected = false;
-                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact'];
+                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
                 
+                // --- 增強註冊商提取邏輯 (Registrar) ---
                 let registrarName = null;
-                const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
-                if (registrarEntity && registrarEntity.vcardArray) {
-                    const fnEntry = registrarEntity.vcardArray[1]?.find(item => item[0] === 'fn');
-                    if (fnEntry) registrarName = fnEntry[3];
-                }
                 
+                // 1. 標準路徑: entities -> roles='registrar' -> vcard
+                const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
+                if (registrarEntity) {
+                    // 嘗試從 vcard 提取 Full Name (fn)
+                    if (registrarEntity.vcardArray && registrarEntity.vcardArray.length > 1) {
+                         const fnEntry = registrarEntity.vcardArray[1]?.find(item => item[0] === 'fn');
+                         if (fnEntry) registrarName = fnEntry[3];
+                    }
+                    // 如果沒有 vcard，嘗試使用 handle 或 name 屬性 (部分 RDAP 實作)
+                    if (!registrarName && registrarEntity.handle) {
+                        registrarName = registrarEntity.handle;
+                    }
+                    if (!registrarName && registrarEntity.name) {
+                        registrarName = registrarEntity.name;
+                    }
+                }
+
+                // 2. 如果標準路徑找不到，遞迴搜尋所有 entities 尋找可能的註冊商名稱
+                if (!registrarName && data.entities) {
+                     // 某些 .cn RDAP 可能結構較扁平或使用非標準 role
+                     const potentialRegistrars = data.entities.filter(e => !e.roles || !e.roles.includes('registrant'));
+                     for (const ent of potentialRegistrars) {
+                         if (ent.vcardArray) {
+                             const fnEntry = ent.vcardArray[1]?.find(item => item[0] === 'fn');
+                             // 排除隱私保護服務的名稱
+                             if (fnEntry && !privacyKeywords.some(kw => fnEntry[3].includes(kw))) {
+                                 registrarName = fnEntry[3];
+                                 break;
+                             }
+                         }
+                     }
+                }
+
+                // --- 隱私偵測遍歷 ---
                 const searchEntities = (entities) => {
                     if (!entities || !Array.isArray(entities)) return;
                     for (const entity of entities) {

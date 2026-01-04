@@ -46,8 +46,8 @@ export async function onRequest(context) {
   // 3. 取得頂級域名後綴 (TLD)
   const tld = rootDomain.split('.').pop();
 
-  // 4. 定義特定 TLD 的直連伺服器 (避開 rdap.org 的轉址問題)
-  // 尤其是 .cn, .tw 這些有時會有防火牆或轉址延遲的註冊局
+  // 4. 定義特定 TLD 的直連伺服器
+  // 針對 .cn 嘗試偽裝成從 CNNIC 官網發出的請求
   const DIRECT_RDAP_SERVERS = {
     "cn": "https://rdap.cnnic.cn/domain/",
     "tw": "https://rdap.twnic.tw/rdap/domain/",
@@ -55,27 +55,60 @@ export async function onRequest(context) {
     "sg": "https://rdap.sgnic.sg/rdap/domain/"
   };
 
-  // 決定最終查詢網址：如果有直連清單就用直連，否則用 rdap.org 引導
   let targetUrl;
-  if (DIRECT_RDAP_SERVERS[tld]) {
-    targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
+  let headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/rdap+json, application/json, text/javascript, */*; q=0.01"
+  };
+
+  // 針對不同 TLD 進行客製化 Header 偽裝
+  if (tld === 'cn') {
+      targetUrl = `${DIRECT_RDAP_SERVERS['cn']}${rootDomain}`;
+      // CNNIC 防火牆較嚴格，加入 Referer 和語系設定
+      headers = {
+          ...headers,
+          "Referer": "https://whois.cnnic.cn/",
+          "Origin": "https://whois.cnnic.cn",
+          "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+          "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+          "Sec-Ch-Ua-Mobile": "?0",
+          "Sec-Ch-Ua-Platform": '"Windows"',
+          "Sec-Fetch-Dest": "empty",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Site": "same-site"
+      };
+  } else if (DIRECT_RDAP_SERVERS[tld]) {
+      targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
   } else {
-    targetUrl = `https://rdap.org/domain/${rootDomain}`;
+      // 其他網域使用 rdap.org 導引
+      targetUrl = `https://rdap.org/domain/${rootDomain}`;
   }
 
   try {
-    // 5. 發送請求 (偽裝成瀏覽器)
+    // 5. 發送請求
     const response = await fetch(targetUrl, {
-      headers: {
-        // 使用真實瀏覽器的 User-Agent，降低被 .cn 防火牆擋下的機率
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/rdap+json, application/json"
-      }
+      headers: headers,
+      method: "GET"
     });
 
     if (!response.ok) {
-       // 如果直連失敗，針對 .cn 特別回傳說明，方便除錯
+       // 如果直連失敗 (特別是 .cn 403)，嘗試 fallback 到 rdap.org (雖然可能也被擋，但值得一試)
        if (tld === 'cn' && response.status === 403) {
+           const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
+           try {
+             const fallbackResponse = await fetch(fallbackUrl, {
+                headers: { "User-Agent": headers["User-Agent"] }
+             });
+             if (fallbackResponse.ok) {
+                const data = await fallbackResponse.json();
+                return new Response(JSON.stringify(data), {
+                    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" }
+                });
+             }
+           } catch(e) {
+             // Fallback failed, continue to error response
+           }
+
            return new Response(JSON.stringify({ 
              error: "Registry Blocked Cloudflare", 
              details: "CNNIC firewall blocked the request. Please use manual check.",
@@ -97,7 +130,8 @@ export async function onRequest(context) {
     return new Response(JSON.stringify(data), {
       headers: { 
         "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=3600"
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*" 
       }
     });
 
