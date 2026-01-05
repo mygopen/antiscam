@@ -180,12 +180,39 @@ export async function onRequest(context) {
 
     // --- 錯誤處理與重試邏輯 ---
     if (!response.ok) {
-       // [修正] 全面開放備援機制：移除 TLD 限制
-       // 只要官方 RDAP 回傳 403 (Forbidden), 404 (Not Found), 500 (Server Error)
-       // 就嘗試使用第三方 Whois365 查詢。這能解決 .online, .xyz 等新頂級域名的問題。
+       
+       // [方案二：Proxy 優先策略] 
+       // 當官方伺服器回傳錯誤 (403/404/500) 時，先嘗試透過 Proxy 訪問 rdap.org
+       // 這可以繞過 Cloudflare IP 被 .online 等註冊局封鎖的問題
+       const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://rdap.org/domain/${rootDomain}`)}`;
+       
+       try {
+           const proxyRes = await fetch(proxyUrl, {
+               headers: { "User-Agent": "Mozilla/5.0 (Compatible; AntiScamBot/1.0)" }
+           });
+           
+           if (proxyRes.ok) {
+               const data = await proxyRes.json();
+               // 簡單檢查回應是否包含 RDAP 特徵欄位，避免 Proxy 回傳錯誤頁面 HTML
+               if (data.events || data.handle || data.entities) {
+                   return new Response(JSON.stringify(data), {
+                       headers: { 
+                           "Content-Type": "application/json",
+                           "Cache-Control": "public, max-age=3600",
+                           "Access-Control-Allow-Origin": "*"
+                       }
+                   });
+               }
+           }
+       } catch(e) {
+           // Proxy 失敗，靜默處理，繼續執行下方的 Whois365 備援
+           // console.log("Proxy fallback failed", e);
+       }
+
+       // [備援策略：爬蟲] 若 Proxy 也失敗，嘗試爬取 Whois365 HTML
+       // 只要狀態碼為 403 (Forbidden), 404 (Not Found), 500 (Server Error)
        if (response.status === 403 || response.status === 404 || response.status === 500) {
            
-           // 策略 1: Whois365
            const thirdPartyData = await fetchThirdPartyWhois(rootDomain);
            if (thirdPartyData) {
                return new Response(JSON.stringify(thirdPartyData), {
@@ -197,7 +224,7 @@ export async function onRequest(context) {
                });
            }
 
-           // 策略 2: rdap.org (針對 .cn 的額外備援)
+           // 針對 .cn 的特殊二次備援 (若上方 Proxy 沒過，這裡再試一次直連 rdap.org)
            if (tld === 'cn') {
                 const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
                 try {
@@ -213,7 +240,7 @@ export async function onRequest(context) {
                 } catch(e) {}
            }
 
-           // 若都失敗，回傳原本的錯誤或客製化錯誤訊息
+           // 若都失敗，回傳錯誤
            if (tld === 'cn' && response.status === 403) {
                return new Response(JSON.stringify({ 
                  error: "Registry Blocked Cloudflare", 
@@ -224,7 +251,6 @@ export async function onRequest(context) {
        }
 
        // 如果是使用 IANA 網址失敗 (例如 404 或 500)，且上面 Whois365 也沒抓到
-       // 可以再給一次 rdap.org 的機會 (通用型備援)
        if (!targetUrl.includes("rdap.org")) {
            try {
                const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
