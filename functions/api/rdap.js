@@ -180,9 +180,10 @@ export async function onRequest(context) {
 
     // --- 錯誤處理與重試邏輯 ---
     if (!response.ok) {
-       // [修正] 針對 .cn 與 .tw 執行備援策略
-       // 若狀態碼為 403 (Forbidden), 404 (Not Found), 500 (Server Error) 皆嘗試切換
-       if ((tld === 'cn' || tld === 'tw') && (response.status === 403 || response.status === 404 || response.status === 500)) {
+       // [修正] 全面開放備援機制：移除 TLD 限制
+       // 只要官方 RDAP 回傳 403 (Forbidden), 404 (Not Found), 500 (Server Error)
+       // 就嘗試使用第三方 Whois365 查詢。這能解決 .online, .xyz 等新頂級域名的問題。
+       if (response.status === 403 || response.status === 404 || response.status === 500) {
            
            // 策略 1: Whois365
            const thirdPartyData = await fetchThirdPartyWhois(rootDomain);
@@ -196,7 +197,7 @@ export async function onRequest(context) {
                });
            }
 
-           // 策略 2: rdap.org (針對 .cn 的額外備援，對 .tw 效果有限但無害)
+           // 策略 2: rdap.org (針對 .cn 的額外備援)
            if (tld === 'cn') {
                 const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
                 try {
@@ -222,8 +223,8 @@ export async function onRequest(context) {
            }
        }
 
-       // 如果是使用 IANA 網址失敗 (例如 404 或 500)，可以再給一次 rdap.org 的機會
-       // 因為有些註冊局的 RDAP 實作不標準，rdap.org 可能有做相容性處理
+       // 如果是使用 IANA 網址失敗 (例如 404 或 500)，且上面 Whois365 也沒抓到
+       // 可以再給一次 rdap.org 的機會 (通用型備援)
        if (!targetUrl.includes("rdap.org")) {
            try {
                const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
