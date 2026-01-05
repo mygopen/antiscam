@@ -19,45 +19,73 @@ function getRegisteredDomain(hostname) {
   }
 }
 
-// [新增] Helper: 從第三方網站 (Whois365) 撈取並解析 HTML
+// [新增] IANA RDAP 資料快取 (避免每次 Request 都重新抓取 IANA JSON)
+let ianaCache = {
+  data: null,
+  timestamp: 0
+};
+
+// [新增] Helper: 從 IANA 取得權威 RDAP 伺服器
+async function fetchIanaRdapServer(tld) {
+  const CACHE_TTL = 3600 * 1000; // 快取 1 小時
+  const now = Date.now();
+
+  // 如果沒有快取或快取過期，重新抓取
+  if (!ianaCache.data || (now - ianaCache.timestamp > CACHE_TTL)) {
+    try {
+      const res = await fetch("https://data.iana.org/rdap/dns.json");
+      if (res.ok) {
+        ianaCache.data = await res.json();
+        ianaCache.timestamp = now;
+      }
+    } catch (e) {
+      // console.error("Failed to fetch IANA data", e);
+      // 失敗時若有舊資料則繼續使用，否則回傳 null
+      if (!ianaCache.data) return null;
+    }
+  }
+
+  // 從 services 陣列中尋找對應的 TLD
+  // IANA 結構: services: [ [ ["com", "net"], ["https://rdap.verisign.com/..."] ], ... ]
+  const services = ianaCache.data.services || [];
+  for (const [tlds, urls] of services) {
+    if (tlds.includes(tld)) {
+      return urls[0]; // 回傳第一個可用的權威伺服器 URL
+    }
+  }
+  return null;
+}
+
+// Helper: 從第三方網站 (Whois365) 撈取並解析 HTML
 async function fetchThirdPartyWhois(domain) {
-  // 這裡以 whois365.com 為例，也可以替換成 who.is 或其他網站
-  // 注意：第三方網站可能會改版或阻擋自動化請求，需定期維護
   const targetUrl = `https://www.whois365.com/tw/domain/${domain}`;
   
   try {
     const response = await fetch(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Referer": "https://www.whois365.com/" // 加上 Referer 增加成功率
+        "Referer": "https://www.whois365.com/"
       }
     });
 
     if (!response.ok) return null;
 
     const html = await response.text();
-
-    // 定義要解析的欄位 (Regex)
-    // 針對 whois365 的 HTML 結構進行匹配 (範例結構，需視實際狀況調整)
-    // 常見關鍵字: "Creation Date", "Registration Date", "Registrar"
     
-    // 1. 嘗試提取日期 (支援多種格式)
-    // 尋找像是 "Creation Date: 2023-01-01" 或 "Registration Date: ..."
+    // 1. 嘗試提取日期
     const dateRegex = /(?:Creation Date|Registration Date|Created on|Registered on)[\s\S]*?(\d{4}-\d{2}-\d{2})/i;
     const dateMatch = html.match(dateRegex);
     
     // 2. 嘗試提取註冊商
-    // 尋找像是 "Registrar: GoDaddy.com, LLC"
     const registrarRegex = /(?:Registrar:|Sponsoring Registrar:)[\s\S]*?(?:>|&nbsp;|\t| )([a-zA-Z0-9\.\,\ \(\)]+?)(?:<|\n|\r)/i;
     const registrarMatch = html.match(registrarRegex);
 
-    // 建構回傳物件，模擬 RDAP 的 events 結構以便前端相容
     if (dateMatch) {
         return {
             events: [
                 {
                     eventAction: "registration",
-                    eventDate: dateMatch[1] // 格式: YYYY-MM-DD
+                    eventDate: dateMatch[1]
                 }
             ],
             entities: registrarMatch ? [
@@ -77,7 +105,6 @@ async function fetchThirdPartyWhois(domain) {
     return null;
 
   } catch (e) {
-    // console.log("Third party fetch failed:", e);
     return null;
   }
 }
@@ -102,7 +129,7 @@ export async function onRequest(context) {
   const rootDomain = getRegisteredDomain(domain);
   const tld = rootDomain.split('.').pop();
 
-  // 定義 RDAP 伺服器
+  // 定義 RDAP 伺服器 (您原本的手動清單，保留做為快速通道或特殊處理)
   const DIRECT_RDAP_SERVERS = {
     "cn": "https://rdap.cnnic.cn/domain/",
     "tw": "https://rdap.twnic.tw/rdap/domain/",
@@ -116,20 +143,33 @@ export async function onRequest(context) {
     "Accept": "application/rdap+json, application/json, text/javascript, */*; q=0.01"
   };
 
+  // --- 決定查詢網址 ---
   if (tld === 'cn') {
+      // .cn 特殊處理 (保留原本的 Anti-blocking 邏輯)
       targetUrl = `${DIRECT_RDAP_SERVERS['cn']}${rootDomain}`;
-      // CNNIC 偽裝 headers
       headers = {
           ...headers,
           "Referer": "https://whois.cnnic.cn/",
           "Origin": "https://whois.cnnic.cn",
           "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-          // ... 其他偽裝 header ...
       };
   } else if (DIRECT_RDAP_SERVERS[tld]) {
+      // 命中手動清單
       targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
   } else {
-      targetUrl = `https://rdap.org/domain/${rootDomain}`;
+      // [新增] 嘗試從 IANA 獲取權威伺服器
+      const ianaServer = await fetchIanaRdapServer(tld);
+      
+      if (ianaServer) {
+          // IANA 回傳的 URL 通常結尾有 slash (e.g., https://rdap.verisign.com/com/v1/)
+          // 需串接 domain/{rootDomain}
+          // 為了安全起見，處理一下 slash 避免雙重斜線
+          const baseUrl = ianaServer.endsWith('/') ? ianaServer : ianaServer + '/';
+          targetUrl = `${baseUrl}domain/${rootDomain}`;
+      } else {
+          // 最終保底：使用 rdap.org
+          targetUrl = `https://rdap.org/domain/${rootDomain}`;
+      }
   }
 
   try {
@@ -138,12 +178,11 @@ export async function onRequest(context) {
       method: "GET"
     });
 
-    // --- 關鍵修改區段 ---
+    // --- 錯誤處理與重試邏輯 ---
     if (!response.ok) {
-       // 如果是 .cn 且遇到 403 Forbidden (CNNIC 擋掉請求)
+       // 如果是 .cn 且被擋 (403)，執行原本的備援策略
        if (tld === 'cn' && response.status === 403) {
-           
-           // [新增] 策略 1: 嘗試使用第三方網站 (Whois365) 作為跳板
+           // 策略 1: Whois365
            const thirdPartyData = await fetchThirdPartyWhois(rootDomain);
            if (thirdPartyData) {
                return new Response(JSON.stringify(thirdPartyData), {
@@ -155,7 +194,7 @@ export async function onRequest(context) {
                });
            }
 
-           // 策略 2: 如果第三方也失敗，嘗試原本的 rdap.org
+           // 策略 2: rdap.org (雖然前面可能已經試過了，但對 .cn 這是備援)
            const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
            try {
              const fallbackResponse = await fetch(fallbackUrl, {
@@ -169,7 +208,6 @@ export async function onRequest(context) {
              }
            } catch(e) {}
 
-           // 最終失敗回傳
            return new Response(JSON.stringify({ 
              error: "Registry Blocked Cloudflare", 
              details: "CNNIC firewall blocked the request. Third-party fallback also failed.",
@@ -177,7 +215,25 @@ export async function onRequest(context) {
            }), { status: 403, headers: { "Content-Type": "application/json" }});
        }
 
-       // 其他一般錯誤
+       // 如果是使用 IANA 網址失敗 (例如 404 或 500)，可以再給一次 rdap.org 的機會
+       // 因為有些註冊局的 RDAP 實作不標準，rdap.org 可能有做相容性處理
+       if (!targetUrl.includes("rdap.org")) {
+           try {
+               const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
+               const fallbackRes = await fetch(fallbackUrl, { headers });
+               if (fallbackRes.ok) {
+                   const data = await fallbackRes.json();
+                   return new Response(JSON.stringify(data), {
+                       headers: { 
+                           "Content-Type": "application/json",
+                           "Cache-Control": "public, max-age=3600",
+                           "Access-Control-Allow-Origin": "*"
+                       }
+                   });
+               }
+           } catch(e) {}
+       }
+
        return new Response(JSON.stringify({ 
          error: "Domain not found or Registry error", 
          status: response.status 
