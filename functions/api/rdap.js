@@ -180,8 +180,10 @@ export async function onRequest(context) {
 
     // --- 錯誤處理與重試邏輯 ---
     if (!response.ok) {
-       // 如果是 .cn 且被擋 (403)，執行原本的備援策略
-       if (tld === 'cn' && response.status === 403) {
+       // [修正] 針對 .cn 與 .tw 執行備援策略
+       // 若狀態碼為 403 (Forbidden), 404 (Not Found), 500 (Server Error) 皆嘗試切換
+       if ((tld === 'cn' || tld === 'tw') && (response.status === 403 || response.status === 404 || response.status === 500)) {
+           
            // 策略 1: Whois365
            const thirdPartyData = await fetchThirdPartyWhois(rootDomain);
            if (thirdPartyData) {
@@ -194,25 +196,30 @@ export async function onRequest(context) {
                });
            }
 
-           // 策略 2: rdap.org (雖然前面可能已經試過了，但對 .cn 這是備援)
-           const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
-           try {
-             const fallbackResponse = await fetch(fallbackUrl, {
-                headers: { "User-Agent": headers["User-Agent"] }
-             });
-             if (fallbackResponse.ok) {
-                const data = await fallbackResponse.json();
-                return new Response(JSON.stringify(data), {
-                    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" }
-                });
-             }
-           } catch(e) {}
+           // 策略 2: rdap.org (針對 .cn 的額外備援，對 .tw 效果有限但無害)
+           if (tld === 'cn') {
+                const fallbackUrl = `https://rdap.org/domain/${rootDomain}`;
+                try {
+                    const fallbackResponse = await fetch(fallbackUrl, {
+                        headers: { "User-Agent": headers["User-Agent"] }
+                    });
+                    if (fallbackResponse.ok) {
+                        const data = await fallbackResponse.json();
+                        return new Response(JSON.stringify(data), {
+                            headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" }
+                        });
+                    }
+                } catch(e) {}
+           }
 
-           return new Response(JSON.stringify({ 
-             error: "Registry Blocked Cloudflare", 
-             details: "CNNIC firewall blocked the request. Third-party fallback also failed.",
-             manualCheck: `https://whois.cnnic.cn/`
-           }), { status: 403, headers: { "Content-Type": "application/json" }});
+           // 若都失敗，回傳原本的錯誤或客製化錯誤訊息
+           if (tld === 'cn' && response.status === 403) {
+               return new Response(JSON.stringify({ 
+                 error: "Registry Blocked Cloudflare", 
+                 details: "CNNIC firewall blocked the request. Third-party fallback also failed.",
+                 manualCheck: `https://whois.cnnic.cn/`
+               }), { status: 403, headers: { "Content-Type": "application/json" }});
+           }
        }
 
        // 如果是使用 IANA 網址失敗 (例如 404 或 500)，可以再給一次 rdap.org 的機會
