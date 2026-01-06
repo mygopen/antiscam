@@ -513,7 +513,8 @@
                 'microsoft.com', 'apple.com', 'netflix.com', 'twitch.tv', 'tiktok.com',
                 'espn.com', 'nba.com', 'cnn.com', 'bbc.com', 'nytimes.com', 'bloomberg.com',
                 'adobe.com', 'dropbox.com', 'paypal.com', 'ebay.com', 'reddit.com',
-                'shopee.tw', 'momo.com.tw', 'pchome.com.tw', 'mygopen.com', 'gov.tw', 'edu.tw'
+                'shopee.tw', 'momo.com.tw', 'pchome.com.tw', 'mygopen.com', 'gov.tw', 'edu.tw',
+                'tfc-taiwan.org.tw', 'antiscam.showcha.com' // 新增白名單
             ];
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
 
@@ -523,7 +524,8 @@
             // 平行呼叫 API
             const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
-                isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 3500, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
+                // 將超時時間從 3500 改為 5000
+                isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 5000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 3000, null),
                 withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
@@ -612,7 +614,7 @@
                     if (!isHighTraffic) {
                         riskScore += 75; // 提高分數，無法連線視為高風險 (原本40)
                     } else {
-                        riskScore += 30; // 高流量網站例外 (可能是擋爬蟲)
+                        riskScore += 20; // [修改] 高流量網站例外 (可能是擋爬蟲) - 降低至 20
                     }
                 }
 
