@@ -44,9 +44,10 @@ function getWhoisServer(tld) {
 function parseDateFromText(text) {
     const regexes = [
         // 標準格式 YYYY-MM-DD
-        /(?:Creation Date|Registration Date|Created on|Registered on|Record created on|Domain Name Commencement Date):?\s*(\d{4}-\d{2}-\d{2})/i,
+        // [修正] 新增 "Registration Time" (針對 .cn) 與 "Creation Time"
+        /(?:Creation Date|Registration Date|Registration Time|Creation Time|Created on|Registered on|Record created on|Domain Name Commencement Date):?\s*(\d{4}-\d{2}-\d{2})/i,
         // 支援斜線 YYYY/MM/DD (常見於亞洲網域)
-        /(?:Creation Date|Registration Date|Created on|Registered on|Record created on):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
+        /(?:Creation Date|Registration Date|Registration Time|Created on|Registered on|Record created on):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
         // 支援點號 YYYY.MM.DD
         /(?:Creation Date|Registration Date|Created on|Registered on):?\s*(\d{4})\.(\d{2})\.(\d{2})/i,
         // 中文格式
