@@ -597,7 +597,7 @@ const whitelist = [
             const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
 
             const domainParts = domain.split('.').length;
-            const isDeepSubdomain = domainParts >= 5;
+            const isDeepSubdomain = domainParts >= 4; // 修正為 4 層
 
             const suspiciousParamKeys = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='];
             const hasSuspiciousParams = suspiciousParamKeys.some(key => fullUrl.toLowerCase().includes(key));
@@ -651,7 +651,7 @@ const whitelist = [
                 }
 
                 if (isDeepSubdomain && !isHighTraffic) {
-                    riskScore += 20;
+                    riskScore += 60; // 提高懲罰，多層子網域 (>=4) 且非受信賴網域視為高風險
                 }
                 
                 if (hasSuspiciousParams) {
@@ -767,10 +767,10 @@ const whitelist = [
                             : '未偵測到隱私保護服務'
                     },
                     subdomain: {
-                        status: isDeepSubdomain ? 'warning' : 'safe',
+                        status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe',
                         label: '子網域深度',
                         details: isDeepSubdomain 
-                            ? '檢測到多層子網域 (≥ 3層)，常見於釣魚網站規避偵測'
+                            ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 4層結構)，常見於詐騙連結偽裝')
                             : '子網域層級正常'
                     },
                     redirect: {
@@ -917,7 +917,8 @@ const whitelist = [
                 if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
                 if (result.checks.whoisPrivacy.status !== 'safe') warnings.push('⚠️ WHOIS 身份已隱藏');
                 if (result.checks.registrar.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${result.checks.registrar.details.split(' ')[1]})`);
-                if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
+                if (result.checks.subdomain.status === 'danger') warnings.push('⚠️ 子網域層級過深 (≥ 4層)，極高風險');
+                else if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
                 if (result.checks.params.status === 'danger') warnings.push('⚠️ 包含敏感參數 (token/auth/session)');
 
                 const report = `【幫你查好囉！網址檢測結果】
