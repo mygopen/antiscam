@@ -507,7 +507,7 @@
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
             
-            const whitelist = [
+const whitelist = [
                 'google.com', 'facebook.com', 'yahoo.com', 'youtube.com', 'wikipedia.org', 
                 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'amazon.com', 
                 'microsoft.com', 'apple.com', 'netflix.com', 'twitch.tv', 'tiktok.com',
@@ -515,7 +515,8 @@
                 'adobe.com', 'dropbox.com', 'paypal.com', 'ebay.com', 'reddit.com',
                 'shopee.tw', 'momo.com.tw', 'pchome.com.tw', 'mygopen.com', 'gov.tw', 'edu.tw',
                 'tfc-taiwan.org.tw', 'antiscam.showcha.com',
-                'everbrightpurifying.com', 'doteat.tw' // [新增]
+                'everbrightpurifying.com', 'doteat.tw',
+                'bitopro.com', 'fami.tw' // [新增] 幣託與全家
             ];
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
 
