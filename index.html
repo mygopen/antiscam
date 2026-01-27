@@ -507,7 +507,7 @@
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
             
-const whitelist = [
+            const whitelist = [
                 'google.com', 'facebook.com', 'yahoo.com', 'youtube.com', 'wikipedia.org', 
                 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'amazon.com', 
                 'microsoft.com', 'apple.com', 'netflix.com', 'twitch.tv', 'tiktok.com',
@@ -516,7 +516,8 @@ const whitelist = [
                 'shopee.tw', 'momo.com.tw', 'pchome.com.tw', 'mygopen.com', 'gov.tw', 'edu.tw',
                 'tfc-taiwan.org.tw', 'antiscam.showcha.com',
                 'everbrightpurifying.com', 'doteat.tw',
-                'bitopro.com', 'fami.tw' // [新增] 幣託與全家
+                'bitopro.com', 'fami.tw', // [新增] 幣託與全家
+                'lihi.io' // [新增] Lihi 縮網址 (白名單但需提示)
             ];
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
 
@@ -554,7 +555,12 @@ const whitelist = [
                 trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
             } else if (isWhitelisted || isTrustedTLD) {
                 trafficStatus = 'safe';
-                trafficDetails = '受信賴的台灣在地或政府教育網站';
+                // [修改] 針對 Lihi 等白名單縮網址服務，提供特定提示
+                if (domain.endsWith('lihi.io')) {
+                    trafficDetails = '知名行銷縮網址服務 (Lihi)，平台安全但請留意轉址後的目的地';
+                } else {
+                    trafficDetails = '受信賴的台灣在地或政府教育網站';
+                }
             } else if (isFreeHosting) {
                 trafficStatus = 'warning';
                 trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，子網域流量無法反應真實信譽`;
@@ -739,7 +745,9 @@ const whitelist = [
                             ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' 
                             : (hasMultipleHyphens 
                                 ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' 
-                                : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常'))
+                                : (domain.endsWith('lihi.io') 
+                                    ? '此為合法縮網址工具，平台安全，請確認下方「轉址」檢測結果' 
+                                    : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常')))
                     },
                     traffic: {
                         status: trafficStatus,
