@@ -517,7 +517,9 @@
                 'tfc-taiwan.org.tw', 'antiscam.showcha.com',
                 'everbrightpurifying.com', 'doteat.tw',
                 'bitopro.com', 'fami.tw', // [新增] 幣託與全家
-                'lihi.io' // [新增] Lihi 縮網址 (白名單但需提示)
+                'lihi.io', // [新增] Lihi 縮網址 (白名單但需提示)
+                'mgp.care', // [新增] MyGoPen 縮網址
+                'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com' // [新增] 常見合法縮網址 (白名單但需提示)
             ];
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
 
@@ -547,6 +549,9 @@
             // 2. 修正高流量判斷：如果是免費架站平台，即使 Tranco 有排名也不視為白名單 (避免 dudaone.com 全域排名影響子網域判斷)
             const isHighTraffic = (trancoRank !== null || isWhitelisted || isTrustedTLD) && !isFreeHosting;
             
+            // Define safe shorteners for messaging
+            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com'];
+
             let trafficStatus = 'warning';
             let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
             
@@ -555,9 +560,10 @@
                 trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
             } else if (isWhitelisted || isTrustedTLD) {
                 trafficStatus = 'safe';
-                // [修改] 針對 Lihi 等白名單縮網址服務，提供特定提示
-                if (domain.endsWith('lihi.io')) {
-                    trafficDetails = '知名行銷縮網址服務 (Lihi)，平台安全但請留意轉址後的目的地';
+                if (safeShorteners.some(s => domain.endsWith(s))) {
+                    trafficDetails = '貼的這個連結有用到縮網址，建議看最後網址是什麼來決定，要特別留意還是可能有風險！';
+                } else if (domain.endsWith('mgp.care')) {
+                    trafficDetails = 'MyGoPen 官方服務，安全無虞';
                 } else {
                     trafficDetails = '受信賴的台灣在地或政府教育網站';
                 }
@@ -745,9 +751,11 @@
                             ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' 
                             : (hasMultipleHyphens 
                                 ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' 
-                                : (domain.endsWith('lihi.io') 
-                                    ? '此為合法縮網址工具，平台安全，請確認下方「轉址」檢測結果' 
-                                    : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常')))
+                                : (safeShorteners.some(s => domain.endsWith(s))
+                                    ? '此連結使用縮網址服務，建議確認轉址後的網站。雖然平台安全，但仍須留意詐騙風險。' 
+                                    : (domain.endsWith('mgp.care')
+                                        ? 'MyGoPen 官方縮網址服務'
+                                        : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常'))))
                     },
                     traffic: {
                         status: trafficStatus,
