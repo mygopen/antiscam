@@ -937,9 +937,17 @@
         };
 
         // --- New Component: Site Screenshot Preview ---
-        const SiteScreenshot = ({ url }) => {
+        const SiteScreenshot = ({ url, status }) => {
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(false);
+            
+            // 如果已知網站狀態是 error，直接視為錯誤，不請求圖片
+            useEffect(() => {
+                if (status === 'error') {
+                    setLoading(false);
+                    setError(true);
+                }
+            }, [status]);
             
             // 使用 Microlink API 進行截圖
             const encodedUrl = encodeURIComponent(url);
@@ -950,15 +958,18 @@
                     <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <ImageIcon size={20} className="text-brand-red" />
-                            <h3 className="font-bold text-gray-800">網站即時截圖 (Live Screenshot)</h3>
+                            {/* [修正] 標題中文化且簡潔 */}
+                            <h3 className="font-bold text-gray-800">網站即時截圖</h3>
                         </div>
                     </div>
                     
                     <div className="p-0 bg-gray-100 flex justify-center items-center min-h-[250px] relative group">
                         {error ? (
-                            <div className="text-gray-400 text-sm flex flex-col items-center py-10">
-                                <XCircle size={32} className="mb-2 opacity-50" />
-                                <span>無法產生截圖 (可能網站拒絕連線或回應過慢)</span>
+                            // [修正] 404 狀態顯示
+                            <div className="text-gray-400 text-sm flex flex-col items-center justify-center h-full min-h-[250px] w-full bg-gray-100">
+                                <AlertTriangle size={32} className="mb-2 opacity-50 text-gray-500" />
+                                <span className="font-mono font-bold text-gray-600 text-lg">404 Not Found</span>
+                                <span className="text-gray-500 mt-1 font-medium">該頁面不存在</span>
                             </div>
                         ) : (
                             <div className="relative w-full">
@@ -1234,7 +1245,8 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                 <>
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
                                                         <div>
-                                                            <div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">Target Domain</div>
+                                                            {/* [修正] Target Domain -> 目標網域 */}
+                                                            <div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div>
                                                             <h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3>
                                                         </div>
                                                         <div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600">
@@ -1254,6 +1266,7 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                     {/* [New] 網站即時截圖 */}
                                                     <SiteScreenshot 
                                                         url={result.details.siteStatus.finalUrl || result.scannedUrl} 
+                                                        status={result.details.siteStatus.status}
                                                     />
 
                                                     {/* Alerts */}
