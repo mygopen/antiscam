@@ -938,14 +938,18 @@
 
         // --- New Component: Site Screenshot Preview ---
         const SiteScreenshot = ({ url, status }) => {
-            // 狀態判定：error(HTTP錯誤), unknown(連線失敗), blank(空白/被擋) 都視為無法截圖
+            // [修正] 擴大錯誤判定：只要是 error, unknown, blank 都視為無法截圖，避免顯示黑畫面
+            // unknown: 連線失敗/DNS解析錯誤
+            // blank: 網站空白/內容被擋
+            // error: HTTP 400+ 錯誤
             const isBadStatus = ['error', 'unknown', 'blank'].includes(status);
             
-            // 初始化 state：如果是壞狀態，直接進入 error 模式，不 loading
+            // 狀態控制
             const [loading, setLoading] = useState(!isBadStatus);
             const [error, setError] = useState(isBadStatus);
+            const [useFallback, setUseFallback] = useState(false); // 控制是否使用備用來源 (WordPress)
             
-            // 如果已知網站狀態異常，直接視為錯誤，不請求圖片
+            // 監聽 status 變化
             useEffect(() => {
                 if (['error', 'unknown', 'blank'].includes(status)) {
                     setLoading(false);
@@ -953,12 +957,16 @@
                 } else {
                     setError(false);
                     setLoading(true);
+                    setUseFallback(false); // 重置為預設來源
                 }
             }, [status, url]);
             
-            // 使用 Microlink API 進行截圖
-            const encodedUrl = encodeURIComponent(url);
-            const screenshotUrl = `https://api.microlink.io/?url=${encodedUrl}&screenshot=true&meta=false&embed=screenshot.url&colorScheme=dark&viewport.width=1280&viewport.height=800`;
+            // 決定截圖 URL
+            // 預設: Microlink (效果好)
+            // 備用: WordPress mshots (相容性高)
+            const imgUrl = useFallback 
+                ? `https://s.wordpress.com/mshots/v1/${encodeURIComponent(url)}?w=1280&h=800`
+                : `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url&colorScheme=dark&viewport.width=1280&viewport.height=800`;
 
             return (
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
@@ -989,21 +997,35 @@
                                     </div>
                                 )}
                                 <img 
-                                    src={screenshotUrl} 
+                                    src={imgUrl} 
                                     alt="Website Screenshot" 
                                     className={`w-full h-auto object-cover transition-all duration-700 ${loading ? 'opacity-0 blur-sm' : 'opacity-100 blur-0'}`}
                                     onLoad={() => setLoading(false)}
-                                    onError={() => { setLoading(false); setError(true); }}
+                                    onError={() => { setLoading(false); setError(false); /* 載入失敗不直接顯示 404，而是讓使用者看空白或切換來源 */ }}
                                 />
                                 <div className="absolute inset-0 bg-transparent"></div>
                             </div>
                         )}
                     </div>
                     <div className="px-6 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400 flex justify-between items-center">
-                        <span>Powered by Microlink</span>
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-brand-red transition-colors">
-                            開啟原始網頁 <ExternalLink size={10} />
-                        </a>
+                        <span>Powered by {useFallback ? 'WordPress' : 'Microlink'}</span>
+                        
+                        <div className="flex items-center gap-3">
+                            {/* [新增] 切換來源按鈕 */}
+                            {!error && (
+                                <button 
+                                    onClick={() => { setLoading(true); setUseFallback(!useFallback); }}
+                                    className="flex items-center gap-1 text-gray-500 hover:text-brand-red transition-colors bg-white border border-gray-200 px-2 py-1 rounded shadow-sm"
+                                >
+                                    <RefreshCw size={10} />
+                                    {useFallback ? '切換回預設來源' : '截圖顯示異常？切換來源'}
+                                </button>
+                            )}
+                            
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-brand-red transition-colors">
+                                開啟原始網頁 <ExternalLink size={10} />
+                            </a>
+                        </div>
                     </div>
                 </div>
             );
