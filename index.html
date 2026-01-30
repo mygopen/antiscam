@@ -205,7 +205,6 @@
                 let text = "";
                 let isBlank = false;
                 let hasIframe = false;
-                let linkStats = { total: 0, internal: 0, external: 0 };
                 
                 if (data.contents) {
                     text = data.contents;
@@ -221,36 +220,6 @@
                                 return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
                             }
                             
-                            // [NEW] Link Analysis
-                            const links = doc.querySelectorAll('a');
-                            linkStats.total = links.length;
-                            
-                            let domainHostname = '';
-                            try { domainHostname = new URL(fullUrl).hostname; } catch(e){}
-
-                            links.forEach(el => {
-                                const href = el.getAttribute('href');
-                                if (!href) return;
-                                
-                                let isInternal = false;
-                                // Check relative links
-                                if (href.startsWith('/') || href.startsWith('.') || href.startsWith('#')) {
-                                    isInternal = true;
-                                } else if (href.startsWith('http')) {
-                                    try {
-                                        const linkUrl = new URL(href);
-                                        if (linkUrl.hostname.includes(domainHostname) || domainHostname.includes(linkUrl.hostname)) {
-                                            isInternal = true;
-                                        }
-                                    } catch(e) {}
-                                } else if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
-                                     isInternal = true; // Treat functional links as internal-ish
-                                }
-
-                                if (isInternal) linkStats.internal++;
-                                else linkStats.external++;
-                            });
-
                             const invisibleTags = doc.querySelectorAll('script, style, link, meta, noscript, svg, path, iframe, frame, object, embed');
                             invisibleTags.forEach(el => el.remove());
                             const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
@@ -259,8 +228,8 @@
                     }
                 }
 
-                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats };
-                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats };
+                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url };
+                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url };
 
             } catch (e) {
                 try {
@@ -770,12 +739,6 @@
                 ageDetails = '高風險特殊網域 (無法取得日期)'; 
             }
 
-            // Link Analysis Status Logic
-            let linkStatus = 'info';
-            if (siteStatusData.linkStats) {
-                if (siteStatusData.linkStats.total <= 1) linkStatus = 'warning'; // Very few links
-            }
-
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
@@ -851,13 +814,6 @@
                         status: 'info',
                         label: '網路服務商 (ISP/ASN)',
                         details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源'
-                    },
-                    links: {
-                        status: linkStatus,
-                        label: '網頁連結分析',
-                        details: siteStatusData.linkStats 
-                            ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` 
-                            : '無法分析頁面內容'
                     },
                     params: {
                         status: hasSuspiciousParams ? 'danger' : 'safe',
@@ -1305,7 +1261,6 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                                 if (check.label === '網域特徵分析') return <Search size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
                                                                 // [新增] 網路與連結圖示
                                                                 if (check.label === '網路服務商 (ISP/ASN)') return <Wifi size={20} className={check.status === 'info' ? 'text-blue-500' : 'text-gray-500'} />;
-                                                                if (check.label === '網頁連結分析') return <Link size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-blue-500'} />;
 
                                                                 // Default Icons
                                                                 return check.status === 'safe' ? 
@@ -1374,6 +1329,1121 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                     </footer>
                 </div>
             );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+}
+
+{
+type: uploaded file
+fileName: mygopen/antiscam/antiscam-c8bf1c9173e305abebd8dd497ad40601a8803715/functions/api/rdap.js
+fullContent:
+import { connect } from 'cloudflare:sockets';
+
+// Helper: 自動提取主網域
+function getRegisteredDomain(hostname) {
+  const parts = hostname.split('.');
+  if (parts.length <= 2) return hostname;
+
+  const secondLevelTLDs = [
+    "com.tw", "org.tw", "gov.tw", "edu.tw", "net.tw", 
+    "co.uk", "org.uk", "gov.uk", 
+    "co.jp", "ne.jp", "ac.jp", "go.jp",
+    "com.hk", "org.hk",
+    "com.cn", "org.cn", "gov.cn", "net.cn", "ac.cn"
+  ];
+
+  const lastTwo = parts.slice(-2).join('.');
+  if (secondLevelTLDs.includes(lastTwo)) {
+    return parts.slice(-3).join('.');
+  } else {
+    return parts.slice(-2).join('.');
+  }
+}
+
+// Helper: 取得 TLD 對應的 WHOIS Server
+function getWhoisServer(tld) {
+    const servers = {
+        "online": "whois.nic.online",
+        "xyz": "whois.nic.xyz",
+        "site": "whois.nic.site",
+        "cn": "whois.cnnic.cn",
+        "tw": "whois.twnic.net",
+        "com": "whois.verisign-grs.com",
+        "net": "whois.verisign-grs.com",
+        "org": "whois.publicinterestregistry.org",
+        "shop": "whois.nic.shop",
+        "club": "whois.nic.club",
+        "vip": "whois.nic.vip",
+        "top": "whois.nic.top"
+    };
+    return servers[tld] || `whois.nic.${tld}`; 
+}
+
+// [Regex 增強] 支援斜線、點號、中文日期
+function parseDateFromText(text) {
+    const regexes = [
+        // 標準格式 YYYY-MM-DD
+        // [修正] 新增 "Registration Time" (針對 .cn) 與 "Creation Time"
+        /(?:Creation Date|Registration Date|Registration Time|Creation Time|Created on|Registered on|Record created on|Domain Name Commencement Date):?\s*(\d{4}-\d{2}-\d{2})/i,
+        // 支援斜線 YYYY/MM/DD (常見於亞洲網域)
+        /(?:Creation Date|Registration Date|Registration Time|Created on|Registered on|Record created on):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
+        // 支援點號 YYYY.MM.DD
+        /(?:Creation Date|Registration Date|Created on|Registered on):?\s*(\d{4})\.(\d{2})\.(\d{2})/i,
+        // 中文格式
+        /(?:注册日期|申请日期|登録年月日):?\s*(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})/
+    ];
+
+    for (const regex of regexes) {
+        const match = text.match(regex);
+        if (match) {
+            // 如果抓到的是拆開的年月日 (group 2,3,4)，組合成 YYYY-MM-DD
+            if (match.length >= 4) {
+                return `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
+            }
+            return match[1];
+        }
+    }
+    return null;
+}
+
+// TCP Socket WHOIS
+async function fetchWhoisSocket(domain, tld) {
+    const server = getWhoisServer(tld);
+    try {
+        const socket = connect({ hostname: server, port: 43 });
+        const writer = socket.writable.getWriter();
+        const reader = socket.readable.getReader();
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+
+        await writer.write(encoder.encode(domain + "\r\n"));
+
+        let responseText = "";
+        let readCount = 0;
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            responseText += decoder.decode(value, { stream: true });
+            if (responseText.length > 5000 || readCount++ > 50) break; 
+        }
+        
+        const date = parseDateFromText(responseText);
+        if (date) {
+            return {
+                events: [{ eventAction: "registration", eventDate: date }],
+                entities: [{ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", "TCP/Whois Lookup"]]] }],
+                source: "tcp-socket"
+            };
+        }
+        return null;
+    } catch (e) { return null; }
+}
+
+// Proxy Helper
+async function fetchViaProxy(targetUrl) {
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    try {
+        const res = await fetch(proxyUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+        });
+        return res;
+    } catch (e) { return null; }
+}
+
+// [方案六] 針對 .tw 的官方網頁爬蟲
+async function fetchTwnicWeb(domain) {
+    // TWNIC 官方查詢介面
+    const targetUrl = `https://www.twnic.tw/whois_n.cgi?query=${domain}`;
+    const res = await fetchViaProxy(targetUrl);
+    
+    if (res && res.ok) {
+        const html = await res.text();
+        // TWNIC 網頁通常顯示 "Record created on yyyy-mm-dd"
+        const date = parseDateFromText(html);
+        if (date) {
+            return {
+                events: [{ eventAction: "registration", eventDate: date }],
+                entities: [{ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", "TWNIC Web"]]] }],
+                source: "twnic-web"
+            };
+        }
+    }
+    return null;
+}
+
+// [方案五] 爬取 who.is (通用備援)
+async function fetchWhoIsWeb(domain) {
+    const targetUrl = `https://who.is/whois/${domain}`;
+    const res = await fetchViaProxy(targetUrl);
+    
+    if (res && res.ok) {
+        const html = await res.text();
+        // who.is 結構通常是 class="queryResponseBody" 或直接在 pre tag 裡
+        const date = parseDateFromText(html);
+        if (date) {
+            return {
+                events: [{ eventAction: "registration", eventDate: date }],
+                entities: [{ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", "Who.is Web"]]] }],
+                source: "whois-web"
+            };
+        }
+    }
+    return null;
+}
+
+// IANA Cache
+let ianaCache = { data: null, timestamp: 0 };
+async function fetchIanaRdapServer(tld) {
+  const CACHE_TTL = 3600 * 1000; 
+  const now = Date.now();
+  if (!ianaCache.data || (now - ianaCache.timestamp > CACHE_TTL)) {
+    try {
+      const res = await fetch("https://data.iana.org/rdap/dns.json");
+      if (res.ok) {
+        ianaCache.data = await res.json();
+        ianaCache.timestamp = now;
+      }
+    } catch (e) {}
+  }
+  const services = ianaCache.data?.services || [];
+  for (const [tlds, urls] of services) {
+    if (tlds.includes(tld)) return urls[0]; 
+  }
+  return null;
+}
+
+export async function onRequest(context) {
+  const { request } = context;
+  const url = new URL(request.url);
+  let domain = url.searchParams.get("domain");
+
+  if (!domain) return new Response(JSON.stringify({ error: "Missing domain" }), { status: 400 });
+
+  domain = domain.toLowerCase();
+  if (domain.startsWith("www.")) domain = domain.slice(4);
+
+  const rootDomain = getRegisteredDomain(domain);
+  const tld = rootDomain.split('.').pop();
+
+  // 1. 決定目標 RDAP URL
+  let targetUrl;
+  const DIRECT_RDAP_SERVERS = {
+    "cn": "https://rdap.cnnic.cn/domain/",
+    "tw": "https://rdap.twnic.tw/rdap/domain/",
+    "jp": "https://rdap.jprs.jp/rdap/domain/",
+    "sg": "https://rdap.sgnic.sg/rdap/domain/"
+  };
+
+  if (DIRECT_RDAP_SERVERS[tld]) {
+      targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
+  } else {
+      const ianaServer = await fetchIanaRdapServer(tld);
+      targetUrl = ianaServer ? `${ianaServer.endsWith('/') ? ianaServer : ianaServer + '/'}domain/${rootDomain}` : `https://rdap.org/domain/${rootDomain}`;
+  }
+
+  try {
+    // 策略 A: 直連官方 RDAP
+    let response = await fetch(targetUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" }
+    });
+
+    // 如果直連失敗 (403/404/500)，進入多重備援流程
+    if (!response.ok) {
+       
+       // 策略 B: 透過 CORS Proxy 訪問 RDAP (針對 .cn, .online)
+       const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+       try {
+           const proxyRes = await fetch(proxyUrl);
+           if (proxyRes.ok) {
+               const data = await proxyRes.json();
+               if (data.events || data.entities) return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" }});
+           }
+       } catch(e) {}
+
+       // 策略 C: TCP Socket 直連 Port 43 (底層協議)
+       const socketData = await fetchWhoisSocket(rootDomain, tld);
+       if (socketData) {
+           return new Response(JSON.stringify(socketData), { headers: { "Content-Type": "application/json" }});
+       }
+
+       // 策略 D: 針對 .tw 的特殊網頁爬蟲 (方案六)
+       if (tld === 'tw') {
+           const twnicData = await fetchTwnicWeb(rootDomain);
+           if (twnicData) {
+               return new Response(JSON.stringify(twnicData), { headers: { "Content-Type": "application/json" }});
+           }
+       }
+
+       // 策略 E: 通用網頁爬蟲 who.is (方案五)
+       const whoisWebData = await fetchWhoIsWeb(rootDomain);
+       if (whoisWebData) {
+           return new Response(JSON.stringify(whoisWebData), { headers: { "Content-Type": "application/json" }});
+       }
+
+       return new Response(JSON.stringify({ error: "Domain not found", status: response.status }), { status: 404, headers: { "Content-Type": "application/json" } });
+    }
+
+    const data = await response.json();
+    return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Server Error", details: err.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+  }
+}
+}
+這份程式碼已經移除了「**網頁連結分析**」相關的所有邏輯與顯示介面，並保留了「IP/ASN 資訊」功能。
+
+主要修改內容：
+1.  **移除資料計算**：在 `checkSiteAvailability` 中移除了計算 `<a>` 連結數量與內外部連結判斷的程式碼。
+2.  **移除檢測指標**：在 `simulateScan` 的回傳物件中，移除了 `links` 欄位。
+3.  **移除介面圖示**：在結果列表的 `renderIcon` 函式中，移除了 `網頁連結分析` 的圖示判斷，但保留了 `網路服務商 (ISP/ASN)` 的 `Wifi` 圖示。
+
+您可以直接複製並覆蓋原本的檔案：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>麥擱騙｜詐騙網址幫你查 - 線上即時檢測工具</title>
+    <meta name="description" content="輸入網址，快速檢查是否為詐騙網站、惡意連結或釣魚網頁。支援手機與電腦瀏覽。">
+    <link rel="icon" href="[https://ik.imagekit.io/mygopen/check_ico.png](https://ik.imagekit.io/mygopen/check_ico.png)">
+    <script src="[https://unpkg.com/react@18/umd/react.production.min.js](https://unpkg.com/react@18/umd/react.production.min.js)" crossorigin></script>
+    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.production.min.js](https://unpkg.com/react-dom@18/umd/react-dom.production.min.js)" crossorigin></script>
+    <script src="[https://unpkg.com/@babel/standalone/babel.min.js](https://unpkg.com/@babel/standalone/babel.min.js)"></script>
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+
+    <link href="[https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap](https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap)" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            red: '#d93025',
+                            darkRed: '#b92b1b',
+                            light: '#fff1f0',
+                            green: '#188038', // 類似 LINE 的綠色
+                            darkGreen: '#12662d'
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.6s ease-out forwards',
+                        'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 40px -10px rgba(0,0,0,0.08)',
+                        'glow': '0 0 20px rgba(217, 48, 37, 0.3)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #f8fafc;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(217, 48, 37, 0.03) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(37, 99, 235, 0.03) 0px, transparent 50%);
+            background-attachment: fixed;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="text-gray-700 antialiased min-h-screen flex flex-col">
+
+    <div id="root" class="flex-grow flex flex-col"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Icons ---
+        const IconBase = ({ children, size = 20, className = "" }) => (
+            <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+
+        const Shield = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></IconBase>;
+        const ShieldAlert = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></IconBase>;
+        const ShieldCheck = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></IconBase>;
+        const AlertTriangle = (p) => <IconBase {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></IconBase>;
+        const Activity = (p) => <IconBase {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></IconBase>;
+        const Server = (p) => <IconBase {...p}><rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" /></IconBase>;
+        const Search = (p) => <IconBase {...p}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></IconBase>;
+        const HelpCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></IconBase>;
+        const Github = (p) => <IconBase {...p}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></IconBase>;
+        const Layout = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></IconBase>;
+        const Code = (p) => <IconBase {...p}><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></IconBase>;
+        const Clock = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></IconBase>;
+        const CheckCircle = (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></IconBase>;
+        const XCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></IconBase>;
+        const Globe = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" /></IconBase>;
+        const Copy = (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconBase>;
+        const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"></polyline></IconBase>;
+        const RefreshCw = (p) => <IconBase {...p}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></IconBase>;
+        const ImageIcon = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></IconBase>;
+        const Type = (p) => <IconBase {...p}><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></IconBase>;
+        const Hash = (p) => <IconBase {...p}><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></IconBase>;
+        const Eye = (p) => <IconBase {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>;
+        const ArrowRight = (p) => <IconBase {...p}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></IconBase>;
+        const ExternalLink = (p) => <IconBase {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></IconBase>;
+        const Shuffle = (p) => <IconBase {...p}><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></IconBase>;
+        const UserX = (p) => <IconBase {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></IconBase>;
+        const Flag = (p) => <IconBase {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>;
+        const Layers = (p) => <IconBase {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></IconBase>;
+        const Link = (p) => <IconBase {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></IconBase>;
+        const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></IconBase>;
+        const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
+        const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
+        const ShieldZap = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polygon points="13 10 13 6 8 13 11 13 11 18 16 11 13 11" /></IconBase>;
+        const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
+
+        // --- Logic Helpers ---
+        const getPseudoRandom = (str) => {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash) / 2147483647;
+        };
+
+        const withTimeout = (promise, ms, fallbackValue) => {
+            return Promise.race([
+                promise,
+                new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
+            ]);
+        };
+
+        // --- Algorithms ---
+        const calculateEntropy = (str) => {
+            const len = str.length;
+            const frequencies = {};
+            for (let i = 0; i < len; i++) {
+                const char = str[i];
+                frequencies[char] = (frequencies[char] || 0) + 1;
+            }
+            let entropy = 0;
+            for (const char in frequencies) {
+                const p = frequencies[char] / len;
+                entropy -= p * Math.log2(p);
+            }
+            return entropy;
+        };
+
+        const fetchGeoLocation = async (ip) => {
+            try {
+                const geoRes = await fetch(`https://ipwho.is/${ip}`);
+                const geoData = await geoRes.json();
+                if (!geoData.success) throw new Error('Geo failed');
+                return { 
+                    country: `${geoData.country} (${geoData.country_code})`, 
+                    asn: geoData.connection?.asn ? `AS${geoData.connection.asn}` : '',
+                    org: geoData.connection?.org || geoData.connection?.isp || '',
+                    isReal: true 
+                };
+            } catch (err) { return null; }
+        };
+
+        const checkSiteAvailability = async (fullUrl) => {
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
+
+            try {
+                const res = await fetch(proxyUrl);
+                if (!res.ok) return { status: 'unknown', msg: '無法檢測網站狀態', hasIframe: false, finalUrl: null };
+                
+                const data = await res.json();
+
+                // 明確檢查 HTTP Status Code (404/403/500 都視為 Error)
+                if (data.status && data.status.http_code >= 400) {
+                     return { 
+                        status: 'error', 
+                        code: data.status.http_code, 
+                        msg: `網站無法正常存取 (HTTP ${data.status.http_code})`, 
+                        hasIframe: false, 
+                        finalUrl: data.status.url 
+                    };
+                }
+                
+                let text = "";
+                let isBlank = false;
+                let hasIframe = false;
+                
+                if (data.contents) {
+                    text = data.contents;
+                    hasIframe = /<iframe/i.test(text);
+
+                    if (text.length < 500) isBlank = true;
+                    else {
+                        try {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(text, 'text/html');
+                            const title = doc.title || "";
+                            if (title.toLowerCase().includes("index of /")) {
+                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
+                            }
+                            
+                            const invisibleTags = doc.querySelectorAll('script, style, link, meta, noscript, svg, path, iframe, frame, object, embed');
+                            invisibleTags.forEach(el => el.remove());
+                            const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
+                            if (visibleText.length < 800) isBlank = true;
+                        } catch (e) {}
+                    }
+                }
+
+                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url };
+                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url };
+
+            } catch (e) {
+                try {
+                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
+                     const resBackup = await fetch(backupProxy);
+                     if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null };
+                } catch(err) {}
+                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null };
+            }
+        };
+
+        const checkTrancoRank = async (domain) => {
+            try {
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`[https://tranco-list.eu/api/ranks/domain/$](https://tranco-list.eu/api/ranks/domain/$){domain}`)}`;
+                const res = await fetch(proxyUrl);
+                if (!res.ok) return null;
+                
+                const data = await res.json();
+                if (data.ranks && data.ranks.length > 0) {
+                    return data.ranks[0].rank;
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const fetchRDAPData = async (domain) => {
+            try {
+                const apiUrl = `/api/rdap?domain=${domain}`;
+                const res = await fetch(apiUrl);
+                if (!res.ok) return { date: null, privacyDetected: false, registrarName: null };
+                const data = await res.json();
+                
+                // --- 增強日期提取邏輯 ---
+                const events = data.events || [];
+                let regEvent = 
+                    events.find(e => e.eventAction === 'registration') || 
+                    events.find(e => e.eventAction === 'created') ||  // 部分非標準欄位
+                    events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                
+                const date = (regEvent && regEvent.eventDate) ? regEvent.eventDate : null;
+
+                // --- 隱私保護偵測 ---
+                let privacyDetected = false;
+                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
+                
+                // --- 增強註冊商提取邏輯 (Registrar) ---
+                let registrarName = null;
+                
+                // 1. 標準路徑: entities -> roles='registrar' -> vcard
+                const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
+                if (registrarEntity) {
+                    // 嘗試從 vcard 提取 Full Name (fn)
+                    if (registrarEntity.vcardArray && registrarEntity.vcardArray.length > 1) {
+                         const fnEntry = registrarEntity.vcardArray[1]?.find(item => item[0] === 'fn');
+                         if (fnEntry) registrarName = fnEntry[3];
+                    }
+                    // 如果沒有 vcard，嘗試使用 handle 或 name 屬性 (部分 RDAP 實作)
+                    if (!registrarName && registrarEntity.handle) {
+                        registrarName = registrarEntity.handle;
+                    }
+                    if (!registrarName && registrarEntity.name) {
+                        registrarName = registrarEntity.name;
+                    }
+                }
+
+                // 2. 如果標準路徑找不到，遞迴搜尋所有 entities 尋找可能的註冊商名稱
+                if (!registrarName && data.entities) {
+                     // 某些 .cn RDAP 可能結構較扁平或使用非標準 role
+                     const potentialRegistrars = data.entities.filter(e => !e.roles || !e.roles.includes('registrant'));
+                     for (const ent of potentialRegistrars) {
+                         if (ent.vcardArray) {
+                             const fnEntry = ent.vcardArray[1]?.find(item => item[0] === 'fn');
+                             // 排除隱私保護服務的名稱
+                             if (fnEntry && !privacyKeywords.some(kw => fnEntry[3].includes(kw))) {
+                                 registrarName = fnEntry[3];
+                                 break;
+                             }
+                         }
+                     }
+                }
+
+                // --- 隱私偵測遍歷 ---
+                const searchEntities = (entities) => {
+                    if (!entities || !Array.isArray(entities)) return;
+                    for (const entity of entities) {
+                        if (entity.vcardArray && Array.isArray(entity.vcardArray) && entity.vcardArray.length > 1) {
+                            const vcardProps = entity.vcardArray[1];
+                            for (const prop of vcardProps) {
+                                if (prop.length >= 4 && typeof prop[3] === 'string') {
+                                    if (privacyKeywords.some(kw => prop[3].toLowerCase().includes(kw.toLowerCase()))) {
+                                        privacyDetected = true;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        if (entity.handle && privacyKeywords.some(kw => entity.handle.toLowerCase().includes(kw.toLowerCase()))) {
+                            privacyDetected = true;
+                            return;
+                        }
+                        if (entity.entities) {
+                            searchEntities(entity.entities);
+                            if (privacyDetected) return;
+                        }
+                    }
+                };
+                searchEntities(data.entities);
+                return { date, privacyDetected, registrarName };
+            } catch (e) {
+                console.error("RDAP Error:", e);
+                return { date: null, privacyDetected: false, registrarName: null };
+            }
+        };
+
+        // --- Trace API Helper ---
+        const fetchTraceData = async (url) => {
+            try {
+                const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (e) {
+                console.error("Trace API Error:", e);
+                return null;
+            }
+        };
+
+        const checkCommunityBlocklists = async (domain) => {
+            try {
+                const sources = [
+                    '[https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt](https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt)',
+                    '[https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamSiteGetFromGlobalAntiScamOrg.txt](https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamSiteGetFromGlobalAntiScamOrg.txt)',
+                    '[https://danny0838.github.io/content-farm-terminator/files/blocklist-ublacklist/scam-sites.txt](https://danny0838.github.io/content-farm-terminator/files/blocklist-ublacklist/scam-sites.txt)',
+                    '[https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/SimilarURL.txt](https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/SimilarURL.txt)'
+                ];
+                const requests = sources.map(url => fetch(url).then(res => res.ok ? res.text() : ''));
+                const contents = await Promise.all(requests);
+                const combinedText = contents.join('\n');
+                if (!combinedText) return false;
+                const lines = combinedText.split(/\r?\n/);
+                const lowerDomain = domain.toLowerCase();
+                return lines.some(line => {
+                    let cleanLine = line.trim();
+                    if (!cleanLine || cleanLine.startsWith('!') || cleanLine.startsWith('#')) return false;
+                    cleanLine = cleanLine.replace(/^\*:\/\/|^\*\.|\/\*$|^\|\||\^$/g, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    cleanLine = cleanLine.toLowerCase();
+                    if (!cleanLine) return false;
+                    return lowerDomain === cleanLine || lowerDomain.endsWith('.' + cleanLine);
+                });
+            } catch (e) {
+                return false;
+            }
+        };
+
+        // --- New Component: MyGoPen Widget ---
+        const MyGoPenSection = ({ domain }) => {
+            const [posts, setPosts] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [keyword, setKeyword] = useState(domain);
+
+            useEffect(() => {
+                setKeyword(domain);
+            }, [domain]);
+
+            useEffect(() => {
+                const fetchPosts = async () => {
+                    const feedUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://www.mygopen.com/feeds/posts/default/-/詐騙?alt=json&max-results=3')}`;
+                    try {
+                        const res = await fetch(feedUrl);
+                        if (res.ok) {
+                            const data = await res.json();
+                            const parsed = JSON.parse(data.contents);
+                            const entries = parsed.feed.entry.map(e => ({
+                                title: e.title.$t,
+                                link: e.link.find(l => l.rel === 'alternate').href,
+                                date: e.published.$t.substring(0, 10)
+                            }));
+                            setPosts(entries);
+                        }
+                    } catch (e) {
+                        console.error("Failed to fetch MyGoPen feed", e);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                fetchPosts();
+            }, []);
+
+            return (
+                <div className="bg-brand-light/50 border border-brand-red/20 rounded-2xl p-6 mt-8">
+                    <div className="flex items-center gap-3 mb-4">
+                        <Shield className="text-brand-red" size={24} />
+                        <h3 className="font-bold text-gray-800 text-lg">防詐騙資料庫查詢：</h3>
+                    </div>
+                    
+                    <p className="text-sm text-gray-600 mb-4">
+                        建議可進一步查詢相關案例，檢視可能的詐騙手法。
+                    </p>
+
+                    <div className="mb-5">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">自訂搜尋關鍵字</label>
+                        <div className="relative group">
+                            <input 
+                                type="text" 
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                                className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red focus:border-transparent outline-none bg-white text-gray-700 shadow-sm transition-all"
+                                placeholder="輸入關鍵字..."
+                            />
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                <Edit size={16} />
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1 ml-1">
+                            提示: 可修改為詐騙簡訊內容、電話或 LINE ID 進行更精確的搜尋。
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-3">
+                        <a 
+                            href={`https://www.mygopen.com/search?q=${encodeURIComponent(keyword)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-white border border-brand-red text-brand-red hover:bg-brand-red hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                        >
+                            <Search size={18} />
+                            <span>在 MyGoPen 搜尋</span>
+                        </a>
+                        
+                         <a 
+                            href={`https://www.google.com/search?q="${encodeURIComponent(keyword)}"+詐騙`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                        >
+                            <GoogleIcon size={18} />
+                            <span>Google 搜尋</span>
+                        </a>
+
+                         <a 
+                            href={`https://165dashboard.tw/key-word-search?keyWord=${encodeURIComponent(keyword)}&type=CityCase&typeArr=CityCase`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-white border border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                        >
+                            <BarChart size={18} />
+                            <span>在165打詐儀錶板搜尋</span>
+                        </a>
+                    </div>
+                </div>
+            );
+        };
+        
+        const GoogleIcon = (props) => (
+            <svg viewBox="0 0 24 24" width={props.size || 24} height={props.size || 24} {...props}>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+        );
+
+        const simulateScan = async (targetDomain, fullUrl) => {
+            let resolvedIp = null;
+            try {
+                const dnsRes = await fetch(`https://dns.google/resolve?name=${targetDomain}&type=A`);
+                const dnsData = await dnsRes.json();
+                if (dnsData.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
+                if (dnsData.Answer && dnsData.Answer.length > 0) {
+                    const aRecord = dnsData.Answer.find(r => r.type === 1);
+                    if (aRecord) resolvedIp = aRecord.data;
+                }
+            } catch(e) {}
+
+            const domain = targetDomain.toLowerCase();
+            const randTraffic = getPseudoRandom(domain + 'traffic');
+            const randAge = getPseudoRandom(domain + 'age');
+
+            const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
+            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal']; // Added .gal as suffix check too
+            const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
+            const isSuspiciousTLD = domain.endsWith('.info');
+            
+            const whitelist = [
+                'google.com', 'facebook.com', 'yahoo.com', 'youtube.com', 'wikipedia.org', 
+                'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'amazon.com', 
+                'microsoft.com', 'apple.com', 'netflix.com', 'twitch.tv', 'tiktok.com',
+                'espn.com', 'nba.com', 'cnn.com', 'bbc.com', 'nytimes.com', 'bloomberg.com',
+                'adobe.com', 'dropbox.com', 'paypal.com', 'ebay.com', 'reddit.com',
+                'shopee.tw', 'momo.com.tw', 'pchome.com.tw', 'mygopen.com', 'gov.tw', 'edu.tw',
+                'tfc-taiwan.org.tw', 'antiscam.showcha.com',
+                'everbrightpurifying.com', 'doteat.tw',
+                'bitopro.com', 'fami.tw', // [新增] 幣託與全家
+                'lihi.io', // [新增] Lihi 縮網址 (白名單但需提示)
+                'mgp.care', // [新增] MyGoPen 縮網址
+                'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com' // [新增] 常見合法縮網址 (白名單但需提示)
+            ];
+            const isWhitelisted = whitelist.some(w => domain.endsWith(w));
+
+            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
+            const isInputShortener = shorteners.some(s => domain.includes(s));
+
+            // 平行呼叫 API
+            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
+                withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
+                // 將超時時間從 3500 改為 5000
+                isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 5000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
+                withTimeout(checkCommunityBlocklists(domain), 4000, false),
+                withTimeout(checkTrancoRank(domain), 3000, null),
+                withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
+                withTimeout(fetchTraceData(fullUrl), 8000, null)
+            ]);
+
+            const rdapDate = rdapData.date;
+            const privacyDetected = rdapData.privacyDetected;
+            const registrarName = rdapData.registrarName || '';
+
+            // [New] Extract trace chain
+            const traceChain = traceData ? traceData.chain : [];
+
+            // 1. 定義免費/高風險架站平台 (新增邏輯)
+            // 修正：Dudaone 是一個網站建置平台，雖主網域流量大，但其子網域常被濫用。
+            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh'];
+            const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
+
+            // 2. 修正高流量判斷：如果是免費架站平台，即使 Tranco 有排名也不視為白名單 (避免 dudaone.com 全域排名影響子網域判斷)
+            const isHighTraffic = (trancoRank !== null || isWhitelisted || isTrustedTLD) && !isFreeHosting;
+            
+            // Define safe shorteners for messaging
+            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com'];
+
+            let trafficStatus = 'warning';
+            let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
+            
+            if (trancoRank && !isFreeHosting) {
+                trafficStatus = 'safe';
+                trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
+            } else if (isWhitelisted || isTrustedTLD) {
+                trafficStatus = 'safe';
+                if (safeShorteners.some(s => domain.endsWith(s))) {
+                    trafficDetails = '貼的這個連結有用到縮網址，建議看最後網址是什麼來決定，要特別留意還是可能有風險！';
+                } else if (domain.endsWith('mgp.care')) {
+                    trafficDetails = 'MyGoPen 官方服務，安全無虞';
+                } else {
+                    trafficDetails = '受信賴的台灣在地或政府教育網站';
+                }
+            } else if (isFreeHosting) {
+                trafficStatus = 'warning';
+                trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，子網域流量無法反應真實信譽`;
+            }
+
+            const entropy = calculateEntropy(domain.split('.')[0]);
+            const isHighEntropy = entropy > 4.2; 
+
+            // [新增] 檢查網域是否包含兩個或以上的連字號 (-)
+            const hyphenCount = (domain.match(/-/g) || []).length;
+            const hasMultipleHyphens = hyphenCount >= 2;
+
+            // Redirect Detection
+            let isRedirected = false;
+            let finalDomain = '';
+            let isKnownShortener = false;
+            let redirectDetails = '未偵測到跨網域轉址';
+            
+            if (traceData && traceData.finalUrl) {
+                siteStatusData.finalUrl = traceData.finalUrl;
+            }
+
+            if (siteStatusData.finalUrl) {
+                try {
+                    const finalUrlObj = new URL(siteStatusData.finalUrl);
+                    finalDomain = finalUrlObj.hostname.toLowerCase();
+                    const cleanDomain = domain.replace(/^www\./, '');
+                    const cleanFinalDomain = finalDomain.replace(/^www\./, '');
+
+                    if (cleanDomain !== cleanFinalDomain) {
+                        isRedirected = true;
+                        isKnownShortener = shorteners.some(s => cleanDomain.includes(s));
+                        redirectDetails = `偵測到轉址至: ${finalDomain}`;
+                        if (isKnownShortener) redirectDetails += ' (短網址服務)';
+                    }
+                } catch(e) {}
+            }
+
+            const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
+            const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
+
+            const domainParts = domain.split('.').length;
+            const isDeepSubdomain = domainParts >= 4; // 修正為 4 層
+
+            const suspiciousParamKeys = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='];
+            const hasSuspiciousParams = suspiciousParamKeys.some(key => fullUrl.toLowerCase().includes(key));
+
+            // 3. 偽造政府/機構關鍵字偵測 (新增邏輯)
+            // 檢查是否包含 "gov" 關鍵字，但結尾不是正規的 .gov 或 .gov.tw
+            const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
+
+            // --- 風險計分 ---
+            let riskScore = 0;
+            if (blocklistListed) riskScore = 100;
+            else {
+                // 基礎狀態檢查 - 強化網站可訪問性風險判定
+                // 網域如果[看不到內容]或[404 Not Found]或[空白]，設定為高風險
+                if (siteStatusData.status === 'blank') {
+                    riskScore += 95; 
+                } else if (siteStatusData.status === 'error') {
+                    riskScore += 80; // 提高分數，確保紅燈 (404/403)
+                } else if (siteStatusData.status === 'unknown') {
+                    if (!isHighTraffic) {
+                        riskScore += 75; // 提高分數，無法連線視為高風險 (原本40)
+                    } else {
+                        riskScore += 20; // [修改] 高流量網站例外 (可能是擋爬蟲) - 降低至 20
+                    }
+                }
+
+                if (isVeryHighRiskTLD) riskScore += 75;
+                else if (isSuspiciousTLD) riskScore += 30;
+                
+                if (siteStatusData.hasIframe) riskScore += 15;
+                
+                if (isRedirected) {
+                    riskScore += 20;
+                    if (isKnownShortener) riskScore += 40;
+                }
+
+                if (isInputShortener) {
+                    riskScore += 30;
+                }
+
+                if (traceData && traceData.isHighRisk) {
+                    riskScore += 40;
+                }
+
+                if (privacyDetected && !isHighTraffic) {
+                     riskScore += 15;
+                }
+
+                if (isHighRiskRegistrar && !isHighTraffic) {
+                    riskScore += 15;
+                }
+
+                if (isDeepSubdomain && !isHighTraffic) {
+                    riskScore += 60; // 提高懲罰，多層子網域 (>=4) 且非受信賴網域視為高風險
+                }
+                
+                if (hasSuspiciousParams) {
+                     riskScore += 40;
+                }
+                
+                // 特徵風險 (新增)
+                if (isFakeGov) {
+                    riskScore += 60; // 惡意偽裝政府，直接給予重罰
+                }
+                
+                if (hasMultipleHyphens) {
+                    riskScore += 60; // 網域包含多個連字號，判定為高風險
+                }
+
+                if (isFreeHosting) {
+                    riskScore += 25; // 免費平台風險
+                }
+                
+                if (!isHighTraffic) riskScore += 15;
+                
+                // 高流量網站若發生 404/Error 則不應降低風險分數
+                if (isHighTraffic) {
+                    // 只有在網站狀態正常且沒有被標記為不安全時，才視為低風險
+                    if (siteStatusData.status === 'ok' && !isFakeGov) {
+                        if (isVeryHighRiskTLD && !isWhitelisted) {
+                            riskScore = 35;
+                        } else {
+                            riskScore = 0;
+                        }
+                    }
+                }
+            }
+
+            let ageDetails = '無法自動獲取 (建議手動查詢 WHOIS)';
+            let ageStatus = 'unknown';
+            
+            if (rdapDate) {
+                const regDate = new Date(rdapDate);
+                const now = new Date();
+                const diffTime = Math.abs(now - regDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const diffYears = (diffDays / 365).toFixed(1);
+                
+                const dateStr = regDate.toISOString().split('T')[0];
+                ageDetails = `註冊日期: ${dateStr} (約 ${diffYears} 年前)`;
+
+                if (diffDays < 180) { 
+                    ageStatus = 'danger';
+                    ageDetails += ' - 極新網域！';
+                    riskScore += 20; 
+                } else if (diffDays < 365) { 
+                    ageStatus = 'warning';
+                    ageDetails += ' - 網域較新';
+                } else {
+                    ageStatus = 'safe';
+                }
+            } else if (isHighTraffic) { 
+                ageStatus = 'safe'; 
+                ageDetails = '受信賴的長期網域 (歷史悠久)'; 
+            } else if (isVeryHighRiskTLD) { 
+                ageStatus = 'danger'; 
+                ageDetails = '高風險特殊網域 (無法取得日期)'; 
+            }
+
+            return {
+                domain: targetDomain,
+                scannedUrl: fullUrl,
+                traceChain: traceChain, // [New] Return trace chain
+                riskScore: Math.min(100, riskScore), 
+                blocklistListed: blocklistListed,
+                details: {
+                    serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測',
+                    siteStatus: siteStatusData
+                },
+                checks: {
+                    siteContent: {
+                        status: (siteStatusData.status === 'ok') ? 'safe' : 'danger',
+                        label: '網站內容狀態',
+                        details: siteStatusData.msg
+                    },
+                    domainAnalysis: {
+                        status: isFakeGov ? 'danger' : (hasMultipleHyphens ? 'danger' : (isFreeHosting ? 'warning' : 'safe')),
+                        label: '網域特徵分析',
+                        details: isFakeGov 
+                            ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' 
+                            : (hasMultipleHyphens 
+                                ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' 
+                                : (safeShorteners.some(s => domain.endsWith(s))
+                                    ? '此連結使用縮網址服務，建議確認轉址後的網站。雖然平台安全，但仍須留意詐騙風險。' 
+                                    : (domain.endsWith('mgp.care')
+                                        ? 'MyGoPen 官方縮網址服務'
+                                        : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常'))))
+                    },
+                    traffic: {
+                        status: trafficStatus,
+                        label: 'Tranco 流量排名',
+                        details: trafficDetails
+                    },
+                    age: {
+                        status: ageStatus,
+                        label: '註冊時間',
+                        details: ageDetails,
+                        link: `https://who.is/whois/${domain}`
+                    },
+                    registrar: {
+                        status: isHighRiskRegistrar ? 'warning' : 'safe',
+                        label: '註冊商信譽',
+                        details: registrarName 
+                            ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站 (統計數據)` : `註冊商: ${registrarName}`) 
+                            : '無法辨識註冊商'
+                    },
+                    whoisPrivacy: {
+                        status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', 
+                        label: 'WHOIS 身份隱藏',
+                        details: privacyDetected 
+                            ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') 
+                            : '未偵測到隱私保護服務'
+                    },
+                    subdomain: {
+                        status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe',
+                        label: '子網域深度',
+                        details: isDeepSubdomain 
+                            ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 4層結構)，常見於詐騙連結偽裝')
+                            : '子網域層級正常'
+                    },
+                    redirect: {
+                         status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), 
+                         label: '轉址/短網址',
+                         details: (traceData && traceData.redirectCount >= 3)
+                            ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`
+                            : (isRedirected 
+                                ? redirectDetails 
+                                : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')),
+                         finalUrl: isRedirected ? siteStatusData.finalUrl : null
+                    },
+                    network: {
+                        status: 'info',
+                        label: '網路服務商 (ISP/ASN)',
+                        details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源'
+                    },
+                    params: {
+                        status: hasSuspiciousParams ? 'danger' : 'safe',
+                        label: '網址參數檢查',
+                        details: hasSuspiciousParams 
+                            ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' 
+                            : '未發現敏感追蹤或認證參數'
+                    },
+                    entropy: {
+                        status: isHighEntropy ? 'warning' : 'safe',
+                        label: '亂碼/隨機網址',
+                        details: isHighEntropy ? '網域名稱隨機度過高，疑似機器生成' : '網域名稱結構正常'
+                    },
+                    iframe: {
+                        status: siteStatusData.hasIframe ? 'warning' : 'safe',
+                        label: 'Iframe 偽裝',
+                        details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架'
+                    }
+                }
+            };
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
