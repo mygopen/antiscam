@@ -132,6 +132,7 @@
         const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
         const ShieldZap = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polygon points="13 10 13 6 8 13 11 13 11 18 16 11 13 11" /></IconBase>;
+        const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
 
         // --- Logic Helpers ---
         const getPseudoRandom = (str) => {
@@ -172,7 +173,12 @@
                 const geoRes = await fetch(`https://ipwho.is/${ip}`);
                 const geoData = await geoRes.json();
                 if (!geoData.success) throw new Error('Geo failed');
-                return { country: `${geoData.country} (${geoData.country_code})`, isReal: true };
+                return { 
+                    country: `${geoData.country} (${geoData.country_code})`, 
+                    asn: geoData.connection?.asn ? `AS${geoData.connection.asn}` : '',
+                    org: geoData.connection?.org || geoData.connection?.isp || '',
+                    isReal: true 
+                };
             } catch (err) { return null; }
         };
 
@@ -199,6 +205,7 @@
                 let text = "";
                 let isBlank = false;
                 let hasIframe = false;
+                let linkStats = { total: 0, internal: 0, external: 0 };
                 
                 if (data.contents) {
                     text = data.contents;
@@ -213,6 +220,37 @@
                             if (title.toLowerCase().includes("index of /")) {
                                 return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
                             }
+                            
+                            // [NEW] Link Analysis
+                            const links = doc.querySelectorAll('a');
+                            linkStats.total = links.length;
+                            
+                            let domainHostname = '';
+                            try { domainHostname = new URL(fullUrl).hostname; } catch(e){}
+
+                            links.forEach(el => {
+                                const href = el.getAttribute('href');
+                                if (!href) return;
+                                
+                                let isInternal = false;
+                                // Check relative links
+                                if (href.startsWith('/') || href.startsWith('.') || href.startsWith('#')) {
+                                    isInternal = true;
+                                } else if (href.startsWith('http')) {
+                                    try {
+                                        const linkUrl = new URL(href);
+                                        if (linkUrl.hostname.includes(domainHostname) || domainHostname.includes(linkUrl.hostname)) {
+                                            isInternal = true;
+                                        }
+                                    } catch(e) {}
+                                } else if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+                                     isInternal = true; // Treat functional links as internal-ish
+                                }
+
+                                if (isInternal) linkStats.internal++;
+                                else linkStats.external++;
+                            });
+
                             const invisibleTags = doc.querySelectorAll('script, style, link, meta, noscript, svg, path, iframe, frame, object, embed');
                             invisibleTags.forEach(el => el.remove());
                             const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
@@ -221,8 +259,8 @@
                     }
                 }
 
-                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url };
-                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url };
+                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats };
+                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats };
 
             } catch (e) {
                 try {
@@ -732,6 +770,12 @@
                 ageDetails = '高風險特殊網域 (無法取得日期)'; 
             }
 
+            // Link Analysis Status Logic
+            let linkStatus = 'info';
+            if (siteStatusData.linkStats) {
+                if (siteStatusData.linkStats.total <= 1) linkStatus = 'warning'; // Very few links
+            }
+
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
@@ -802,6 +846,18 @@
                                 ? redirectDetails 
                                 : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')),
                          finalUrl: isRedirected ? siteStatusData.finalUrl : null
+                    },
+                    network: {
+                        status: 'info',
+                        label: '網路服務商 (ISP/ASN)',
+                        details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源'
+                    },
+                    links: {
+                        status: linkStatus,
+                        label: '網頁連結分析',
+                        details: siteStatusData.linkStats 
+                            ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` 
+                            : '無法分析頁面內容'
                     },
                     params: {
                         status: hasSuspiciousParams ? 'danger' : 'safe',
@@ -1247,6 +1303,9 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                                 if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
                                                                 if (check.label === '網域特徵分析') return <Search size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
+                                                                // [新增] 網路與連結圖示
+                                                                if (check.label === '網路服務商 (ISP/ASN)') return <Wifi size={20} className={check.status === 'info' ? 'text-blue-500' : 'text-gray-500'} />;
+                                                                if (check.label === '網頁連結分析') return <Link size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-blue-500'} />;
 
                                                                 // Default Icons
                                                                 return check.status === 'safe' ? 
