@@ -938,16 +938,23 @@
 
         // --- New Component: Site Screenshot Preview ---
         const SiteScreenshot = ({ url, status }) => {
-            const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(false);
+            // 狀態判定：error(HTTP錯誤), unknown(連線失敗), blank(空白/被擋) 都視為無法截圖
+            const isBadStatus = ['error', 'unknown', 'blank'].includes(status);
             
-            // 如果已知網站狀態是 error，直接視為錯誤，不請求圖片
+            // 初始化 state：如果是壞狀態，直接進入 error 模式，不 loading
+            const [loading, setLoading] = useState(!isBadStatus);
+            const [error, setError] = useState(isBadStatus);
+            
+            // 如果已知網站狀態異常，直接視為錯誤，不請求圖片
             useEffect(() => {
-                if (status === 'error') {
+                if (['error', 'unknown', 'blank'].includes(status)) {
                     setLoading(false);
                     setError(true);
+                } else {
+                    setError(false);
+                    setLoading(true);
                 }
-            }, [status]);
+            }, [status, url]);
             
             // 使用 Microlink API 進行截圖
             const encodedUrl = encodeURIComponent(url);
@@ -965,7 +972,7 @@
                     
                     <div className="p-0 bg-gray-100 flex justify-center items-center min-h-[250px] relative group">
                         {error ? (
-                            // [修正] 404 狀態顯示
+                            // [修正] 404/Error 狀態顯示 (灰色背景 + 文字提示)
                             <div className="text-gray-400 text-sm flex flex-col items-center justify-center h-full min-h-[250px] w-full bg-gray-100">
                                 <AlertTriangle size={32} className="mb-2 opacity-50 text-gray-500" />
                                 <span className="font-mono font-bold text-gray-600 text-lg">404 Not Found</span>
