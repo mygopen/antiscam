@@ -541,6 +541,9 @@
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
 
+            // [New] Extract trace chain
+            const traceChain = traceData ? traceData.chain : [];
+
             // 1. 定義免費/高風險架站平台 (新增邏輯)
             // 修正：Dudaone 是一個網站建置平台，雖主網域流量大，但其子網域常被濫用。
             const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh'];
@@ -732,6 +735,7 @@
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
+                traceChain: traceChain, // [New] Return trace chain
                 riskScore: Math.min(100, riskScore), 
                 blocklistListed: blocklistListed,
                 details: {
@@ -847,6 +851,84 @@
                             className={`h-full ${color} transition-all duration-1000 ease-out`} 
                             style={{ width: width }}
                         ></div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- New Component: Page URL History Timeline ---
+        const TraceTimeline = ({ chain }) => {
+            if (!chain || chain.length === 0) return null;
+
+            return (
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
+                    <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Activity size={20} className="text-brand-red" />
+                            <h3 className="font-bold text-gray-800">網頁跳轉紀錄 (URL History)</h3>
+                        </div>
+                        <span className="text-xs font-mono text-gray-400 bg-white px-2 py-1 rounded border border-gray-200">
+                            Total: {chain.length} hops
+                        </span>
+                    </div>
+                    <div className="p-6 bg-white">
+                        <div className="relative">
+                            {/* 垂直連線線條 */}
+                            {chain.length > 1 && (
+                                <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-gray-100"></div>
+                            )}
+
+                            <div className="space-y-6">
+                                {chain.map((hop, index) => {
+                                    const isLast = index === chain.length - 1;
+                                    const code = hop.status;
+                                    const isRedirect = code >= 300 && code < 400;
+                                    const isError = code >= 400;
+
+                                    let colorClass = "bg-green-100 text-green-700 border-green-200"; 
+                                    let dotColor = "bg-green-500 border-green-100";
+                                    
+                                    if (isRedirect) {
+                                        colorClass = "bg-orange-100 text-orange-700 border-orange-200";
+                                        dotColor = "bg-orange-500 border-orange-100";
+                                    } else if (isError) {
+                                        colorClass = "bg-red-100 text-red-700 border-red-200";
+                                        dotColor = "bg-red-500 border-red-100";
+                                    }
+
+                                    return (
+                                        <div key={index} className="relative flex items-start gap-4 group">
+                                            {/* 圓點與序號 */}
+                                            <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center border-4 shadow-sm flex-shrink-0 bg-white ${isRedirect ? 'border-orange-100' : (isError ? 'border-red-100' : 'border-green-100')}`}>
+                                                <div className={`w-2.5 h-2.5 rounded-full ${isRedirect ? 'bg-orange-500' : (isError ? 'bg-red-500' : 'bg-green-500')}`}></div>
+                                            </div>
+
+                                            {/* 內容區塊 */}
+                                            <div className="flex-grow min-w-0 pt-1">
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                    <span className={`px-2.5 py-0.5 rounded-md text-xs font-bold border ${colorClass}`}>
+                                                        HTTP {hop.status}
+                                                    </span>
+                                                    {isRedirect && (
+                                                        <span className="flex items-center text-xs text-orange-600 font-medium">
+                                                            <ArrowRight size={12} className="mr-1" />
+                                                            Redirect
+                                                        </span>
+                                                    )}
+                                                    {index === 0 && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Initial</span>}
+                                                    {isLast && !isRedirect && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Final</span>}
+                                                </div>
+                                                
+                                                {/* 網址顯示 */}
+                                                <div className="group-hover:bg-blue-50/50 transition-colors p-2.5 rounded-lg border border-gray-100 bg-gray-50 font-mono text-sm text-gray-600 break-all select-all hover:border-blue-200 hover:text-blue-800">
+                                                    {hop.url}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
@@ -1105,6 +1187,11 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                     </div>
 
                                                     <RiskMeter score={result.riskScore} />
+
+                                                    {/* [New] 插入網頁跳轉紀錄 (URL History) */}
+                                                    {result.traceChain && result.traceChain.length > 0 && (
+                                                        <TraceTimeline chain={result.traceChain} />
+                                                    )}
 
                                                     {/* Alerts */}
                                                     {result.blocklistListed && (
