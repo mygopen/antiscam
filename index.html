@@ -858,14 +858,16 @@
 
         // --- New Component: Page URL History Timeline ---
         const TraceTimeline = ({ chain }) => {
-            if (!chain || chain.length === 0) return null;
+            // [修正] 當轉址鏈長度小於等於 1 (代表只有初始網址，無轉址)，則不顯示
+            if (!chain || chain.length <= 1) return null;
 
             return (
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
                     <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Activity size={20} className="text-brand-red" />
-                            <h3 className="font-bold text-gray-800">網頁跳轉紀錄 (URL History)</h3>
+                            {/* [修正] 移除英文 (URL History) */}
+                            <h3 className="font-bold text-gray-800">網頁跳轉紀錄</h3>
                         </div>
                         <span className="text-xs font-mono text-gray-400 bg-white px-2 py-1 rounded border border-gray-200">
                             Total: {chain.length} hops
@@ -1189,7 +1191,8 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                     <RiskMeter score={result.riskScore} />
 
                                                     {/* [New] 插入網頁跳轉紀錄 (URL History) */}
-                                                    {result.traceChain && result.traceChain.length > 0 && (
+                                                    {/* 條件已包含在 TraceTimeline 內部 (chain <= 1 則 return null)，但這裡也可保留檢查 */}
+                                                    {result.traceChain && result.traceChain.length > 1 && (
                                                         <TraceTimeline chain={result.traceChain} />
                                                     )}
 
