@@ -936,101 +936,6 @@
             );
         };
 
-        // --- New Component: Site Screenshot Preview ---
-        const SiteScreenshot = ({ url, status }) => {
-            // [修正] 擴大錯誤判定：只要是 error, unknown, blank 都視為無法截圖，避免顯示黑畫面
-            // unknown: 連線失敗/DNS解析錯誤
-            // blank: 網站空白/內容被擋
-            // error: HTTP 400+ 錯誤
-            const isBadStatus = ['error', 'unknown', 'blank'].includes(status);
-            
-            // 狀態控制
-            const [loading, setLoading] = useState(!isBadStatus);
-            const [error, setError] = useState(isBadStatus);
-            const [useFallback, setUseFallback] = useState(false); // 控制是否使用備用來源 (WordPress)
-            
-            // 監聽 status 變化
-            useEffect(() => {
-                if (['error', 'unknown', 'blank'].includes(status)) {
-                    setLoading(false);
-                    setError(true);
-                } else {
-                    setError(false);
-                    setLoading(true);
-                    setUseFallback(false); // 重置為預設來源
-                }
-            }, [status, url]);
-            
-            // 決定截圖 URL
-            // 預設: Microlink (效果好)
-            // 備用: WordPress mshots (相容性高)
-            const imgUrl = useFallback 
-                ? `https://s.wordpress.com/mshots/v1/${encodeURIComponent(url)}?w=1280&h=800`
-                : `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url&colorScheme=dark&viewport.width=1280&viewport.height=800`;
-
-            return (
-                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
-                    <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <ImageIcon size={20} className="text-brand-red" />
-                            {/* [修正] 標題中文化且簡潔 */}
-                            <h3 className="font-bold text-gray-800">網站即時截圖</h3>
-                        </div>
-                    </div>
-                    
-                    <div className="p-0 bg-gray-100 flex justify-center items-center min-h-[250px] relative group">
-                        {error ? (
-                            // [修正] 404/Error 狀態顯示 (灰色背景 + 文字提示)
-                            <div className="text-gray-400 text-sm flex flex-col items-center justify-center h-full min-h-[250px] w-full bg-gray-100">
-                                <AlertTriangle size={32} className="mb-2 opacity-50 text-gray-500" />
-                                <span className="font-mono font-bold text-gray-600 text-lg">404 Not Found</span>
-                                <span className="text-gray-500 mt-1 font-medium">該頁面不存在</span>
-                            </div>
-                        ) : (
-                            <div className="relative w-full">
-                                {loading && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50/50 z-10 backdrop-blur-sm h-[300px]">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-red"></div>
-                                            <span className="text-xs text-gray-500 font-medium">正在擷取畫面...</span>
-                                        </div>
-                                    </div>
-                                )}
-                                <img 
-                                    src={imgUrl} 
-                                    alt="Website Screenshot" 
-                                    className={`w-full h-auto object-cover transition-all duration-700 ${loading ? 'opacity-0 blur-sm' : 'opacity-100 blur-0'}`}
-                                    onLoad={() => setLoading(false)}
-                                    onError={() => { setLoading(false); setError(false); /* 載入失敗不直接顯示 404，而是讓使用者看空白或切換來源 */ }}
-                                />
-                                <div className="absolute inset-0 bg-transparent"></div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="px-6 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400 flex justify-between items-center">
-                        <span>Powered by {useFallback ? 'WordPress' : 'Microlink'}</span>
-                        
-                        <div className="flex items-center gap-3">
-                            {/* [新增] 切換來源按鈕 */}
-                            {!error && (
-                                <button 
-                                    onClick={() => { setLoading(true); setUseFallback(!useFallback); }}
-                                    className="flex items-center gap-1 text-gray-500 hover:text-brand-red transition-colors bg-white border border-gray-200 px-2 py-1 rounded shadow-sm"
-                                >
-                                    <RefreshCw size={10} />
-                                    {useFallback ? '切換回預設來源' : '截圖顯示異常？切換來源'}
-                                </button>
-                            )}
-                            
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-brand-red transition-colors">
-                                開啟原始網頁 <ExternalLink size={10} />
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
         // --- Main Component ---
         const App = () => {
             const [url, setUrl] = useState('');
@@ -1291,12 +1196,6 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                     {result.traceChain && result.traceChain.length > 1 && (
                                                         <TraceTimeline chain={result.traceChain} />
                                                     )}
-
-                                                    {/* [New] 網站即時截圖 */}
-                                                    <SiteScreenshot 
-                                                        url={result.details.siteStatus.finalUrl || result.scannedUrl} 
-                                                        status={result.details.siteStatus.status}
-                                                    />
 
                                                     {/* Alerts */}
                                                     {result.blocklistListed && (
