@@ -936,6 +936,61 @@
             );
         };
 
+        // --- New Component: Site Screenshot Preview ---
+        const SiteScreenshot = ({ url }) => {
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(false);
+            
+            // 使用 Microlink API 進行截圖
+            const encodedUrl = encodeURIComponent(url);
+            const screenshotUrl = `https://api.microlink.io/?url=${encodedUrl}&screenshot=true&meta=false&embed=screenshot.url&colorScheme=dark&viewport.width=1280&viewport.height=800`;
+
+            return (
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
+                    <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <ImageIcon size={20} className="text-brand-red" />
+                            <h3 className="font-bold text-gray-800">網站即時截圖 (Live Screenshot)</h3>
+                        </div>
+                    </div>
+                    
+                    <div className="p-0 bg-gray-100 flex justify-center items-center min-h-[250px] relative group">
+                        {error ? (
+                            <div className="text-gray-400 text-sm flex flex-col items-center py-10">
+                                <XCircle size={32} className="mb-2 opacity-50" />
+                                <span>無法產生截圖 (可能網站拒絕連線或回應過慢)</span>
+                            </div>
+                        ) : (
+                            <div className="relative w-full">
+                                {loading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50/50 z-10 backdrop-blur-sm h-[300px]">
+                                        <div className="flex flex-col items-center gap-3">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-red"></div>
+                                            <span className="text-xs text-gray-500 font-medium">正在擷取畫面...</span>
+                                        </div>
+                                    </div>
+                                )}
+                                <img 
+                                    src={screenshotUrl} 
+                                    alt="Website Screenshot" 
+                                    className={`w-full h-auto object-cover transition-all duration-700 ${loading ? 'opacity-0 blur-sm' : 'opacity-100 blur-0'}`}
+                                    onLoad={() => setLoading(false)}
+                                    onError={() => { setLoading(false); setError(true); }}
+                                />
+                                <div className="absolute inset-0 bg-transparent"></div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="px-6 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400 flex justify-between items-center">
+                        <span>Powered by Microlink</span>
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-brand-red transition-colors">
+                            開啟原始網頁 <ExternalLink size={10} />
+                        </a>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Main Component ---
         const App = () => {
             const [url, setUrl] = useState('');
@@ -1195,6 +1250,11 @@ ${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).j
                                                     {result.traceChain && result.traceChain.length > 1 && (
                                                         <TraceTimeline chain={result.traceChain} />
                                                     )}
+
+                                                    {/* [New] 網站即時截圖 */}
+                                                    <SiteScreenshot 
+                                                        url={result.details.siteStatus.finalUrl || result.scannedUrl} 
+                                                    />
 
                                                     {/* Alerts */}
                                                     {result.blocklistListed && (
