@@ -25,7 +25,7 @@
                             red: '#d93025',
                             darkRed: '#b92b1b',
                             light: '#fff1f0',
-                            green: '#188038', 
+                            green: '#188038', // 類似 LINE 的綠色
                             darkGreen: '#12662d'
                         }
                     },
@@ -62,10 +62,20 @@
             background-attachment: fixed;
             -webkit-tap-highlight-color: transparent;
         }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
         
         .glass-card {
             background: rgba(255, 255, 255, 0.9);
@@ -99,18 +109,29 @@
         const HelpCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></IconBase>;
         const Github = (p) => <IconBase {...p}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></IconBase>;
         const Layout = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></IconBase>;
+        const Code = (p) => <IconBase {...p}><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></IconBase>;
+        const Clock = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></IconBase>;
         const CheckCircle = (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></IconBase>;
+        const XCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></IconBase>;
         const Globe = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" /></IconBase>;
         const Copy = (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconBase>;
         const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"></polyline></IconBase>;
+        const RefreshCw = (p) => <IconBase {...p}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></IconBase>;
+        const ImageIcon = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></IconBase>;
+        const Type = (p) => <IconBase {...p}><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></IconBase>;
+        const Hash = (p) => <IconBase {...p}><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></IconBase>;
+        const Eye = (p) => <IconBase {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></IconBase>;
         const ArrowRight = (p) => <IconBase {...p}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></IconBase>;
         const ExternalLink = (p) => <IconBase {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></IconBase>;
+        const Shuffle = (p) => <IconBase {...p}><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></IconBase>;
         const UserX = (p) => <IconBase {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></IconBase>;
         const Flag = (p) => <IconBase {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>;
         const Layers = (p) => <IconBase {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></IconBase>;
         const Link = (p) => <IconBase {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></IconBase>;
+        const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></IconBase>;
         const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
+        const ShieldZap = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polygon points="13 10 13 6 8 13 11 13 11 18 16 11 13 11" /></IconBase>;
         const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
 
         // --- Logic Helpers ---
@@ -131,6 +152,7 @@
             ]);
         };
 
+        // --- Algorithms ---
         const calculateEntropy = (str) => {
             const len = str.length;
             const frequencies = {};
@@ -162,54 +184,92 @@
 
         const checkSiteAvailability = async (fullUrl) => {
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
+
             try {
                 const res = await fetch(proxyUrl);
                 if (!res.ok) return { status: 'unknown', msg: '無法檢測網站狀態', hasIframe: false, finalUrl: null };
+                
                 const data = await res.json();
+
+                // 明確檢查 HTTP Status Code (404/403/500 都視為 Error)
                 if (data.status && data.status.http_code >= 400) {
-                     return { status: 'error', code: data.status.http_code, msg: `網站無法正常存取 (HTTP ${data.status.http_code})`, hasIframe: false, finalUrl: data.status.url };
+                     return { 
+                        status: 'error', 
+                        code: data.status.http_code, 
+                        msg: `網站無法正常存取 (HTTP ${data.status.http_code})`, 
+                        hasIframe: false, 
+                        finalUrl: data.status.url 
+                    };
                 }
+                
                 let text = "";
                 let isBlank = false;
                 let hasIframe = false;
                 let linkStats = { total: 0, internal: 0, external: 0 };
+                
                 if (data.contents) {
                     text = data.contents;
                     hasIframe = /<iframe/i.test(text);
+
                     if (text.length < 500) isBlank = true;
                     else {
                         try {
                             const parser = new DOMParser();
                             const doc = parser.parseFromString(text, 'text/html');
-                            if ((doc.title || "").toLowerCase().includes("index of /")) {
+                            const title = doc.title || "";
+                            if (title.toLowerCase().includes("index of /")) {
                                 return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
                             }
+                            
+                            // [NEW] Link Analysis
                             const links = doc.querySelectorAll('a');
                             linkStats.total = links.length;
+                            
                             let domainHostname = '';
                             try { domainHostname = new URL(fullUrl).hostname; } catch(e){}
+
                             links.forEach(el => {
                                 const href = el.getAttribute('href');
                                 if (!href) return;
-                                let isInternal = (href.startsWith('/') || href.startsWith('.') || href.startsWith('#'));
-                                if (!isInternal && href.startsWith('http')) {
+                                
+                                let isInternal = false;
+                                // Check relative links
+                                if (href.startsWith('/') || href.startsWith('.') || href.startsWith('#')) {
+                                    isInternal = true;
+                                } else if (href.startsWith('http')) {
                                     try {
                                         const linkUrl = new URL(href);
-                                        if (linkUrl.hostname.includes(domainHostname) || domainHostname.includes(linkUrl.hostname)) isInternal = true;
+                                        if (linkUrl.hostname.includes(domainHostname) || domainHostname.includes(linkUrl.hostname)) {
+                                            isInternal = true;
+                                        }
                                     } catch(e) {}
+                                } else if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+                                     isInternal = true; // Treat functional links as internal-ish
                                 }
-                                if (isInternal || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) linkStats.internal++;
+
+                                if (isInternal) linkStats.internal++;
                                 else linkStats.external++;
                             });
+
                             const invisibleTags = doc.querySelectorAll('script, style, link, meta, noscript, svg, path, iframe, frame, object, embed');
                             invisibleTags.forEach(el => el.remove());
-                            if ((doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim().length < 800) isBlank = true;
+                            const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
+                            if (visibleText.length < 800) isBlank = true;
                         } catch (e) {}
                     }
                 }
+
                 if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats };
                 return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats };
-            } catch (e) { return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null }; }
+
+            } catch (e) {
+                try {
+                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
+                     const resBackup = await fetch(backupProxy);
+                     if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null };
+                } catch(err) {}
+                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null };
+            }
         };
 
         const checkTrancoRank = async (domain) => {
@@ -217,52 +277,116 @@
                 const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://tranco-list.eu/api/ranks/domain/${domain}`)}`;
                 const res = await fetch(proxyUrl);
                 if (!res.ok) return null;
+                
                 const data = await res.json();
-                return (data.ranks && data.ranks.length > 0) ? data.ranks[0].rank : null;
-            } catch (e) { return null; }
+                if (data.ranks && data.ranks.length > 0) {
+                    return data.ranks[0].rank;
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
         };
 
         const fetchRDAPData = async (domain) => {
             try {
-                const res = await fetch(`/api/rdap?domain=${domain}`);
+                const apiUrl = `/api/rdap?domain=${domain}`;
+                const res = await fetch(apiUrl);
                 if (!res.ok) return { date: null, privacyDetected: false, registrarName: null };
                 const data = await res.json();
+                
+                // --- 增強日期提取邏輯 ---
                 const events = data.events || [];
-                let regEvent = events.find(e => e.eventAction === 'registration') || events.find(e => e.eventAction === 'created') || events.find(e => e.eventAction === 'last changed');
+                let regEvent = 
+                    events.find(e => e.eventAction === 'registration') || 
+                    events.find(e => e.eventAction === 'created') ||  // 部分非標準欄位
+                    events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                
                 const date = (regEvent && regEvent.eventDate) ? regEvent.eventDate : null;
+
+                // --- 隱私保護偵測 ---
                 let privacyDetected = false;
-                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Masked', 'Private'];
+                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
+                
+                // --- 增強註冊商提取邏輯 (Registrar) ---
                 let registrarName = null;
+                
+                // 1. 標準路徑: entities -> roles='registrar' -> vcard
                 const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
                 if (registrarEntity) {
-                    if (registrarEntity.vcardArray && registrarEntity.vcardArray[1]) {
-                         const fnEntry = registrarEntity.vcardArray[1].find(item => item[0] === 'fn');
+                    // 嘗試從 vcard 提取 Full Name (fn)
+                    if (registrarEntity.vcardArray && registrarEntity.vcardArray.length > 1) {
+                         const fnEntry = registrarEntity.vcardArray[1]?.find(item => item[0] === 'fn');
                          if (fnEntry) registrarName = fnEntry[3];
                     }
-                    if (!registrarName && registrarEntity.handle) registrarName = registrarEntity.handle;
+                    // 如果沒有 vcard，嘗試使用 handle 或 name 屬性 (部分 RDAP 實作)
+                    if (!registrarName && registrarEntity.handle) {
+                        registrarName = registrarEntity.handle;
+                    }
+                    if (!registrarName && registrarEntity.name) {
+                        registrarName = registrarEntity.name;
+                    }
                 }
+
+                // 2. 如果標準路徑找不到，遞迴搜尋所有 entities 尋找可能的註冊商名稱
+                if (!registrarName && data.entities) {
+                     // 某些 .cn RDAP 可能結構較扁平或使用非標準 role
+                     const potentialRegistrars = data.entities.filter(e => !e.roles || !e.roles.includes('registrant'));
+                     for (const ent of potentialRegistrars) {
+                         if (ent.vcardArray) {
+                             const fnEntry = ent.vcardArray[1]?.find(item => item[0] === 'fn');
+                             // 排除隱私保護服務的名稱
+                             if (fnEntry && !privacyKeywords.some(kw => fnEntry[3].includes(kw))) {
+                                 registrarName = fnEntry[3];
+                                 break;
+                             }
+                         }
+                     }
+                }
+
+                // --- 隱私偵測遍歷 ---
                 const searchEntities = (entities) => {
-                    if (!entities) return;
+                    if (!entities || !Array.isArray(entities)) return;
                     for (const entity of entities) {
-                        if (entity.vcardArray && entity.vcardArray[1]) {
-                            for (const prop of entity.vcardArray[1]) {
-                                if (prop.length >= 4 && typeof prop[3] === 'string' && privacyKeywords.some(kw => prop[3].toLowerCase().includes(kw.toLowerCase()))) { privacyDetected = true; return; }
+                        if (entity.vcardArray && Array.isArray(entity.vcardArray) && entity.vcardArray.length > 1) {
+                            const vcardProps = entity.vcardArray[1];
+                            for (const prop of vcardProps) {
+                                if (prop.length >= 4 && typeof prop[3] === 'string') {
+                                    if (privacyKeywords.some(kw => prop[3].toLowerCase().includes(kw.toLowerCase()))) {
+                                        privacyDetected = true;
+                                        return;
+                                    }
+                                }
                             }
                         }
-                        if (entity.entities) searchEntities(entity.entities);
-                        if (privacyDetected) return;
+                        if (entity.handle && privacyKeywords.some(kw => entity.handle.toLowerCase().includes(kw.toLowerCase()))) {
+                            privacyDetected = true;
+                            return;
+                        }
+                        if (entity.entities) {
+                            searchEntities(entity.entities);
+                            if (privacyDetected) return;
+                        }
                     }
                 };
                 searchEntities(data.entities);
                 return { date, privacyDetected, registrarName };
-            } catch (e) { return { date: null, privacyDetected: false, registrarName: null }; }
+            } catch (e) {
+                console.error("RDAP Error:", e);
+                return { date: null, privacyDetected: false, registrarName: null };
+            }
         };
 
+        // --- Trace API Helper ---
         const fetchTraceData = async (url) => {
             try {
                 const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
-                return res.ok ? await res.json() : null;
-            } catch (e) { return null; }
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (e) {
+                console.error("Trace API Error:", e);
+                return null;
+            }
         };
 
         const checkCommunityBlocklists = async (domain) => {
@@ -270,72 +394,180 @@
                 const sources = [
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt',
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamSiteGetFromGlobalAntiScamOrg.txt',
-                    'https://danny0838.github.io/content-farm-terminator/files/blocklist-ublacklist/scam-sites.txt'
+                    'https://danny0838.github.io/content-farm-terminator/files/blocklist-ublacklist/scam-sites.txt',
+                    'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/SimilarURL.txt'
                 ];
-                const contents = await Promise.all(sources.map(url => fetch(url).then(res => res.ok ? res.text() : '')));
+                const requests = sources.map(url => fetch(url).then(res => res.ok ? res.text() : ''));
+                const contents = await Promise.all(requests);
                 const combinedText = contents.join('\n');
+                if (!combinedText) return false;
+                const lines = combinedText.split(/\r?\n/);
                 const lowerDomain = domain.toLowerCase();
-                return combinedText.split(/\r?\n/).some(line => {
+                return lines.some(line => {
                     let cleanLine = line.trim();
                     if (!cleanLine || cleanLine.startsWith('!') || cleanLine.startsWith('#')) return false;
-                    cleanLine = cleanLine.replace(/^\*:\/\/|^\*\.|\/\*$|^\|\||\^$/g, '').replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+                    cleanLine = cleanLine.replace(/^\*:\/\/|^\*\.|\/\*$|^\|\||\^$/g, '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    cleanLine = cleanLine.toLowerCase();
+                    if (!cleanLine) return false;
                     return lowerDomain === cleanLine || lowerDomain.endsWith('.' + cleanLine);
                 });
-            } catch (e) { return false; }
+            } catch (e) {
+                return false;
+            }
         };
 
+        // --- New Component: MyGoPen Widget ---
         const MyGoPenSection = ({ domain }) => {
             const [posts, setPosts] = useState([]);
+            const [loading, setLoading] = useState(true);
             const [keyword, setKeyword] = useState(domain);
-            useEffect(() => { setKeyword(domain); }, [domain]);
+
+            useEffect(() => {
+                setKeyword(domain);
+            }, [domain]);
+
             useEffect(() => {
                 const fetchPosts = async () => {
+                    const feedUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://www.mygopen.com/feeds/posts/default/-/詐騙?alt=json&max-results=3')}`;
                     try {
-                        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent('https://www.mygopen.com/feeds/posts/default/-/詐騙?alt=json&max-results=3')}`);
+                        const res = await fetch(feedUrl);
                         if (res.ok) {
                             const data = await res.json();
                             const parsed = JSON.parse(data.contents);
-                            setPosts(parsed.feed.entry.map(e => ({ title: e.title.$t, link: e.link.find(l => l.rel === 'alternate').href, date: e.published.$t.substring(0, 10) })));
+                            const entries = parsed.feed.entry.map(e => ({
+                                title: e.title.$t,
+                                link: e.link.find(l => l.rel === 'alternate').href,
+                                date: e.published.$t.substring(0, 10)
+                            }));
+                            setPosts(entries);
                         }
-                    } catch (e) {}
+                    } catch (e) {
+                        console.error("Failed to fetch MyGoPen feed", e);
+                    } finally {
+                        setLoading(false);
+                    }
                 };
                 fetchPosts();
             }, []);
+
             return (
                 <div className="bg-brand-light/50 border border-brand-red/20 rounded-2xl p-6 mt-8">
-                    <div className="flex items-center gap-3 mb-4"><Shield className="text-brand-red" size={24} /><h3 className="font-bold text-gray-800 text-lg">防詐騙資料庫查詢：</h3></div>
-                    <div className="mb-5"><label className="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">自訂搜尋關鍵字</label>
-                        <div className="relative group">
-                            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red focus:border-transparent outline-none bg-white text-gray-700 shadow-sm transition-all" />
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"><Edit size={16} /></div>
-                        </div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <Shield className="text-brand-red" size={24} />
+                        <h3 className="font-bold text-gray-800 text-lg">防詐騙資料庫查詢：</h3>
                     </div>
+                    
+                    <p className="text-sm text-gray-600 mb-4">
+                        建議可進一步查詢相關案例，檢視可能的詐騙手法。
+                    </p>
+
+                    <div className="mb-5">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">自訂搜尋關鍵字</label>
+                        <div className="relative group">
+                            <input 
+                                type="text" 
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                                className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red focus:border-transparent outline-none bg-white text-gray-700 shadow-sm transition-all"
+                                placeholder="輸入關鍵字..."
+                            />
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                <Edit size={16} />
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1 ml-1">
+                            提示: 可修改為詐騙簡訊內容、電話或 LINE ID 進行更精確的搜尋。
+                        </p>
+                    </div>
+
                     <div className="flex flex-col md:flex-row gap-3">
-                        <a href={`https://www.mygopen.com/search?q=${encodeURIComponent(keyword)}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-white border border-brand-red text-brand-red hover:bg-brand-red hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"><Search size={18} /><span>在 MyGoPen 搜尋</span></a>
-                        <a href={`https://www.google.com/search?q="${encodeURIComponent(keyword)}"+詐騙`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"><GoogleIcon size={18} /><span>Google 搜尋</span></a>
-                        <a href={`https://165dashboard.tw/key-word-search?keyWord=${encodeURIComponent(keyword)}&type=CityCase&typeArr=CityCase`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-white border border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"><BarChart size={18} /><span>在165打詐儀錶板搜尋</span></a>
+                        <a 
+                            href={`https://www.mygopen.com/search?q=${encodeURIComponent(keyword)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-white border border-brand-red text-brand-red hover:bg-brand-red hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                        >
+                            <Search size={18} />
+                            <span>在 MyGoPen 搜尋</span>
+                        </a>
+                        
+                         <a 
+                            href={`https://www.google.com/search?q="${encodeURIComponent(keyword)}"+詐騙`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                        >
+                            <GoogleIcon size={18} />
+                            <span>Google 搜尋</span>
+                        </a>
+
+                         <a 
+                            href={`https://165dashboard.tw/key-word-search?keyWord=${encodeURIComponent(keyword)}&type=CityCase&typeArr=CityCase`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-white border border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                        >
+                            <BarChart size={18} />
+                            <span>在165打詐儀錶板搜尋</span>
+                        </a>
                     </div>
                 </div>
             );
         };
-        const GoogleIcon = (p) => (<svg viewBox="0 0 24 24" width={p.size || 24} height={p.size || 24} {...p}><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>);
+        
+        const GoogleIcon = (props) => (
+            <svg viewBox="0 0 24 24" width={props.size || 24} height={props.size || 24} {...props}>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+        );
 
-        // --- Core Scan Logic ---
-        const simulateScan = async (targetDomain, fullUrl, whitelist) => {
+        const simulateScan = async (targetDomain, fullUrl) => {
             let resolvedIp = null;
             try {
                 const dnsRes = await fetch(`https://dns.google/resolve?name=${targetDomain}&type=A`);
                 const dnsData = await dnsRes.json();
                 if (dnsData.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
-                if (dnsData.Answer) resolvedIp = dnsData.Answer.find(r => r.type === 1)?.data;
+                if (dnsData.Answer && dnsData.Answer.length > 0) {
+                    const aRecord = dnsData.Answer.find(r => r.type === 1);
+                    if (aRecord) resolvedIp = aRecord.data;
+                }
             } catch(e) {}
 
             const domain = targetDomain.toLowerCase();
-            const isWhitelisted = whitelist.some(w => domain.endsWith(w));
-            const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
+            const randTraffic = getPseudoRandom(domain + 'traffic');
+            const randAge = getPseudoRandom(domain + 'age');
 
+            const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
+            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal']; // Added .gal as suffix check too
+            const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
+            const isSuspiciousTLD = domain.endsWith('.info');
+            
+            const whitelist = [
+                'google.com', 'facebook.com', 'yahoo.com', 'youtube.com', 'wikipedia.org', 
+                'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'amazon.com', 
+                'microsoft.com', 'apple.com', 'netflix.com', 'twitch.tv', 'tiktok.com',
+                'espn.com', 'nba.com', 'cnn.com', 'bbc.com', 'nytimes.com', 'bloomberg.com',
+                'adobe.com', 'dropbox.com', 'paypal.com', 'ebay.com', 'reddit.com',
+                'shopee.tw', 'momo.com.tw', 'pchome.com.tw', 'mygopen.com', 'gov.tw', 'edu.tw',
+                'tfc-taiwan.org.tw', 'antiscam.showcha.com',
+                'everbrightpurifying.com', 'doteat.tw',
+                'bitopro.com', 'fami.tw', // [新增] 幣託與全家
+                'lihi.io', // [新增] Lihi 縮網址 (白名單但需提示)
+                'mgp.care', // [新增] MyGoPen 縮網址
+                'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com' // [新增] 常見合法縮網址 (白名單但需提示)
+            ];
+            const isWhitelisted = whitelist.some(w => domain.endsWith(w));
+
+            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
+            const isInputShortener = shorteners.some(s => domain.includes(s));
+
+            // 平行呼叫 API
             const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
+                // 將超時時間從 3500 改為 5000
                 isWhitelisted ? Promise.resolve({ status: 'ok', msg: '白名單網站', hasIframe: false }) : withTimeout(checkSiteAvailability(fullUrl), 5000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 3000, null),
@@ -343,155 +575,807 @@
                 withTimeout(fetchTraceData(fullUrl), 8000, null)
             ]);
 
-            const freeHosting = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'github.io', 'vercel.app', 'netlify.app'];
-            const isFreeHosting = freeHosting.some(p => domain.endsWith(p));
-            const isHighTraffic = (trancoRank !== null || isWhitelisted || isTrustedTLD) && !isFreeHosting;
+            const rdapDate = rdapData.date;
+            const privacyDetected = rdapData.privacyDetected;
+            const registrarName = rdapData.registrarName || '';
 
+            // [New] Extract trace chain
+            const traceChain = traceData ? traceData.chain : [];
+
+            // 1. 定義免費/高風險架站平台 (新增邏輯)
+            // 修正：Dudaone 是一個網站建置平台，雖主網域流量大，但其子網域常被濫用。
+            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh'];
+            const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
+
+            // 2. 修正高流量判斷：如果是免費架站平台，即使 Tranco 有排名也不視為白名單 (避免 dudaone.com 全域排名影響子網域判斷)
+            const isHighTraffic = (trancoRank !== null || isWhitelisted || isTrustedTLD) && !isFreeHosting;
+            
+            // Define safe shorteners for messaging
+            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com'];
+
+            let trafficStatus = 'warning';
+            let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
+            
+            if (trancoRank && !isFreeHosting) {
+                trafficStatus = 'safe';
+                trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
+            } else if (isWhitelisted || isTrustedTLD) {
+                trafficStatus = 'safe';
+                if (safeShorteners.some(s => domain.endsWith(s))) {
+                    trafficDetails = '貼的這個連結有用到縮網址，建議看最後網址是什麼來決定，要特別留意還是可能有風險！';
+                } else if (domain.endsWith('mgp.care')) {
+                    trafficDetails = 'MyGoPen 官方服務，安全無虞';
+                } else {
+                    trafficDetails = '受信賴的台灣在地或政府教育網站';
+                }
+            } else if (isFreeHosting) {
+                trafficStatus = 'warning';
+                trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，子網域流量無法反應真實信譽`;
+            }
+
+            const entropy = calculateEntropy(domain.split('.')[0]);
+            const isHighEntropy = entropy > 4.2; 
+
+            // [新增] 檢查網域是否包含兩個或以上的連字號 (-)
+            const hyphenCount = (domain.match(/-/g) || []).length;
+            const hasMultipleHyphens = hyphenCount >= 2;
+
+            // Redirect Detection
+            let isRedirected = false;
+            let finalDomain = '';
+            let isKnownShortener = false;
+            let redirectDetails = '未偵測到跨網域轉址';
+            
+            if (traceData && traceData.finalUrl) {
+                siteStatusData.finalUrl = traceData.finalUrl;
+            }
+
+            if (siteStatusData.finalUrl) {
+                try {
+                    const finalUrlObj = new URL(siteStatusData.finalUrl);
+                    finalDomain = finalUrlObj.hostname.toLowerCase();
+                    const cleanDomain = domain.replace(/^www\./, '');
+                    const cleanFinalDomain = finalDomain.replace(/^www\./, '');
+
+                    if (cleanDomain !== cleanFinalDomain) {
+                        isRedirected = true;
+                        isKnownShortener = shorteners.some(s => cleanDomain.includes(s));
+                        redirectDetails = `偵測到轉址至: ${finalDomain}`;
+                        if (isKnownShortener) redirectDetails += ' (短網址服務)';
+                    }
+                } catch(e) {}
+            }
+
+            const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
+            const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
+
+            const domainParts = domain.split('.').length;
+            const isDeepSubdomain = domainParts >= 4; // 修正為 4 層
+
+            const suspiciousParamKeys = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='];
+            const hasSuspiciousParams = suspiciousParamKeys.some(key => fullUrl.toLowerCase().includes(key));
+
+            // 3. 偽造政府/機構關鍵字偵測 (新增邏輯)
+            // 檢查是否包含 "gov" 關鍵字，但結尾不是正規的 .gov 或 .gov.tw
+            const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
+
+            // --- 風險計分 ---
             let riskScore = 0;
             if (blocklistListed) riskScore = 100;
             else {
-                if (siteStatusData.status === 'blank') riskScore += 95; 
-                else if (siteStatusData.status === 'error') riskScore += 80;
-                else if (siteStatusData.status === 'unknown' && !isHighTraffic) riskScore += 75;
-                if (domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted) riskScore += 60;
-                if ((domain.match(/-/g) || []).length >= 2) riskScore += 60;
-                if (isHighTraffic && siteStatusData.status === 'ok') riskScore = 0;
+                // 基礎狀態檢查 - 強化網站可訪問性風險判定
+                // 網域如果[看不到內容]或[404 Not Found]或[空白]，設定為高風險
+                if (siteStatusData.status === 'blank') {
+                    riskScore += 95; 
+                } else if (siteStatusData.status === 'error') {
+                    riskScore += 80; // 提高分數，確保紅燈 (404/403)
+                } else if (siteStatusData.status === 'unknown') {
+                    if (!isHighTraffic) {
+                        riskScore += 75; // 提高分數，無法連線視為高風險 (原本40)
+                    } else {
+                        riskScore += 20; // [修改] 高流量網站例外 (可能是擋爬蟲) - 降低至 20
+                    }
+                }
+
+                if (isVeryHighRiskTLD) riskScore += 75;
+                else if (isSuspiciousTLD) riskScore += 30;
+                
+                if (siteStatusData.hasIframe) riskScore += 15;
+                
+                if (isRedirected) {
+                    riskScore += 20;
+                    if (isKnownShortener) riskScore += 40;
+                }
+
+                if (isInputShortener) {
+                    riskScore += 30;
+                }
+
+                if (traceData && traceData.isHighRisk) {
+                    riskScore += 40;
+                }
+
+                if (privacyDetected && !isHighTraffic) {
+                     riskScore += 15;
+                }
+
+                if (isHighRiskRegistrar && !isHighTraffic) {
+                    riskScore += 15;
+                }
+
+                if (isDeepSubdomain && !isHighTraffic) {
+                    riskScore += 60; // 提高懲罰，多層子網域 (>=4) 且非受信賴網域視為高風險
+                }
+                
+                if (hasSuspiciousParams) {
+                     riskScore += 40;
+                }
+                
+                // 特徵風險 (新增)
+                if (isFakeGov) {
+                    riskScore += 60; // 惡意偽裝政府，直接給予重罰
+                }
+                
+                if (hasMultipleHyphens) {
+                    riskScore += 60; // 網域包含多個連字號，判定為高風險
+                }
+
+                if (isFreeHosting) {
+                    riskScore += 25; // 免費平台風險
+                }
+                
+                if (!isHighTraffic) riskScore += 15;
+                
+                // 高流量網站若發生 404/Error 則不應降低風險分數
+                if (isHighTraffic) {
+                    // 只有在網站狀態正常且沒有被標記為不安全時，才視為低風險
+                    if (siteStatusData.status === 'ok' && !isFakeGov) {
+                        if (isVeryHighRiskTLD && !isWhitelisted) {
+                            riskScore = 35;
+                        } else {
+                            riskScore = 0;
+                        }
+                    }
+                }
+            }
+
+            let ageDetails = '無法自動獲取 (建議手動查詢 WHOIS)';
+            let ageStatus = 'unknown';
+            
+            if (rdapDate) {
+                const regDate = new Date(rdapDate);
+                const now = new Date();
+                const diffTime = Math.abs(now - regDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const diffYears = (diffDays / 365).toFixed(1);
+                
+                const dateStr = regDate.toISOString().split('T')[0];
+                ageDetails = `註冊日期: ${dateStr} (約 ${diffYears} 年前)`;
+
+                if (diffDays < 180) { 
+                    ageStatus = 'danger';
+                    ageDetails += ' - 極新網域！';
+                    riskScore += 20; 
+                } else if (diffDays < 365) { 
+                    ageStatus = 'warning';
+                    ageDetails += ' - 網域較新';
+                } else {
+                    ageStatus = 'safe';
+                }
+            } else if (isHighTraffic) { 
+                ageStatus = 'safe'; 
+                ageDetails = '受信賴的長期網域 (歷史悠久)'; 
+            } else if (isVeryHighRiskTLD) { 
+                ageStatus = 'danger'; 
+                ageDetails = '高風險特殊網域 (無法取得日期)'; 
+            }
+
+            // Link Analysis Status Logic
+            let linkStatus = 'info';
+            if (siteStatusData.linkStats) {
+                if (siteStatusData.linkStats.total <= 1) linkStatus = 'warning'; // Very few links
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceData?.chain || [], riskScore: Math.min(100, riskScore), blocklistListed,
-                details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
+                domain: targetDomain,
+                scannedUrl: fullUrl,
+                traceChain: traceChain, // [New] Return trace chain
+                riskScore: Math.min(100, riskScore), 
+                blocklistListed: blocklistListed,
+                details: {
+                    serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測',
+                    siteStatus: siteStatusData
+                },
                 checks: {
-                    siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteStatusData.msg },
-                    domainAnalysis: { status: (riskScore > 60) ? 'danger' : 'safe', label: '網域特徵分析', details: isWhitelisted ? '白名單信任網域' : '分析結果顯示正常' },
-                    traffic: { status: isHighTraffic ? 'safe' : 'warning', label: '流量排名', details: isHighTraffic ? '高流量網站' : '低流量網站' },
-                    age: { status: 'info', label: '註冊時間', details: rdapData.date ? `註冊於: ${rdapData.date}` : '無法取得日期' },
-                    registrar: { status: 'info', label: '註冊商', details: rdapData.registrarName || '無法辨識' },
-                    redirect: { status: (traceData?.redirectCount >= 3) ? 'warning' : 'safe', label: '轉址檢查', details: `跳轉次數: ${traceData?.redirectCount || 0}` }
+                    siteContent: {
+                        status: (siteStatusData.status === 'ok') ? 'safe' : 'danger',
+                        label: '網站內容狀態',
+                        details: siteStatusData.msg
+                    },
+                    domainAnalysis: {
+                        status: isFakeGov ? 'danger' : (hasMultipleHyphens ? 'danger' : (isFreeHosting ? 'warning' : 'safe')),
+                        label: '網域特徵分析',
+                        details: isFakeGov 
+                            ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' 
+                            : (hasMultipleHyphens 
+                                ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' 
+                                : (safeShorteners.some(s => domain.endsWith(s))
+                                    ? '此連結使用縮網址服務，建議確認轉址後的網站。雖然平台安全，但仍須留意詐騙風險。' 
+                                    : (domain.endsWith('mgp.care')
+                                        ? 'MyGoPen 官方縮網址服務'
+                                        : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站` : '網域命名結構無明顯異常'))))
+                    },
+                    traffic: {
+                        status: trafficStatus,
+                        label: 'Tranco 流量排名',
+                        details: trafficDetails
+                    },
+                    age: {
+                        status: ageStatus,
+                        label: '註冊時間',
+                        details: ageDetails,
+                        link: `https://who.is/whois/${domain}`
+                    },
+                    registrar: {
+                        status: isHighRiskRegistrar ? 'warning' : 'safe',
+                        label: '註冊商信譽',
+                        details: registrarName 
+                            ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站 (統計數據)` : `註冊商: ${registrarName}`) 
+                            : '無法辨識註冊商'
+                    },
+                    whoisPrivacy: {
+                        status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', 
+                        label: 'WHOIS 身份隱藏',
+                        details: privacyDetected 
+                            ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') 
+                            : '未偵測到隱私保護服務'
+                    },
+                    subdomain: {
+                        status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe',
+                        label: '子網域深度',
+                        details: isDeepSubdomain 
+                            ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 4層結構)，常見於詐騙連結偽裝')
+                            : '子網域層級正常'
+                    },
+                    redirect: {
+                         status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), 
+                         label: '轉址/短網址',
+                         details: (traceData && traceData.redirectCount >= 3)
+                            ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`
+                            : (isRedirected 
+                                ? redirectDetails 
+                                : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')),
+                         finalUrl: isRedirected ? siteStatusData.finalUrl : null
+                    },
+                    network: {
+                        status: 'info',
+                        label: '網路服務商 (ISP/ASN)',
+                        details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源'
+                    },
+                    links: {
+                        status: linkStatus,
+                        label: '網頁連結分析',
+                        details: siteStatusData.linkStats 
+                            ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` 
+                            : '無法分析頁面內容'
+                    },
+                    params: {
+                        status: hasSuspiciousParams ? 'danger' : 'safe',
+                        label: '網址參數檢查',
+                        details: hasSuspiciousParams 
+                            ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' 
+                            : '未發現敏感追蹤或認證參數'
+                    },
+                    entropy: {
+                        status: isHighEntropy ? 'warning' : 'safe',
+                        label: '亂碼/隨機網址',
+                        details: isHighEntropy ? '網域名稱隨機度過高，疑似機器生成' : '網域名稱結構正常'
+                    },
+                    iframe: {
+                        status: siteStatusData.hasIframe ? 'warning' : 'safe',
+                        label: 'Iframe 偽裝',
+                        details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架'
+                    }
                 }
             };
         };
 
         const RiskMeter = ({ score }) => {
-            const color = score >= 70 ? 'bg-red-600' : (score >= 30 ? 'bg-yellow-500' : 'bg-green-500');
-            const text = score >= 70 ? '高度風險' : (score >= 30 ? '中度風險' : '低度風險');
+            let color = 'bg-green-500';
+            let text = '低度風險';
+            let width = '10%';
+
+            if (score >= 70) {
+                color = 'bg-red-600';
+                text = '高度風險';
+                width = '90%';
+            } else if (score >= 30) {
+                color = 'bg-yellow-500';
+                text = '中度風險';
+                width = '50%';
+            }
+
             return (
                 <div className="mt-4 mb-6">
-                    <div className="flex justify-between mb-1 text-sm font-bold"><span>安全</span><span className={score >= 70 ? 'text-red-600' : (score >= 30 ? 'text-yellow-600' : 'text-green-600')}>{text}</span><span>危險</span></div>
-                    <div className="h-3 w-full bg-gray-200 rounded-full overflow-hidden"><div className={`h-full ${color} transition-all duration-1000`} style={{ width: `${Math.max(10, score)}%` }}></div></div>
+                    <div className="flex justify-between mb-1 text-sm font-bold">
+                        <span>安全</span>
+                        <span className={score >= 70 ? 'text-red-600' : (score >= 30 ? 'text-yellow-600' : 'text-green-600')}>{text}</span>
+                        <span>危險</span>
+                    </div>
+                    <div className="h-3 w-full bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                            className={`h-full ${color} transition-all duration-1000 ease-out`} 
+                            style={{ width: width }}
+                        ></div>
+                    </div>
                 </div>
             );
         };
 
+        // --- New Component: Page URL History Timeline ---
         const TraceTimeline = ({ chain }) => {
+            // [修正] 當轉址鏈長度小於等於 1 (代表只有初始網址，無轉址)，則不顯示
             if (!chain || chain.length <= 1) return null;
+
             return (
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
-                    <div className="bg-gray-50/80 px-6 py-4 border-b flex items-center gap-2"><Activity size={20} className="text-brand-red" /><h3 className="font-bold">網頁跳轉紀錄</h3></div>
-                    <div className="p-6 space-y-6">{chain.map((hop, i) => (
-                        <div key={i} className="flex gap-4"><div className="w-8 h-8 rounded-full border-4 flex items-center justify-center bg-white"><div className="w-2.5 h-2.5 rounded-full bg-gray-400"></div></div><div className="flex-grow pt-1 min-w-0"><span className="text-xs font-bold px-2 py-0.5 rounded border bg-gray-50">HTTP {hop.status}</span><div className="mt-2 p-2.5 rounded-lg bg-gray-50 font-mono text-sm break-all">{hop.url}</div></div></div>
-                    ))}</div>
+                    <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Activity size={20} className="text-brand-red" />
+                            {/* [修正] 移除英文 (URL History) */}
+                            <h3 className="font-bold text-gray-800">網頁跳轉紀錄</h3>
+                        </div>
+                        <span className="text-xs font-mono text-gray-400 bg-white px-2 py-1 rounded border border-gray-200">
+                            Total: {chain.length} hops
+                        </span>
+                    </div>
+                    <div className="p-6 bg-white">
+                        <div className="relative">
+                            {/* 垂直連線線條 */}
+                            {chain.length > 1 && (
+                                <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-gray-100"></div>
+                            )}
+
+                            <div className="space-y-6">
+                                {chain.map((hop, index) => {
+                                    const isLast = index === chain.length - 1;
+                                    const code = hop.status;
+                                    const isRedirect = code >= 300 && code < 400;
+                                    const isError = code >= 400;
+
+                                    let colorClass = "bg-green-100 text-green-700 border-green-200"; 
+                                    let dotColor = "bg-green-500 border-green-100";
+                                    
+                                    if (isRedirect) {
+                                        colorClass = "bg-orange-100 text-orange-700 border-orange-200";
+                                        dotColor = "bg-orange-500 border-orange-100";
+                                    } else if (isError) {
+                                        colorClass = "bg-red-100 text-red-700 border-red-200";
+                                        dotColor = "bg-red-500 border-red-100";
+                                    }
+
+                                    return (
+                                        <div key={index} className="relative flex items-start gap-4 group">
+                                            {/* 圓點與序號 */}
+                                            <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center border-4 shadow-sm flex-shrink-0 bg-white ${isRedirect ? 'border-orange-100' : (isError ? 'border-red-100' : 'border-green-100')}`}>
+                                                <div className={`w-2.5 h-2.5 rounded-full ${isRedirect ? 'bg-orange-500' : (isError ? 'bg-red-500' : 'bg-green-500')}`}></div>
+                                            </div>
+
+                                            {/* 內容區塊 */}
+                                            <div className="flex-grow min-w-0 pt-1">
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                    <span className={`px-2.5 py-0.5 rounded-md text-xs font-bold border ${colorClass}`}>
+                                                        HTTP {hop.status}
+                                                    </span>
+                                                    {isRedirect && (
+                                                        <span className="flex items-center text-xs text-orange-600 font-medium">
+                                                            <ArrowRight size={12} className="mr-1" />
+                                                            Redirect
+                                                        </span>
+                                                    )}
+                                                    {index === 0 && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Initial</span>}
+                                                    {isLast && !isRedirect && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Final</span>}
+                                                </div>
+                                                
+                                                {/* 網址顯示 */}
+                                                <div className="group-hover:bg-blue-50/50 transition-colors p-2.5 rounded-lg border border-gray-100 bg-gray-50 font-mono text-sm text-gray-600 break-all select-all hover:border-blue-200 hover:text-blue-800">
+                                                    {hop.url}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             );
         };
 
+        // --- Main Component ---
         const App = () => {
             const [url, setUrl] = useState('');
             const [loading, setLoading] = useState(false);
             const [result, setResult] = useState(null);
             const [error, setError] = useState('');
-            const [copyStatus, setCopyStatus] = useState('idle');
-            const [dynamicWhitelist, setDynamicWhitelist] = useState([]);
+            const [copyStatus, setCopyStatus] = useState('idle'); // idle, copied
             const resultRef = useRef(null);
-
-            useEffect(() => {
-                const fetchWhitelist = async () => {
-                    const fallback = ["google.com", "facebook.com", "yahoo.com", "mygopen.com", "gov.tw", "edu.tw", "mgp.care"];
-                    try {
-                        const res = await fetch('whitelist.json');
-                        if (res.ok) {
-                            const data = await res.json();
-                            setDynamicWhitelist(data.domains || fallback);
-                        } else setDynamicWhitelist(fallback);
-                    } catch (e) { setDynamicWhitelist(fallback); }
-                };
-                fetchWhitelist();
-            }, []);
 
             const handleScan = async (e) => {
                 e.preventDefault();
-                if (!url.trim()) { setError('請輸入網址'); return; }
-                let urlToParse = url.trim();
-                if (!/^https?:\/\//i.test(urlToParse)) urlToParse = 'https://' + urlToParse;
+                const inputUrl = url.trim();
+
+                if (!inputUrl) {
+                    setError('請輸入網址');
+                    return;
+                }
+                
+                let urlToParse = inputUrl;
+                if (!/^https?:\/\//i.test(inputUrl)) {
+                    urlToParse = 'https://' + inputUrl;
+                }
+
                 try {
                     const urlObj = new URL(urlToParse);
-                    setError(''); setLoading(true); setResult(null);
-                    const data = await simulateScan(urlObj.hostname, urlObj.href, dynamicWhitelist);
+                    const hostname = urlObj.hostname;
+                    if (!hostname.includes('.') || !/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(hostname)) {
+                        setError('請輸入有效的網域 (如 google.com)');
+                        return;
+                    }
+
+                    setError('');
+                    setLoading(true);
+                    setResult(null);
+                    setCopyStatus('idle');
+
+                    if (document.activeElement) {
+                        document.activeElement.blur();
+                    }
+
+                    const data = await simulateScan(urlObj.hostname, urlObj.href);
                     setResult(data);
-                } catch (err) { setError('網址格式錯誤'); } finally { setLoading(false); }
+
+                } catch (err) {
+                    setError('網址格式錯誤');
+                } finally {
+                    setLoading(false);
+                }
             };
 
-            const handleCopy = () => {
+            const handleCopyReport = () => {
                 if (!result) return;
-                const risk = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '🟡 中度風險' : '🟢 低度風險');
-                const report = `【幫你查好囉！網址檢測結果】\n🔍 網址：${result.domain}\n🛡️ 風險評估：${risk}\n請務必保持警覺！`;
-                const el = document.createElement('textarea'); el.value = report; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-                setCopyStatus('copied'); setTimeout(() => setCopyStatus('idle'), 3000);
+
+                const riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '🟡 中度風險' : '🟢 低度風險');
+                const warnings = [];
+                if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
+                
+                // 新增特徵檢查
+                if (result.checks.domainAnalysis.status === 'danger') {
+                     if (result.domain.includes('gov') && !result.domain.endsWith('.gov') && !result.domain.endsWith('.gov.tw')) {
+                        warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
+                     } else if ((result.domain.match(/-/g) || []).length >= 2) {
+                        warnings.push('⚠️ 網域包含多個連字號 (-)，極高機率為詐騙');
+                     }
+                }
+                else if (result.checks.domainAnalysis.status === 'warning') warnings.push('⚠️ 使用免費架站平台，風險較高');
+
+                if (result.details.siteStatus.status === 'blank') warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
+                
+                // 新增 404/Error 警告
+                if (result.details.siteStatus.status === 'error') {
+                     warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
+                }
+                
+                if (result.details.siteStatus.status === 'unknown') warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
+                if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
+                if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間或字尾異常');
+                if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
+                if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
+                if (result.checks.whoisPrivacy.status !== 'safe') warnings.push('⚠️ WHOIS 身份已隱藏');
+                if (result.checks.registrar.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${result.checks.registrar.details.split(' ')[1]})`);
+                if (result.checks.subdomain.status === 'danger') warnings.push('⚠️ 子網域層級過深 (≥ 4層)，極高風險');
+                else if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
+                if (result.checks.params.status === 'danger') warnings.push('⚠️ 包含敏感參數 (token/auth/session)');
+
+                const report = `【幫你查好囉！網址檢測結果】
+----------------------
+🔍 幫你查了這個網址：${result.domain}
+🛡️ 目前的風險評估是：${riskLevel}
+----------------------
+${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).join('\n')}\n----------------------\n` : ''}請務必保持警覺，切勿隨意輸入個資🙏`;
+
+                const textArea = document.createElement("textarea");
+                textArea.value = report;
+                
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        setCopyStatus('copied');
+                        setTimeout(() => setCopyStatus('idle'), 3000);
+                    } else {
+                        alert('複製失敗，請手動複製');
+                    }
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                    alert('複製失敗，請手動複製');
+                }
+                
+                document.body.removeChild(textArea);
             };
+
+            useEffect(() => {
+                if (result && resultRef.current) {
+                    setTimeout(() => {
+                        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+            }, [result]);
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm">
+                    {/* Header */}
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm">
                         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-                            <a href="/" className="flex items-center gap-2"><img src="https://ik.imagekit.io/mygopen/menu-logo.png" alt="Logo" className="h-8" /><h1 className="font-bold text-lg">麥擱騙｜詐騙網址幫你查</h1></a>
-                            <div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.4 AI 偵測引擎</div>
+                            <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                                <img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" />
+                                <h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1>
+                            </a>
+                            <div className="text-xs text-gray-400 font-medium hidden md:block">
+                                v2.2.4 AI 偵測引擎
+                            </div>
                         </div>
                     </header>
-                    <main className="flex-grow flex flex-col items-center pt-8 pb-12 px-4 md:pt-16">
+
+                    {/* Main Content */}
+                    <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6">
+                        
                         <div className="w-full max-w-3xl">
-                            <div className="text-center mb-10 animate-fade-in">
-                                <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<span className="text-brand-red">從檢查網址開始</span></h2>
-                                <p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p>
+                            {/* Hero Section */}
+                            <div className="text-center mb-10 md:mb-12 animate-fade-in">
+                                <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">
+                                    遠離網路詐騙<br className="md:hidden" />
+                                    <span className="text-brand-red">從檢查網址開始</span>
+                                </h2>
+                                <p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">
+                                    輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。
+                                </p>
                             </div>
-                            <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 border border-gray-100">
+
+                            {/* Search Box */}
+                            <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100">
                                 <form onSubmit={handleScan} className="flex flex-col md:flex-row gap-2">
-                                    <div className="relative flex-grow group"><div className="absolute inset-y-0 left-0 pl-4 flex items-center"><Search className="text-gray-400 group-focus-within:text-brand-red transition-colors" size={20} /></div>
-                                        <input type="text" className="w-full pl-12 pr-4 py-4 bg-gray-50 focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red outline-none transition-all" placeholder="輸入網址 (如 www.shop.xyz)" value={url} onChange={(e) => setUrl(e.target.value)} />
+                                    <div className="relative flex-grow group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <Search className="text-gray-400 group-focus-within:text-brand-red transition-colors" size={20} />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className="w-full pl-12 pr-4 py-4 md:py-4 bg-gray-50 border-transparent focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red focus:outline-none transition-all text-base md:text-lg placeholder-gray-400"
+                                            placeholder="輸入網址 (例如 www.shop.xyz)"
+                                            value={url}
+                                            onChange={(e) => setUrl(e.target.value)}
+                                            onFocus={(e) => e.target.select()}
+                                        />
                                     </div>
-                                    <button type="submit" disabled={loading} className={`px-8 py-4 rounded-xl font-bold text-white shadow-md transition-all active:scale-95 ${loading ? 'bg-gray-400' : 'bg-brand-red hover:bg-brand-darkRed shadow-glow'}`}>{loading ? '分析中...' : '立即檢測'}</button>
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className={`px-8 py-4 rounded-xl font-bold text-white shadow-md flex justify-center items-center transition-all active:scale-95 md:w-auto w-full text-lg ${
+                                            loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-red hover:bg-brand-darkRed shadow-glow'
+                                        }`}
+                                    >
+                                        {loading ? (
+                                            <span className="flex items-center gap-2">
+                                                <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                分析中...
+                                            </span>
+                                        ) : (
+                                            '立即檢測'
+                                        )}
+                                    </button>
                                 </form>
                             </div>
-                            {error && <div className="text-center mb-6 text-red-600 bg-red-50 py-2 rounded-lg">{error}</div>}
-                            
+                             {error && (
+                                <div className="text-center animate-fade-in mb-6">
+                                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-50 text-red-600 text-sm font-medium border border-red-100">
+                                        <AlertTriangle size={14} /> {error}
+                                    </span>
+                                </div>
+                             )}
+
+                            {/* Features Grid (Empty State) */}
                             {!result && !loading && (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 opacity-60">
-                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-blue-50 p-3 rounded-full text-blue-500 mb-2"><Github size={24}/></div><span className="text-xs font-medium text-gray-500">開源黑名單</span></div>
-                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-purple-50 p-3 rounded-full text-purple-500 mb-2"><Server size={24}/></div><span className="text-xs font-medium text-gray-500">主機位置</span></div>
-                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-orange-50 p-3 rounded-full text-orange-500 mb-2"><Activity size={24}/></div><span className="text-xs font-medium text-gray-500">流量異常</span></div>
-                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-green-50 p-3 rounded-full text-green-500 mb-2"><Layout size={24}/></div><span className="text-xs font-medium text-gray-500">偽裝偵測</span></div>
+                                    <div className="flex flex-col items-center text-center p-4">
+                                        <div className="bg-blue-50 p-3 rounded-full text-blue-500 mb-2"><Github size={24}/></div>
+                                        <span className="text-xs font-medium text-gray-500">開源黑名單</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-center p-4">
+                                        <div className="bg-purple-50 p-3 rounded-full text-purple-500 mb-2"><Server size={24}/></div>
+                                        <span className="text-xs font-medium text-gray-500">主機位置</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-center p-4">
+                                        <div className="bg-orange-50 p-3 rounded-full text-orange-500 mb-2"><Activity size={24}/></div>
+                                        <span className="text-xs font-medium text-gray-500">流量異常</span>
+                                    </div>
+                                    <div className="flex flex-col items-center text-center p-4">
+                                        <div className="bg-green-50 p-3 rounded-full text-green-500 mb-2"><Layout size={24}/></div>
+                                        <span className="text-xs font-medium text-gray-500">偽裝偵測</span>
+                                    </div>
                                 </div>
                             )}
 
+                            {/* Results Section */}
                             {result && !loading && (
-                                <div ref={resultRef} className="animate-slide-up space-y-6">
-                                    <div className="bg-white rounded-3xl shadow-soft p-6 md:p-8 border border-gray-100">
-                                        <div className="flex justify-between items-start mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl font-bold break-all">{result.domain}</h3></div><div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
-                                        <RiskMeter score={result.riskScore} />
-                                        <TraceTimeline chain={result.traceChain} />
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 mb-8">{Object.values(result.checks).map((check, i) => (
-                                            <div key={i} className="p-4 rounded-xl border border-gray-100 bg-white"><div className="flex items-center gap-3 mb-2"><CheckCircle className="text-green-500" size={20} /><span className="font-bold text-gray-700">{check.label}</span></div><p className="text-sm text-gray-600 pl-8">{check.details}</p></div>
-                                        ))}</div>
-                                        <button onClick={handleCopy} className={`w-full py-3 rounded-xl font-bold border transition-all active:scale-95 ${copyStatus === 'copied' ? 'bg-green-600 text-white' : 'bg-white hover:bg-gray-50'}`}>{copyStatus === 'copied' ? '已複製！' : '複製檢測報告'}</button>
-                                        <MyGoPenSection domain={result.domain} />
+                                <div ref={resultRef} className="animate-slide-up space-y-6 pb-12">
+                                    
+                                    {/* Main Result Card */}
+                                    <div className="bg-white rounded-3xl shadow-soft overflow-hidden border border-gray-100">
+                                        <div className="p-6 md:p-8">
+                                            {result.isInvalid ? (
+                                                <div className="text-center py-8">
+                                                    <div className="inline-block p-4 bg-gray-100 rounded-full mb-4 text-gray-400">
+                                                        <Search size={48} />
+                                                    </div>
+                                                    <h3 className="text-2xl font-bold text-gray-800 mb-2">無法連結此網站</h3>
+                                                    <p className="text-gray-500">{result.invalidMsg}</p>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                                                        <div>
+                                                            {/* [修正] Target Domain -> 目標網域 */}
+                                                            <div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div>
+                                                            <h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3>
+                                                        </div>
+                                                        <div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600">
+                                                            <Globe size={16} className="text-brand-red" />
+                                                            <span>伺服器: {result.details.serverCountry}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <RiskMeter score={result.riskScore} />
+
+                                                    {/* [New] 插入網頁跳轉紀錄 (URL History) */}
+                                                    {/* 條件已包含在 TraceTimeline 內部 (chain <= 1 則 return null)，但這裡也可保留檢查 */}
+                                                    {result.traceChain && result.traceChain.length > 1 && (
+                                                        <TraceTimeline chain={result.traceChain} />
+                                                    )}
+
+                                                    {/* Alerts */}
+                                                    {result.blocklistListed && (
+                                                        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-4">
+                                                            <div className="flex gap-3">
+                                                                <ShieldAlert className="text-red-600 flex-shrink-0" size={24} />
+                                                                <div>
+                                                                    <p className="font-bold text-red-800">警告：已列入詐騙黑名單</p>
+                                                                    <p className="text-sm text-red-700 mt-1">此網址存在於開源反詐騙資料庫中，極高機率為惡意網站。</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Redirect Alert Card */}
+                                                    {result.checks.redirect.status !== 'safe' && (
+                                                        <div className="mb-4 p-4 rounded-xl bg-orange-50 border border-orange-200 flex items-start gap-3">
+                                                            <AlertTriangle className="text-orange-600 flex-shrink-0" size={24} />
+                                                            <div>
+                                                                <h3 className="font-bold text-orange-800 text-base">⚠️ 發現轉址或異常</h3>
+                                                                <p className="text-sm text-orange-700 mt-1">
+                                                                    {result.checks.redirect.details}
+                                                                    <br/>跨網域轉址常見於隱藏真實目的地的惡意連結。
+                                                                </p>
+                                                                {/* External Tool Link */}
+                                                                <a 
+                                                                    href={`https://wheregoes.com/trace/${result.scannedUrl}`} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-orange-700 hover:text-orange-900 underline"
+                                                                >
+                                                                    <ExternalLink size={12} />
+                                                                    外部工具：檢查詳細轉址路徑 (WhereGoes)
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Detail Grid */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 mb-8">
+                                                        {Object.values(result.checks).map((check, idx) => {
+                                                            if (check.label === '轉址/短網址' && check.status === 'safe') return null;
+
+                                                            // Icon mapping helper
+                                                            const renderIcon = () => {
+                                                                if (check.label === '網站內容狀態') return <Layout size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
+                                                                if (check.label === '註冊商信譽') return <Flag size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
+                                                                if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
+                                                                if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
+                                                                if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
+                                                                if (check.label === '網域特徵分析') return <Search size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
+                                                                // [新增] 網路與連結圖示
+                                                                if (check.label === '網路服務商 (ISP/ASN)') return <Wifi size={20} className={check.status === 'info' ? 'text-blue-500' : 'text-gray-500'} />;
+                                                                if (check.label === '網頁連結分析') return <Link size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-blue-500'} />;
+
+                                                                // Default Icons
+                                                                return check.status === 'safe' ? 
+                                                                    <CheckCircle className="text-green-500" size={20} /> : 
+                                                                    (check.status === 'info' ? <HelpCircle className="text-blue-500" size={20} /> :
+                                                                    <AlertTriangle className={check.status === 'danger' ? 'text-red-500' : 'text-yellow-500'} size={20} />);
+                                                            };
+
+                                                            return (
+                                                                <div key={idx} className={`p-4 rounded-xl border ${check.status === 'safe' ? 'border-gray-100 bg-white' : (check.status === 'info' ? 'border-blue-100 bg-blue-50' : (check.status === 'warning' ? 'border-yellow-200 bg-yellow-50/50' : 'border-red-200 bg-red-50/50'))} transition-colors`}>
+                                                                    <div className="flex items-center gap-3 mb-2">
+                                                                        {renderIcon()}
+                                                                        <span className="font-bold text-gray-700">{check.label}</span>
+                                                                    </div>
+                                                                    <p className="text-sm text-gray-600 pl-8 leading-relaxed">
+                                                                        {check.details}
+                                                                        {check.link && (
+                                                                            <a href={check.link} target="_blank" className="text-blue-500 hover:underline ml-1 text-xs break-all"> {check.link.includes('google') ? '查詢' : '查詢'}</a>
+                                                                        )}
+                                                                    </p>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    {/* Copy Report Button */}
+                                                    <button
+                                                        onClick={handleCopyReport}
+                                                        className={`w-full py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border ${
+                                                            copyStatus === 'copied' 
+                                                                ? 'bg-green-600 text-white border-green-600' 
+                                                                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {copyStatus === 'copied' ? (
+                                                            <>
+                                                                <Check size={20} />
+                                                                已複製文字報告！
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Copy size={20} className="text-gray-500" />
+                                                                一鍵複製檢測報告 (可貼至 LINE)
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                    
+                                                    {/* MyGoPen Integration */}
+                                                    <MyGoPenSection domain={result.domain} />
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
+                                    
+                                    <p className="text-center text-xs text-gray-400 max-w-lg mx-auto leading-relaxed px-4">
+                                        免責聲明：本工具分析結果僅供參考，無法保證 100% 準確。詐騙手法日新月異，請務必保持警覺，切勿隨意提供銀行帳號或密碼。
+                                    </p>
                                 </div>
                             )}
                         </div>
                     </main>
-                    <footer className="py-6 text-center text-gray-400 text-sm border-t bg-white"><p>&copy; {new Date().getFullYear()} MyGoPen 麥擱騙. All rights reserved.</p></footer>
+
+                    {/* Simple Footer */}
+                    <footer className="py-6 text-center text-gray-400 text-sm border-t border-gray-100 bg-white">
+                        <p>&copy; {new Date().getFullYear()} MyGoPen 麥擱騙. All rights reserved.</p>
+                    </footer>
                 </div>
             );
         };
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
