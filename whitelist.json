@@ -1,0 +1,17 @@
+{
+  "description": "麥擱騙網址白名單 - 包含官方網域、熱門服務及銀行官網",
+  "version": "1.0.0",
+  "updatedAt": "2025-05-20",
+  "domains": [
+    "google.com", "facebook.com", "yahoo.com", "youtube.com", "wikipedia.org", 
+    "instagram.com", "twitter.com", "x.com", "linkedin.com", "amazon.com", 
+    "microsoft.com", "apple.com", "netflix.com", "twitch.tv", "tiktok.com",
+    "shopee.tw", "momo.com.tw", "pchome.com.tw", "mygopen.com", "gov.tw", "edu.tw",
+    "tfc-taiwan.org.tw", "antiscam.showcha.com", "mgp.care",
+    "fubon.com", "taipeifubon.com.tw", "bot.com.tw", "landbank.com.tw", "tcb-bank.com.tw",
+    "post.gov.tw", "ctbcbank.com", "cathaybk.com.tw", "taishinbank.com.tw", 
+    "esunbank.com.tw", "esunbank.com", "megabank.com.tw", "firstbank.com.tw", 
+    "hncb.com.tw", "chb.com.tw", "sinopac.com", "nextbank.com.tw", 
+    "linebank.com.tw", "rakuten-bank.com.tw", "o-bank.com", "tbb.com.tw", "cbc.gov.tw"
+  ]
+}
