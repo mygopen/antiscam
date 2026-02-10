@@ -66,6 +66,7 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
         .glass-card {
             background: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(12px);
@@ -81,12 +82,13 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- Icons (保持原樣) ---
+        // --- Icons ---
         const IconBase = ({ children, size = 20, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {children}
             </svg>
         );
+
         const Shield = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></IconBase>;
         const ShieldAlert = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></IconBase>;
         const ShieldCheck = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" /></IconBase>;
@@ -97,24 +99,21 @@
         const HelpCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></IconBase>;
         const Github = (p) => <IconBase {...p}><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></IconBase>;
         const Layout = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></IconBase>;
-        const Code = (p) => <IconBase {...p}><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></IconBase>;
-        const Clock = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></IconBase>;
         const CheckCircle = (p) => <IconBase {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></IconBase>;
-        const XCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></IconBase>;
         const Globe = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" /></IconBase>;
         const Copy = (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconBase>;
         const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"></polyline></IconBase>;
         const ArrowRight = (p) => <IconBase {...p}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></IconBase>;
         const ExternalLink = (p) => <IconBase {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></IconBase>;
-        const Flag = (p) => <IconBase {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>;
         const UserX = (p) => <IconBase {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></IconBase>;
+        const Flag = (p) => <IconBase {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></IconBase>;
         const Layers = (p) => <IconBase {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></IconBase>;
         const Link = (p) => <IconBase {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></IconBase>;
-        const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
         const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
+        const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
 
-        // --- Logic Helpers (保持原樣) ---
+        // --- Logic Helpers ---
         const getPseudoRandom = (str) => {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -182,7 +181,9 @@
                         try {
                             const parser = new DOMParser();
                             const doc = parser.parseFromString(text, 'text/html');
-                            if ((doc.title || "").toLowerCase().includes("index of /")) return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
+                            if ((doc.title || "").toLowerCase().includes("index of /")) {
+                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
+                            }
                             const links = doc.querySelectorAll('a');
                             linkStats.total = links.length;
                             let domainHostname = '';
@@ -227,10 +228,10 @@
                 if (!res.ok) return { date: null, privacyDetected: false, registrarName: null };
                 const data = await res.json();
                 const events = data.events || [];
-                let regEvent = events.find(e => e.eventAction === 'registration') || events.find(e => e.eventAction === 'created') || events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                let regEvent = events.find(e => e.eventAction === 'registration') || events.find(e => e.eventAction === 'created') || events.find(e => e.eventAction === 'last changed');
                 const date = (regEvent && regEvent.eventDate) ? regEvent.eventDate : null;
                 let privacyDetected = false;
-                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
+                const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Masked', 'Private'];
                 let registrarName = null;
                 const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
                 if (registrarEntity) {
@@ -269,12 +270,10 @@
                 const sources = [
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt',
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamSiteGetFromGlobalAntiScamOrg.txt',
-                    'https://danny0838.github.io/content-farm-terminator/files/blocklist-ublacklist/scam-sites.txt',
-                    'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/SimilarURL.txt'
+                    'https://danny0838.github.io/content-farm-terminator/files/blocklist-ublacklist/scam-sites.txt'
                 ];
                 const contents = await Promise.all(sources.map(url => fetch(url).then(res => res.ok ? res.text() : '')));
                 const combinedText = contents.join('\n');
-                if (!combinedText) return false;
                 const lowerDomain = domain.toLowerCase();
                 return combinedText.split(/\r?\n/).some(line => {
                     let cleanLine = line.trim();
@@ -305,9 +304,11 @@
             return (
                 <div className="bg-brand-light/50 border border-brand-red/20 rounded-2xl p-6 mt-8">
                     <div className="flex items-center gap-3 mb-4"><Shield className="text-brand-red" size={24} /><h3 className="font-bold text-gray-800 text-lg">防詐騙資料庫查詢：</h3></div>
-                    <p className="text-sm text-gray-600 mb-4">建議可進一步查詢相關案例，檢視可能的詐騙手法。</p>
                     <div className="mb-5"><label className="block text-xs font-bold text-gray-500 uppercase mb-2 ml-1">自訂搜尋關鍵字</label>
-                        <div className="relative group"><input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red focus:border-transparent outline-none bg-white text-gray-700 shadow-sm transition-all" /><div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"><Edit size={16} /></div></div>
+                        <div className="relative group">
+                            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red focus:border-transparent outline-none bg-white text-gray-700 shadow-sm transition-all" />
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"><Edit size={16} /></div>
+                        </div>
                     </div>
                     <div className="flex flex-col md:flex-row gap-3">
                         <a href={`https://www.mygopen.com/search?q=${encodeURIComponent(keyword)}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-white border border-brand-red text-brand-red hover:bg-brand-red hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"><Search size={18} /><span>在 MyGoPen 搜尋</span></a>
@@ -319,7 +320,7 @@
         };
         const GoogleIcon = (p) => (<svg viewBox="0 0 24 24" width={p.size || 24} height={p.size || 24} {...p}><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>);
 
-        // --- Core Scanning Logic (修改: 移除內建白名單，改由外部傳入) ---
+        // --- Core Scan Logic ---
         const simulateScan = async (targetDomain, fullUrl, whitelist) => {
             let resolvedIp = null;
             try {
@@ -330,15 +331,8 @@
             } catch(e) {}
 
             const domain = targetDomain.toLowerCase();
-            const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
-            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
-            const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
-            
-            // 使用傳入的動態白名單
             const isWhitelisted = whitelist.some(w => domain.endsWith(w));
-
-            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
-            const isInputShortener = shorteners.some(s => domain.includes(s));
+            const isTrustedTLD = /\.(com\.tw|org\.tw|gov\.tw|edu\.tw)$/.test(domain);
 
             const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
@@ -349,36 +343,19 @@
                 withTimeout(fetchTraceData(fullUrl), 8000, null)
             ]);
 
-            const rdapDate = rdapData.date;
-            const registrarName = rdapData.registrarName || '';
-            const freeHosting = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh'];
+            const freeHosting = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'github.io', 'vercel.app', 'netlify.app'];
             const isFreeHosting = freeHosting.some(p => domain.endsWith(p));
             const isHighTraffic = (trancoRank !== null || isWhitelisted || isTrustedTLD) && !isFreeHosting;
-            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com'];
 
             let riskScore = 0;
             if (blocklistListed) riskScore = 100;
             else {
                 if (siteStatusData.status === 'blank') riskScore += 95; 
                 else if (siteStatusData.status === 'error') riskScore += 80;
-                else if (siteStatusData.status === 'unknown') riskScore += isHighTraffic ? 20 : 75;
-
-                if (isVeryHighRiskTLD) riskScore += 75;
-                if (traceData?.isHighRisk) riskScore += 40;
-                if (domain.split('.').length >= 4 && !isHighTraffic) riskScore += 60;
+                else if (siteStatusData.status === 'unknown' && !isHighTraffic) riskScore += 75;
                 if (domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted) riskScore += 60;
                 if ((domain.match(/-/g) || []).length >= 2) riskScore += 60;
-                if (isHighTraffic && siteStatusData.status === 'ok') riskScore = (isVeryHighRiskTLD && !isWhitelisted) ? 35 : 0;
-            }
-
-            let ageDetails = '無法取得日期';
-            let ageStatus = 'info';
-            if (rdapDate) {
-                const diffDays = Math.ceil(Math.abs(new Date() - new Date(rdapDate)) / (1000 * 60 * 60 * 24));
-                ageDetails = `註冊於: ${rdapDate}`;
-                if (diffDays < 180) { ageStatus = 'danger'; riskScore += 20; }
-                else if (diffDays < 365) ageStatus = 'warning';
-                else ageStatus = 'safe';
+                if (isHighTraffic && siteStatusData.status === 'ok') riskScore = 0;
             }
 
             return {
@@ -388,8 +365,8 @@
                     siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteStatusData.msg },
                     domainAnalysis: { status: (riskScore > 60) ? 'danger' : 'safe', label: '網域特徵分析', details: isWhitelisted ? '白名單信任網域' : '分析結果顯示正常' },
                     traffic: { status: isHighTraffic ? 'safe' : 'warning', label: '流量排名', details: isHighTraffic ? '高流量網站' : '低流量網站' },
-                    age: { status: ageStatus, label: '註冊時間', details: ageDetails },
-                    registrar: { status: 'info', label: '註冊商', details: registrarName || '無法辨識' },
+                    age: { status: 'info', label: '註冊時間', details: rdapData.date ? `註冊於: ${rdapData.date}` : '無法取得日期' },
+                    registrar: { status: 'info', label: '註冊商', details: rdapData.registrarName || '無法辨識' },
                     redirect: { status: (traceData?.redirectCount >= 3) ? 'warning' : 'safe', label: '轉址檢查', details: `跳轉次數: ${traceData?.redirectCount || 0}` }
                 }
             };
@@ -412,7 +389,7 @@
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6 shadow-sm">
                     <div className="bg-gray-50/80 px-6 py-4 border-b flex items-center gap-2"><Activity size={20} className="text-brand-red" /><h3 className="font-bold">網頁跳轉紀錄</h3></div>
                     <div className="p-6 space-y-6">{chain.map((hop, i) => (
-                        <div key={i} className="flex gap-4"><div className="w-8 h-8 rounded-full border-4 flex items-center justify-center bg-white"><div className="w-2.5 h-2.5 rounded-full bg-gray-400"></div></div><div className="flex-grow min-w-0 pt-1"><span className="text-xs font-bold px-2 py-0.5 rounded border bg-gray-50">HTTP {hop.status}</span><div className="mt-2 p-2.5 rounded-lg bg-gray-50 font-mono text-sm break-all">{hop.url}</div></div></div>
+                        <div key={i} className="flex gap-4"><div className="w-8 h-8 rounded-full border-4 flex items-center justify-center bg-white"><div className="w-2.5 h-2.5 rounded-full bg-gray-400"></div></div><div className="flex-grow pt-1 min-w-0"><span className="text-xs font-bold px-2 py-0.5 rounded border bg-gray-50">HTTP {hop.status}</span><div className="mt-2 p-2.5 rounded-lg bg-gray-50 font-mono text-sm break-all">{hop.url}</div></div></div>
                     ))}</div>
                 </div>
             );
@@ -424,27 +401,21 @@
             const [result, setResult] = useState(null);
             const [error, setError] = useState('');
             const [copyStatus, setCopyStatus] = useState('idle');
-            // 新增: 存放從 whitelist.json 讀取的名單
             const [dynamicWhitelist, setDynamicWhitelist] = useState([]);
             const resultRef = useRef(null);
 
-            // 新增: 網頁載入時讀取外部 whitelist.json
             useEffect(() => {
-                const loadWhitelist = async () => {
-                    const fallbackList = ["google.com", "facebook.com", "yahoo.com", "mygopen.com", "gov.tw", "edu.tw", "mgp.care"];
+                const fetchWhitelist = async () => {
+                    const fallback = ["google.com", "facebook.com", "yahoo.com", "mygopen.com", "gov.tw", "edu.tw", "mgp.care"];
                     try {
                         const res = await fetch('whitelist.json');
                         if (res.ok) {
                             const data = await res.json();
-                            setDynamicWhitelist(data.domains || fallbackList);
-                        } else {
-                            setDynamicWhitelist(fallbackList);
-                        }
-                    } catch (e) {
-                        setDynamicWhitelist(fallbackList);
-                    }
+                            setDynamicWhitelist(data.domains || fallback);
+                        } else setDynamicWhitelist(fallback);
+                    } catch (e) { setDynamicWhitelist(fallback); }
                 };
-                loadWhitelist();
+                fetchWhitelist();
             }, []);
 
             const handleScan = async (e) => {
@@ -454,68 +425,70 @@
                 if (!/^https?:\/\//i.test(urlToParse)) urlToParse = 'https://' + urlToParse;
                 try {
                     const urlObj = new URL(urlToParse);
-                    if (!urlObj.hostname.includes('.')) { setError('網域格式不正確'); return; }
                     setError(''); setLoading(true); setResult(null);
-                    // 傳入動態白名單進行掃描
                     const data = await simulateScan(urlObj.hostname, urlObj.href, dynamicWhitelist);
                     setResult(data);
                 } catch (err) { setError('網址格式錯誤'); } finally { setLoading(false); }
             };
 
-            const handleCopyReport = () => {
+            const handleCopy = () => {
                 if (!result) return;
-                const riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '🟡 中度風險' : '🟢 低度風險');
-                const report = `【幫你查好囉！網址檢測結果】\n🔍 網址：${result.domain}\n🛡️ 風險評估：${riskLevel}\n請務必保持警覺！`;
+                const risk = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '🟡 中度風險' : '🟢 低度風險');
+                const report = `【幫你查好囉！網址檢測結果】\n🔍 網址：${result.domain}\n🛡️ 風險評估：${risk}\n請務必保持警覺！`;
                 const el = document.createElement('textarea'); el.value = report; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
                 setCopyStatus('copied'); setTimeout(() => setCopyStatus('idle'), 3000);
             };
-
-            useEffect(() => { if (result) resultRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [result]);
 
             return (
                 <div className="flex flex-col min-h-screen">
                     <header className="bg-white border-b sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm">
                         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
                             <a href="/" className="flex items-center gap-2"><img src="https://ik.imagekit.io/mygopen/menu-logo.png" alt="Logo" className="h-8" /><h1 className="font-bold text-lg">麥擱騙｜詐騙網址幫你查</h1></a>
-                            <div className="text-xs text-gray-400">v2.2.5 (Whitelist Remote)</div>
+                            <div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.4 AI 偵測引擎</div>
                         </div>
                     </header>
-                    <main className="flex-grow flex flex-col items-center pt-8 pb-12 px-4">
+                    <main className="flex-grow flex flex-col items-center pt-8 pb-12 px-4 md:pt-16">
                         <div className="w-full max-w-3xl">
                             <div className="text-center mb-10 animate-fade-in">
-                                <h2 className="text-3xl md:text-5xl font-extrabold mb-4">遠離網路詐騙<br/><span className="text-brand-red">從檢查網址開始</span></h2>
-                                <p className="text-gray-500">輸入網址，即時分析網站特徵與流量。</p>
+                                <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br/><span className="text-brand-red">從檢查網址開始</span></h2>
+                                <p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p>
                             </div>
                             <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 border border-gray-100">
                                 <form onSubmit={handleScan} className="flex flex-col md:flex-row gap-2">
-                                    <div className="relative flex-grow"><div className="absolute inset-y-0 left-0 pl-4 flex items-center"><Search className="text-gray-400" size={20} /></div>
-                                        <input type="text" className="w-full pl-12 pr-4 py-4 bg-gray-50 rounded-xl outline-none" placeholder="輸入網址 (如 www.shop.xyz)" value={url} onChange={(e) => setUrl(e.target.value)} />
+                                    <div className="relative flex-grow group"><div className="absolute inset-y-0 left-0 pl-4 flex items-center"><Search className="text-gray-400 group-focus-within:text-brand-red transition-colors" size={20} /></div>
+                                        <input type="text" className="w-full pl-12 pr-4 py-4 bg-gray-50 focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red outline-none transition-all" placeholder="輸入網址 (如 www.shop.xyz)" value={url} onChange={(e) => setUrl(e.target.value)} />
                                     </div>
-                                    <button type="submit" disabled={loading} className={`px-8 py-4 rounded-xl font-bold text-white ${loading ? 'bg-gray-400' : 'bg-brand-red hover:bg-brand-darkRed'}`}>{loading ? '分析中...' : '立即檢測'}</button>
+                                    <button type="submit" disabled={loading} className={`px-8 py-4 rounded-xl font-bold text-white shadow-md transition-all active:scale-95 ${loading ? 'bg-gray-400' : 'bg-brand-red hover:bg-brand-darkRed shadow-glow'}`}>{loading ? '分析中...' : '立即檢測'}</button>
                                 </form>
                             </div>
                             {error && <div className="text-center mb-6 text-red-600 bg-red-50 py-2 rounded-lg">{error}</div>}
+                            
+                            {!result && !loading && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 opacity-60">
+                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-blue-50 p-3 rounded-full text-blue-500 mb-2"><Github size={24}/></div><span className="text-xs font-medium text-gray-500">開源黑名單</span></div>
+                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-purple-50 p-3 rounded-full text-purple-500 mb-2"><Server size={24}/></div><span className="text-xs font-medium text-gray-500">主機位置</span></div>
+                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-orange-50 p-3 rounded-full text-orange-500 mb-2"><Activity size={24}/></div><span className="text-xs font-medium text-gray-500">流量異常</span></div>
+                                    <div className="flex flex-col items-center text-center p-4"><div className="bg-green-50 p-3 rounded-full text-green-500 mb-2"><Layout size={24}/></div><span className="text-xs font-medium text-gray-500">偽裝偵測</span></div>
+                                </div>
+                            )}
+
                             {result && !loading && (
                                 <div ref={resultRef} className="animate-slide-up space-y-6">
                                     <div className="bg-white rounded-3xl shadow-soft p-6 md:p-8 border border-gray-100">
-                                        {result.isInvalid ? <h3 className="text-center py-8 text-2xl font-bold">{result.invalidMsg}</h3> : (
-                                            <>
-                                                <div className="flex justify-between items-start mb-6"><div><div className="text-xs text-gray-400 uppercase">目標網域</div><h3 className="text-2xl font-bold break-all">{result.domain}</h3></div><div className="px-4 py-2 bg-gray-50 rounded-lg text-sm flex items-center gap-2"><Globe size={16} className="text-brand-red" /><span>{result.details.serverCountry}</span></div></div>
-                                                <RiskMeter score={result.riskScore} />
-                                                <TraceTimeline chain={result.traceChain} />
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 mb-8">{Object.values(result.checks).map((check, i) => (
-                                                    <div key={i} className="p-4 rounded-xl border border-gray-100 bg-white"><div className="flex items-center gap-3 mb-2"><CheckCircle className="text-green-500" size={20} /><span className="font-bold text-gray-700">{check.label}</span></div><p className="text-sm text-gray-600 pl-8">{check.details}</p></div>
-                                                ))}</div>
-                                                <button onClick={handleCopyReport} className={`w-full py-3 rounded-xl font-bold border ${copyStatus === 'copied' ? 'bg-green-600 text-white' : 'bg-white hover:bg-gray-50'}`}>{copyStatus === 'copied' ? '已複製！' : '複製檢測報告'}</button>
-                                                <MyGoPenSection domain={result.domain} />
-                                            </>
-                                        )}
+                                        <div className="flex justify-between items-start mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl font-bold break-all">{result.domain}</h3></div><div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
+                                        <RiskMeter score={result.riskScore} />
+                                        <TraceTimeline chain={result.traceChain} />
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 mb-8">{Object.values(result.checks).map((check, i) => (
+                                            <div key={i} className="p-4 rounded-xl border border-gray-100 bg-white"><div className="flex items-center gap-3 mb-2"><CheckCircle className="text-green-500" size={20} /><span className="font-bold text-gray-700">{check.label}</span></div><p className="text-sm text-gray-600 pl-8">{check.details}</p></div>
+                                        ))}</div>
+                                        <button onClick={handleCopy} className={`w-full py-3 rounded-xl font-bold border transition-all active:scale-95 ${copyStatus === 'copied' ? 'bg-green-600 text-white' : 'bg-white hover:bg-gray-50'}`}>{copyStatus === 'copied' ? '已複製！' : '複製檢測報告'}</button>
+                                        <MyGoPenSection domain={result.domain} />
                                     </div>
                                 </div>
                             )}
                         </div>
                     </main>
-                    <footer className="py-6 text-center text-gray-400 text-sm border-t bg-white"><p>&copy; {new Date().getFullYear()} MyGoPen 麥擱騙.</p></footer>
+                    <footer className="py-6 text-center text-gray-400 text-sm border-t bg-white"><p>&copy; {new Date().getFullYear()} MyGoPen 麥擱騙. All rights reserved.</p></footer>
                 </div>
             );
         };
