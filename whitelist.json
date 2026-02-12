@@ -1,7 +1,7 @@
 {
   "description": "麥擱騙網址白名單 - 包含官方網域、熱門服務及銀行官網",
-  "version": "1.0.1",
-  "updatedAt": "2026-02-10",
+  "version": "1.0.2",
+  "updatedAt": "2026-02-12",
   "domains": [
     "google.com", "facebook.com", "yahoo.com", "youtube.com", "wikipedia.org", 
     "instagram.com", "twitter.com", "x.com", "linkedin.com", "amazon.com", 
@@ -12,6 +12,7 @@
     "post.gov.tw", "ctbcbank.com", "cathaybk.com.tw", "taishinbank.com.tw", 
     "esunbank.com.tw", "esunbank.com", "megabank.com.tw", "firstbank.com.tw", 
     "hncb.com.tw", "chb.com.tw", "sinopac.com", "nextbank.com.tw", 
-    "linebank.com.tw", "rakuten-bank.com.tw", "o-bank.com", "tbb.com.tw", "cbc.gov.tw"
+    "linebank.com.tw", "rakuten-bank.com.tw", "o-bank.com", "tbb.com.tw", "cbc.gov.tw",
+    "txp.rs", "lohasnet.tw"
   ]
 }
