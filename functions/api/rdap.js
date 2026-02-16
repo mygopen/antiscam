@@ -40,17 +40,24 @@ function getWhoisServer(tld) {
     return servers[tld] || `whois.nic.${tld}`; 
 }
 
+// [Regex 增強] 支援斜線、點號、中文日期
 function parseDateFromText(text) {
     const regexes = [
+        // 標準格式 YYYY-MM-DD
+        // [修正] 新增 "Registration Time" (針對 .cn) 與 "Creation Time"
         /(?:Creation Date|Registration Date|Registration Time|Creation Time|Created on|Registered on|Record created on|Domain Name Commencement Date):?\s*(\d{4}-\d{2}-\d{2})/i,
+        // 支援斜線 YYYY/MM/DD (常見於亞洲網域)
         /(?:Creation Date|Registration Date|Registration Time|Created on|Registered on|Record created on):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
+        // 支援點號 YYYY.MM.DD
         /(?:Creation Date|Registration Date|Created on|Registered on):?\s*(\d{4})\.(\d{2})\.(\d{2})/i,
+        // 中文格式
         /(?:注册日期|申请日期|登録年月日):?\s*(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})/
     ];
 
     for (const regex of regexes) {
         const match = text.match(regex);
         if (match) {
+            // 如果抓到的是拆開的年月日 (group 2,3,4)，組合成 YYYY-MM-DD
             if (match.length >= 4) {
                 return `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
             }
@@ -60,6 +67,7 @@ function parseDateFromText(text) {
     return null;
 }
 
+// TCP Socket WHOIS
 async function fetchWhoisSocket(domain, tld) {
     const server = getWhoisServer(tld);
     try {
@@ -93,6 +101,7 @@ async function fetchWhoisSocket(domain, tld) {
     } catch (e) { return null; }
 }
 
+// Proxy Helper
 async function fetchViaProxy(targetUrl) {
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
     try {
@@ -103,11 +112,15 @@ async function fetchViaProxy(targetUrl) {
     } catch (e) { return null; }
 }
 
+// [方案六] 針對 .tw 的官方網頁爬蟲
 async function fetchTwnicWeb(domain) {
+    // TWNIC 官方查詢介面
     const targetUrl = `https://www.twnic.tw/whois_n.cgi?query=${domain}`;
     const res = await fetchViaProxy(targetUrl);
+    
     if (res && res.ok) {
         const html = await res.text();
+        // TWNIC 網頁通常顯示 "Record created on yyyy-mm-dd"
         const date = parseDateFromText(html);
         if (date) {
             return {
@@ -120,11 +133,14 @@ async function fetchTwnicWeb(domain) {
     return null;
 }
 
+// [方案五] 爬取 who.is (通用備援)
 async function fetchWhoIsWeb(domain) {
     const targetUrl = `https://who.is/whois/${domain}`;
     const res = await fetchViaProxy(targetUrl);
+    
     if (res && res.ok) {
         const html = await res.text();
+        // who.is 結構通常是 class="queryResponseBody" 或直接在 pre tag 裡
         const date = parseDateFromText(html);
         if (date) {
             return {
@@ -135,44 +151,6 @@ async function fetchWhoIsWeb(domain) {
         }
     }
     return null;
-}
-
-// --- 新增：憑證透明度查詢 (Certificate Transparency) ---
-// 查詢 crt.sh 獲取該網域最新的憑證簽發時間
-async function fetchCertTransparency(domain) {
-    // 查詢 crt.sh 的 JSON API
-    const url = `https://crt.sh/?q=${encodeURIComponent(domain)}&output=json`;
-    try {
-        const res = await fetch(url, {
-            headers: { "User-Agent": "MyGoPen-AntiScam-Bot/1.0" }
-        });
-        
-        if (!res.ok) return null;
-        
-        const text = await res.text();
-        // crt.sh 有時會回傳不標準的 JSON 或空值，需 try-catch
-        let data;
-        try {
-            data = JSON.parse(text);
-        } catch(e) { return null; }
-
-        if (!Array.isArray(data) || data.length === 0) return { found: false };
-
-        // 找到最新的 entry_timestamp (通常是簽發時間)
-        // 排序：最新的在最前
-        data.sort((a, b) => new Date(b.entry_timestamp) - new Date(a.entry_timestamp));
-        
-        const latest = data[0];
-        return {
-            found: true,
-            latestDate: latest.entry_timestamp, // ISO string usually
-            issuer: latest.issuer_name,
-            subject: latest.common_name
-        };
-
-    } catch(e) {
-        return null;
-    }
 }
 
 // IANA Cache
@@ -198,29 +176,18 @@ async function fetchIanaRdapServer(tld) {
 
 export async function onRequest(context) {
   const { request } = context;
-  const urlObj = new URL(request.url);
-  let domain = urlObj.searchParams.get("domain");
-  const type = urlObj.searchParams.get("type"); // 支援 ?type=cert
+  const url = new URL(request.url);
+  let domain = url.searchParams.get("domain");
 
   if (!domain) return new Response(JSON.stringify({ error: "Missing domain" }), { status: 400 });
 
   domain = domain.toLowerCase();
   if (domain.startsWith("www.")) domain = domain.slice(4);
 
-  // --- 特殊模式：查詢 SSL 憑證 ---
-  if (type === 'cert') {
-      const certData = await fetchCertTransparency(domain);
-      if (certData) {
-          return new Response(JSON.stringify(certData), { headers: { "Content-Type": "application/json" }});
-      } else {
-          return new Response(JSON.stringify({ found: false, msg: "No Data or Error" }), { headers: { "Content-Type": "application/json" }});
-      }
-  }
-
-  // --- 標準模式：查詢 RDAP/WHOIS ---
   const rootDomain = getRegisteredDomain(domain);
   const tld = rootDomain.split('.').pop();
 
+  // 1. 決定目標 RDAP URL
   let targetUrl;
   const DIRECT_RDAP_SERVERS = {
     "cn": "https://rdap.cnnic.cn/domain/",
@@ -237,11 +204,15 @@ export async function onRequest(context) {
   }
 
   try {
+    // 策略 A: 直連官方 RDAP
     let response = await fetch(targetUrl, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" }
     });
 
+    // 如果直連失敗 (403/404/500)，進入多重備援流程
     if (!response.ok) {
+       
+       // 策略 B: 透過 CORS Proxy 訪問 RDAP (針對 .cn, .online)
        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
        try {
            const proxyRes = await fetch(proxyUrl);
@@ -251,11 +222,13 @@ export async function onRequest(context) {
            }
        } catch(e) {}
 
+       // 策略 C: TCP Socket 直連 Port 43 (底層協議)
        const socketData = await fetchWhoisSocket(rootDomain, tld);
        if (socketData) {
            return new Response(JSON.stringify(socketData), { headers: { "Content-Type": "application/json" }});
        }
 
+       // 策略 D: 針對 .tw 的特殊網頁爬蟲 (方案六)
        if (tld === 'tw') {
            const twnicData = await fetchTwnicWeb(rootDomain);
            if (twnicData) {
@@ -263,6 +236,7 @@ export async function onRequest(context) {
            }
        }
 
+       // 策略 E: 通用網頁爬蟲 who.is (方案五)
        const whoisWebData = await fetchWhoIsWeb(rootDomain);
        if (whoisWebData) {
            return new Response(JSON.stringify(whoisWebData), { headers: { "Content-Type": "application/json" }});
