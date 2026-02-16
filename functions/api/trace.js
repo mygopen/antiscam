@@ -11,197 +11,125 @@ export async function onRequest(context) {
     });
   }
 
+  // 自動補上 https (如果使用者沒輸入)
   if (!targetUrl.startsWith("http")) {
     targetUrl = "https://" + targetUrl;
   }
 
-  // --- 設定 ---
-  const MAX_REDIRECTS = 8;
-  const GLOBAL_TIMEOUT = 12000; // 延長至 12 秒以容納雙重檢測
+  // --- 安全保險絲設定 (Circuit Breaker) ---
+  const MAX_REDIRECTS = 6;       // 保險 1: 最大跳轉層數 (超過此數強制斬斷，視為高風險)
+  const GLOBAL_TIMEOUT = 8000;   // 保險 2: 最大執行時間 8秒 (超過強制斬斷，防止卡死)
   
-  // User-Agents
-  const UA_MOBILE = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1";
-  const UA_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
   let currentUrl = targetUrl;
-  let redirectChain = [];
+  let redirectChain = [];        // 存放完整的轉址路徑
   let redirectCount = 0;
   let isHighRisk = false;
   let riskReason = "";
-  let cloakingDetected = false;
   
+  // 用來偵測 A -> B -> A 這種鬼打牆迴圈
   let seenUrls = new Set();
   seenUrls.add(currentUrl);
 
+  // 設定全域計時器
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), GLOBAL_TIMEOUT);
 
-  // --- Helper: 執行單次請求 ---
-  const fetchPage = async (url, ua, manualRedirect = true) => {
-    try {
-      const res = await fetch(url, {
-        redirect: manualRedirect ? "manual" : "follow",
-        signal: controller.signal,
-        headers: { "User-Agent": ua }
-      });
-      return res;
-    } catch (e) {
-      if (e.name === 'AbortError') throw new Error('Timeout');
-      throw e;
-    }
-  };
-
   try {
-    // --- 階段一：深度轉址追蹤 (Mobile View) ---
-    // 釣魚簡訊通常針對手機優化，因此主檢測使用 Mobile UA
+    // 開始剝洋蔥 (逐層追蹤)
     while (redirectCount < MAX_REDIRECTS) {
       
-      const response = await fetchPage(currentUrl, UA_MOBILE, true);
-      const status = response.status;
-      let nextUrl = null;
-      let redirectType = "http"; // http | meta | js
+      try {
+        // 發送請求 (使用 manual 模式，不讓系統自動跳轉，我們要自己控制)
+        const response = await fetch(currentUrl, {
+          redirect: "manual", 
+          signal: controller.signal, // 綁定計時器
+          headers: {
+            // 偽裝成 iPhone，因為很多詐騙簡訊只對手機進行轉址，對電腦會顯示正常頁面
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+          }
+        });
 
-      // 讀取內容以檢查 DOM 轉址 (僅在非 HTTP 轉址且狀態為 200 時檢查)
-      let htmlContent = "";
-      if (status === 200) {
-        try {
-            htmlContent = await response.text();
-        } catch(e) {}
-      }
+        // 紀錄這一層的結果
+        redirectChain.push({
+          url: currentUrl,
+          status: response.status
+        });
 
-      redirectChain.push({
-        url: currentUrl,
-        status: status
-      });
+        // 檢查狀態碼是否為轉址 (301, 302, 303, 307, 308)
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("Location");
+          
+          // 如果是空的 Location，視為終止
+          if (!location) break;
 
-      // 1. HTTP Redirect (3xx)
-      if (status >= 300 && status < 400) {
-        const location = response.headers.get("Location");
-        if (location) {
-            nextUrl = new URL(location, currentUrl).href;
-        }
-      } 
-      // 2. DOM Redirect (Meta Refresh / JS) - 針對 200 OK 的頁面檢查
-      else if (status === 200 && htmlContent) {
-        // Check <meta http-equiv="refresh" content="0;url=...">
-        const metaMatch = htmlContent.match(/<meta\s+http-equiv=["']?refresh["']?\s+content=["']?(\d+)?;\s*url=(.*?)["']?/i);
-        if (metaMatch) {
-            const delay = parseInt(metaMatch[1] || "0");
-            // 只有短時間內的跳轉才視為轉址行為
-            if (delay <= 10) {
-                nextUrl = new URL(metaMatch[2], currentUrl).href;
-                redirectType = "meta-refresh";
-            }
-        }
+          // 解析下一層網址 (處理相對路徑，如 "/login.php")
+          let nextUrl = new URL(location, currentUrl).href;
 
-        // Check window.location = "..."
-        if (!nextUrl) {
-            const jsMatch = htmlContent.match(/(?:window|self|top)\.location(?:\.href)?\s*=\s*["'](.*?)["']/);
-            if (jsMatch) {
-                nextUrl = new URL(jsMatch[1], currentUrl).href;
-                redirectType = "javascript";
-            }
-        }
-      }
+          // 保險 3: 迴圈偵測 (Loop Detection)
+          if (seenUrls.has(nextUrl)) {
+            isHighRisk = true;
+            riskReason = "偵測到惡意迴圈 (Loop)，網站試圖導向重複路徑，企圖癱瘓檢測。";
+            break; // 強制跳出
+          }
 
-      // 判斷是否繼續追蹤
-      if (nextUrl) {
-        if (seenUrls.has(nextUrl)) {
-          isHighRisk = true;
-          riskReason = "偵測到惡意迴圈 (Loop)，網站試圖導向重複路徑。";
-          break;
-        }
-        
-        // 記錄轉址類型 (如果是前端轉址，更新上一筆紀錄)
-        if (redirectType !== 'http') {
-             redirectChain[redirectChain.length - 1].note = `Client-side Redirect (${redirectType})`;
+          // 準備進入下一層
+          seenUrls.add(nextUrl);
+          currentUrl = nextUrl;
+          redirectCount++;
+
+        } else {
+          // 不是轉址 (例如 200 OK, 404, 403)，代表到達終點
+          break; 
         }
 
-        seenUrls.add(nextUrl);
-        currentUrl = nextUrl;
-        redirectCount++;
-      } else {
-        // 到達終點
-        break; 
+      } catch (fetchError) {
+        // 特別處理超時錯誤
+        if (fetchError.name === 'AbortError') {
+           isHighRisk = true;
+           riskReason = "檢測超時 (Timeout)，轉址過程過長或伺服器惡意延遲回應。";
+           break;
+        }
+        // 其他網路錯誤 (DNS解析失敗等)，視為檢查結束
+        throw fetchError; 
       }
     }
 
-    // --- 階段二：Cloaking 檢測 (偽裝防禦) ---
-    // 如果主要檢測看起來正常 (或是轉址數不多)，我們嘗試用 Desktop UA 再跑一次
-    // 比較兩者的「最終狀態碼」或「最終網址」是否差異過大
-    if (!isHighRisk && redirectCount < MAX_REDIRECTS) {
-        try {
-            // 為了節省時間，Desktop 檢測通常只看第一層或讓它自動跳轉
-            // 這裡我們只請求原始 TargetUrl 看反應
-            const resDesktop = await fetch(targetUrl, {
-                redirect: "manual",
-                signal: controller.signal,
-                headers: { "User-Agent": UA_DESKTOP }
-            });
-
-            // 取得第一層的 Mobile 結果 (redirectChain[0])
-            const firstHopMobile = redirectChain[0];
-
-            // 判定邏輯：
-            // 1. 如果 Mobile 是轉址 (3xx) 但 Desktop 是 200 OK (或 404) -> 針對手機的詐騙
-            // 2. 如果 Mobile 是 200 OK 但 Desktop 是 403/404 -> 針對特定流量封鎖
-            
-            const mobileStatus = firstHopMobile.status;
-            const desktopStatus = resDesktop.status;
-
-            const isMobileRedirect = mobileStatus >= 300 && mobileStatus < 400;
-            const isDesktopRedirect = desktopStatus >= 300 && desktopStatus < 400;
-
-            if (isMobileRedirect !== isDesktopRedirect) {
-                // 狀態性質不同 (一個轉址、一個不轉)
-                cloakingDetected = true;
-                riskReason = `偵測到偽裝行為 (Cloaking)：手機版與電腦版行為不一致 (Mobile: ${mobileStatus}, Desktop: ${desktopStatus})。`;
-                isHighRisk = true;
-            } else if (isMobileRedirect && isDesktopRedirect) {
-                // 都是轉址，檢查目的地是否相同
-                const locDesktop = resDesktop.headers.get("Location");
-                // 簡易比對，若差異過大視為風險
-                // 這裡暫不實作深度比對以免誤判 CDN 分流
-            }
-
-        } catch (e) {
-            // Desktop fetch 失敗不一定要報錯，可能是連線問題，忽略
-        }
-    }
-
+    // 清除計時器 (重要！釋放資源)
     clearTimeout(timeoutId);
 
-    // --- 最終風險判定 ---
-    if (!isHighRisk) {
+    // --- 最終風險智慧判定 ---
+    if (!isHighRisk) { 
+        // 如果上面沒抓到迴圈或超時，這裡進行次數判斷
         if (redirectCount >= MAX_REDIRECTS) {
             isHighRisk = true;
-            riskReason = `轉址路徑過深 (超過 ${MAX_REDIRECTS} 層)。`;
+            riskReason = `轉址路徑過深 (超過 ${MAX_REDIRECTS} 層)，強制中止。正常網站極少轉址這麼多次。`;
         } else if (redirectCount >= 3) {
             isHighRisk = true;
-            riskReason = `偵測到多重轉址 (${redirectCount} 次)，常見於規避掃描。`;
+            riskReason = `偵測到多重轉址 (${redirectCount} 次)，常見於詐騙連結規避掃描。`;
         } else {
-            // 檢查危險短網址
-            const riskyShorteners = ['i.gal', 'bit.do', 'is.gd', 'tiny.cc', 't.cn', 'mz.cm'];
+            // 檢查是否包含知名的高風險短網址服務
+            const riskyShorteners = ['i.gal', 'bit.do', 'is.gd', 'tiny.cc', 't.cn'];
             const hasRiskyShortener = redirectChain.some(hop => riskyShorteners.some(risk => hop.url.includes(risk)));
+            
             if (hasRiskyShortener && redirectCount >= 1) {
                 isHighRisk = true;
-                riskReason = "使用了高風險短網址服務。";
+                riskReason = "使用了常被詐騙集團濫用的短網址服務。";
             }
         }
     }
 
+    // 回傳 JSON 結果
     return new Response(JSON.stringify({
       finalUrl: currentUrl,
       redirectCount: redirectCount,
       chain: redirectChain,
       isHighRisk: isHighRisk,
-      riskReason: riskReason,
-      cloakingDetected: cloakingDetected
+      riskReason: riskReason
     }), {
       headers: { 
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "no-store"
+          "Cache-Control": "no-store" // 轉址追蹤不建議快取，因為詐騙連結變化很快
       }
     });
 
