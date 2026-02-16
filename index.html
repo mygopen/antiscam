@@ -132,8 +132,6 @@
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
         const ShieldZap = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polygon points="13 10 13 6 8 13 11 13 11 18 16 11 13 11" /></IconBase>;
         const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
-        const Lock = (p) => <IconBase {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></IconBase>;
-        const Smartphone = (p) => <IconBase {...p}><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></IconBase>;
 
         // --- Logic Helpers ---
         const getPseudoRandom = (str) => {
@@ -292,6 +290,18 @@
                     if (!registrarName && registrarEntity.handle) registrarName = registrarEntity.handle;
                     if (!registrarName && registrarEntity.name) registrarName = registrarEntity.name;
                 }
+                if (!registrarName && data.entities) {
+                     const potentialRegistrars = data.entities.filter(e => !e.roles || !e.roles.includes('registrant'));
+                     for (const ent of potentialRegistrars) {
+                         if (ent.vcardArray) {
+                             const fnEntry = ent.vcardArray[1]?.find(item => item[0] === 'fn');
+                             if (fnEntry && !privacyKeywords.some(kw => fnEntry[3].includes(kw))) {
+                                 registrarName = fnEntry[3];
+                                 break;
+                             }
+                         }
+                     }
+                }
                 const searchEntities = (entities) => {
                     if (!entities || !Array.isArray(entities)) return;
                     for (const entity of entities) {
@@ -324,14 +334,6 @@
         const fetchTraceData = async (url) => {
             try {
                 const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
-                if (!res.ok) return null;
-                return await res.json();
-            } catch (e) { return null; }
-        };
-        
-        const fetchCertData = async (domain) => {
-            try {
-                const res = await fetch(`/api/rdap?domain=${domain}&type=cert`);
                 if (!res.ok) return null;
                 return await res.json();
             } catch (e) { return null; }
@@ -419,6 +421,7 @@
             </svg>
         );
 
+        // --- Modified simulateScan with refined whitelist and risk scoring ---
         const simulateScan = async (targetDomain, fullUrl, currentWhitelist = []) => {
             let resolvedIp = null;
             try {
@@ -433,6 +436,7 @@
 
             const domain = targetDomain.toLowerCase();
             
+            // 修正 1：嚴謹的白名單判定 (完全匹配或子網域匹配)
             const isWhitelisted = currentWhitelist.some(w => {
                 const lowerW = w.toLowerCase();
                 return domain === lowerW || domain.endsWith('.' + lowerW);
@@ -450,26 +454,23 @@
             const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
             const isInputShortener = shorteners.some(s => domain.includes(s));
 
-            // 新增 certData 呼叫
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData, certData] = await Promise.all([
+            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 3000, null),
                 withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
-                withTimeout(fetchTraceData(fullUrl), 10000, null), // Extend timeout for cloaking check
-                withTimeout(fetchCertData(domain), 4000, null) // New Cert Check
+                withTimeout(fetchTraceData(fullUrl), 8000, null)
             ]);
 
             const rdapDate = rdapData.date;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
             const traceChain = traceData ? traceData.chain : [];
-            const cloakingDetected = traceData ? traceData.cloakingDetected : false;
-            
             const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh'];
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
             
+            // 修正：只有在白名單內或高流量且不是免費空間時才視為高流量網站
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
             const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com'];
 
@@ -523,29 +524,6 @@
             const hasSuspiciousParams = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='].some(key => fullUrl.toLowerCase().includes(key));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
 
-            // --- 憑證分析 ---
-            let certStatus = 'unknown';
-            let certDetails = '無法取得憑證資訊';
-            let certIsNew = false;
-            if (certData && certData.found && certData.latestDate) {
-                const certDate = new Date(certData.latestDate);
-                const hoursOld = (new Date() - certDate) / (1000 * 60 * 60);
-                certDetails = `簽發時間: ${certDate.toISOString().split('T')[0]} (約 ${Math.floor(hoursOld)} 小時前)`;
-                
-                if (hoursOld < 24) {
-                    certStatus = 'danger';
-                    certDetails += ' - [極危險] 憑證於 24 小時內簽發！';
-                    certIsNew = true;
-                } else if (hoursOld < 72) {
-                    certStatus = 'warning';
-                    certDetails += ' - 憑證於 3 天內簽發，風險較高。';
-                } else {
-                    certStatus = 'safe';
-                }
-                
-                if (certData.issuer) certDetails += `\n簽發單位: ${certData.issuer.split(',')[0]}`;
-            }
-
             // --- 精確風險權重判定 ---
             let riskScore = 0;
             if (blocklistListed) riskScore = 100;
@@ -555,7 +533,7 @@
                 else if (siteStatusData.status === 'error') riskScore += 80;
                 else if (siteStatusData.status === 'unknown') riskScore += isHighTraffic ? 20 : 75;
                 
-                // 2. 網域年齡分析
+                // 2. 網域年齡分析 (修正：強加權重於極新網域)
                 let ageStatus = 'unknown';
                 let ageDetails = '無法自動獲取';
                 if (rdapDate) {
@@ -589,15 +567,13 @@
                     if (isFreeHosting) riskScore += 25;
                     if (!isHighTraffic) riskScore += 15;
                     if (isHighEntropy) riskScore += 20;
-                    
-                    // 新增特徵加分
-                    if (cloakingDetected) riskScore += 80; // 偽裝是非常強的詐騙訊號
-                    if (certIsNew && !isHighTraffic) riskScore += 60; // 憑證極新
                 }
                 
+                // 修正：白名單且運作正常時歸零，但極新網域排除在外
                 if (isWhitelisted && siteStatusData.status === 'ok' && !isFakeGov && riskScore < 80) riskScore = 0;
             }
 
+            // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
             if (isWhitelisted && siteStatusData.status === 'ok') siteContentMsg = '受信賴的白名單網域';
 
@@ -606,11 +582,9 @@
                 details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
                 checks: {
                     siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteContentMsg },
-                    sslCert: { status: certStatus, label: 'SSL 憑證安全', details: certDetails }, // New UI
-                    cloaking: { status: cloakingDetected ? 'danger' : 'safe', label: '偽裝偵測 (Cloaking)', details: cloakingDetected ? '偵測到針對裝置的偽裝詐騙行為' : '未發現針對性偽裝行為' }, // New UI
                     domainAnalysis: { status: isFakeGov || hasMultipleHyphens ? 'danger' : (isFreeHosting ? 'warning' : 'safe'), label: '網域特徵分析', details: isFakeGov ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' : (hasMultipleHyphens ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站` : '網域命名結構無明顯異常')) },
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
-                    age: { status: ageStatus, label: '註冊時間', details: ageDetails, link: `https://who.is/whois/${domain}` },
+                    age: { status: (riskScore >= 80 && rdapDate && (new Date() - new Date(rdapDate)) < 30 * 86400000) ? 'danger' : (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'danger' : (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'), label: '註冊時間', details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${(new Date() - new Date(rdapDate)) < 30 * 86400000 ? ' - 極新網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'), link: `https://who.is/whois/${domain}` },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 4層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
@@ -645,9 +619,7 @@
                                     const code = hop.status, isRedirect = code >= 300 && code < 400, isError = code >= 400;
                                     let colorClass = isRedirect ? "bg-orange-100 text-orange-700 border-orange-200" : (isError ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200");
                                     return (
-                                        <div key={index} className="relative flex items-start gap-4 group"><div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center border-4 shadow-sm flex-shrink-0 bg-white ${isRedirect ? 'border-orange-100' : (isError ? 'border-red-100' : 'border-green-100')}`}><div className={`w-2.5 h-2.5 rounded-full ${isRedirect ? 'bg-orange-500' : (isError ? 'bg-red-500' : 'bg-green-500')}`}></div></div><div className="flex-grow min-w-0 pt-1"><div className="flex flex-wrap items-center gap-2 mb-2"><span className={`px-2.5 py-0.5 rounded-md text-xs font-bold border ${colorClass}`}>HTTP {hop.status}</span>{isRedirect && <span className="flex items-center text-xs text-orange-600 font-medium"><ArrowRight size={12} className="mr-1" />Redirect</span>}{index === 0 && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Initial</span>}{index === chain.length - 1 && !isRedirect && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Final</span>}</div><div className="group-hover:bg-blue-50/50 transition-colors p-2.5 rounded-lg border border-gray-100 bg-gray-50 font-mono text-sm text-gray-600 break-all select-all hover:border-blue-200 hover:text-blue-800">{hop.url}</div>
-                                        {hop.note && <div className="mt-1 text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded inline-block">{hop.note}</div>}
-                                        </div></div>
+                                        <div key={index} className="relative flex items-start gap-4 group"><div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center border-4 shadow-sm flex-shrink-0 bg-white ${isRedirect ? 'border-orange-100' : (isError ? 'border-red-100' : 'border-green-100')}`}><div className={`w-2.5 h-2.5 rounded-full ${isRedirect ? 'bg-orange-500' : (isError ? 'bg-red-500' : 'bg-green-500')}`}></div></div><div className="flex-grow min-w-0 pt-1"><div className="flex flex-wrap items-center gap-2 mb-2"><span className={`px-2.5 py-0.5 rounded-md text-xs font-bold border ${colorClass}`}>HTTP {hop.status}</span>{isRedirect && <span className="flex items-center text-xs text-orange-600 font-medium"><ArrowRight size={12} className="mr-1" />Redirect</span>}{index === 0 && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Initial</span>}{index === chain.length - 1 && !isRedirect && <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Final</span>}</div><div className="group-hover:bg-blue-50/50 transition-colors p-2.5 rounded-lg border border-gray-100 bg-gray-50 font-mono text-sm text-gray-600 break-all select-all hover:border-blue-200 hover:text-blue-800">{hop.url}</div></div></div>
                                     );
                                 })}</div></div></div>
                 </div>
@@ -670,39 +642,19 @@
                     .catch(() => setExternalWhitelist([]));
             }, []);
 
-            // Helper: 全形轉半形 & 移除隱形字元
-            const sanitizeInput = (str) => {
-                if (!str) return '';
-                // 1. 全形轉半形
-                let tmp = str.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
-                             .replace(/\u3000/g, ' ');
-                // 2. 移除中括號、空白、隱形字元(ZWSP等)
-                // \u200B-\u200D: Zero Width chars, \uFEFF: BOM
-                return tmp.replace(/[\[\]\s\u200B-\u200D\uFEFF]/g, '');
-            };
-
             const handleScan = async (e) => {
                 e.preventDefault();
-                
-                // 強制清洗輸入內容
-                const inputUrl = sanitizeInput(url);
-                
+                const inputUrl = url.trim();
                 if (!inputUrl) { setError('請輸入網址'); return; }
                 let urlToParse = /^https?:\/\//i.test(inputUrl) ? inputUrl : 'https://' + inputUrl;
                 try {
                     const urlObj = new URL(urlToParse);
-                    // 修正：移除複雜正則，改為簡單檢查是否有主機名稱且包含點號
-                    if (!urlObj.hostname || !urlObj.hostname.includes('.')) { 
-                        setError('請輸入有效的網域 (如 google.com)'); return; 
-                    }
+                    if (!urlObj.hostname.includes('.') || !/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(urlObj.hostname)) { setError('請輸入有效的網域 (如 google.com)'); return; }
                     setError(''); setLoading(true); setResult(null); setCopyStatus('idle');
                     if (document.activeElement) document.activeElement.blur();
                     const data = await simulateScan(urlObj.hostname, urlObj.href, externalWhitelist);
                     setResult(data);
-                } catch (err) { 
-                    console.error(err);
-                    setError('網址格式錯誤'); 
-                } finally { setLoading(false); }
+                } catch (err) { setError('網址格式錯誤'); } finally { setLoading(false); }
             };
 
             const handleCopyReport = () => {
@@ -714,11 +666,6 @@
                      if (result.domain.includes('gov') && !result.domain.endsWith('.gov') && !result.domain.endsWith('.gov.tw')) warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
                      else if ((result.domain.match(/-/g) || []).length >= 2) warnings.push('⚠️ 網域包含多個連字號 (-)，極高機率為詐騙');
                 } else if (result.checks.domainAnalysis.status === 'warning') warnings.push('⚠️ 使用免費架站平台，風險較高');
-                
-                // 新增報告項目
-                if (result.checks.sslCert.status === 'danger') warnings.push('⚠️ SSL 憑證為 24 小時內新簽發 (極高風險)');
-                if (result.checks.cloaking.status === 'danger') warnings.push('⚠️ 偵測到針對裝置的偽裝詐騙行為');
-                
                 if (result.details.siteStatus.status === 'blank') warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
                 if (result.details.siteStatus.status === 'error') warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
                 if (result.details.siteStatus.status === 'unknown') warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
@@ -743,7 +690,7 @@
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.3.2 Robust Update</div></div></header>
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.6 AI 偵測引擎</div></div></header>
                     <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6"><div className="w-full max-w-3xl">
                             <div className="text-center mb-10 md:mb-12 animate-fade-in"><h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br className="md:hidden" /><span className="text-brand-red">從檢查網址開始</span></h2><p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p></div>
                             <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100"><form onSubmit={handleScan} className="flex flex-col md:flex-row gap-2"><div className="relative flex-grow group"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="text-gray-400 group-focus-within:text-brand-red transition-colors" size={20} /></div><input type="text" className="w-full pl-12 pr-4 py-4 md:py-4 bg-gray-50 border-transparent focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red focus:outline-none transition-all text-base md:text-lg placeholder-gray-400" placeholder="輸入網址 (例如 www.shop.xyz)" value={url} onChange={(e) => setUrl(e.target.value)} onFocus={(e) => e.target.select()} /></div><button type="submit" disabled={loading} className={`px-8 py-4 rounded-xl font-bold text-white shadow-md flex justify-center items-center transition-all active:scale-95 md:w-auto w-full text-lg ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-red hover:bg-brand-darkRed shadow-glow'}`}>{loading ? (<span className="flex items-center gap-2"><svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>分析中...</span>) : '立即檢測'}</button></form></div>
@@ -761,8 +708,6 @@
                                                             const renderIcon = () => {
                                                                 if (check.label === '網站內容狀態') return <Layout size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
                                                                 if (check.label === '註冊商信譽') return <Flag size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
-                                                                if (check.label === 'SSL 憑證安全') return <Lock size={20} className={check.status === 'danger' ? 'text-red-600' : (check.status === 'warning' ? 'text-yellow-500' : 'text-green-500')} />;
-                                                                if (check.label === '偽裝偵測 (Cloaking)') return <Smartphone size={20} className={check.status === 'danger' ? 'text-red-600' : 'text-green-500'} />;
                                                                 if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
                                                                 if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
@@ -771,7 +716,7 @@
                                                                 if (check.label === '網頁連結分析') return <Link size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-blue-500'} />;
                                                                 return check.status === 'safe' ? <CheckCircle className="text-green-500" size={20} /> : (check.status === 'info' ? <HelpCircle className="text-blue-500" size={20} /> : <AlertTriangle className={check.status === 'danger' ? 'text-red-500' : 'text-yellow-500'} size={20} />);
                                                             };
-                                                            return (<div key={idx} className={`p-4 rounded-xl border ${check.status === 'safe' ? 'border-gray-100 bg-white' : (check.status === 'info' ? 'border-blue-100 bg-blue-50' : (check.status === 'warning' ? 'border-yellow-200 bg-yellow-50/50' : 'border-red-200 bg-red-50/50'))} transition-colors`}><div className="flex items-center gap-3 mb-2">{renderIcon()}<span className="font-bold text-gray-700">{check.label}</span></div><p className="text-sm text-gray-600 pl-8 leading-relaxed whitespace-pre-line">{check.details}{check.link && <a href={check.link} target="_blank" className="text-blue-500 hover:underline ml-1 text-xs break-all">查詢</a>}</p></div>);
+                                                            return (<div key={idx} className={`p-4 rounded-xl border ${check.status === 'safe' ? 'border-gray-100 bg-white' : (check.status === 'info' ? 'border-blue-100 bg-blue-50' : (check.status === 'warning' ? 'border-yellow-200 bg-yellow-50/50' : 'border-red-200 bg-red-50/50'))} transition-colors`}><div className="flex items-center gap-3 mb-2">{renderIcon()}<span className="font-bold text-gray-700">{check.label}</span></div><p className="text-sm text-gray-600 pl-8 leading-relaxed">{check.details}{check.link && <a href={check.link} target="_blank" className="text-blue-500 hover:underline ml-1 text-xs break-all">查詢</a>}</p></div>);
                                                         })}</div>
                                                     <button onClick={handleCopyReport} className={`w-full py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border ${copyStatus === 'copied' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>{copyStatus === 'copied' ? (<><Check size={20} />已複製文字報告！</>) : (<><Copy size={20} className="text-gray-500" />一鍵複製檢測報告 (可貼至 LINE)</>)}</button>
                                                     <MyGoPenSection domain={result.domain} />
