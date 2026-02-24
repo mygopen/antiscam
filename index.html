@@ -718,8 +718,21 @@
                                                             };
                                                             return (<div key={idx} className={`p-4 rounded-xl border ${check.status === 'safe' ? 'border-gray-100 bg-white' : (check.status === 'info' ? 'border-blue-100 bg-blue-50' : (check.status === 'warning' ? 'border-yellow-200 bg-yellow-50/50' : 'border-red-200 bg-red-50/50'))} transition-colors`}><div className="flex items-center gap-3 mb-2">{renderIcon()}<span className="font-bold text-gray-700">{check.label}</span></div><p className="text-sm text-gray-600 pl-8 leading-relaxed">{check.details}{check.link && <a href={check.link} target="_blank" className="text-blue-500 hover:underline ml-1 text-xs break-all">查詢</a>}</p></div>);
                                                         })}</div>
-                                                    <button onClick={handleCopyReport} className={`w-full py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border ${copyStatus === 'copied' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>{copyStatus === 'copied' ? (<><Check size={20} />已複製文字報告！</>) : (<><Copy size={20} className="text-gray-500" />一鍵複製檢測報告 (可貼至 LINE)</>)}</button>
-                                                    <MyGoPenSection domain={result.domain} />
+                                                    
+                                    <button onClick={handleCopyReport} className={`w-full py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border ${copyStatus === 'copied' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>{copyStatus === 'copied' ? (<><Check size={20} />已複製文字報告！</>) : (<><Copy size={20} className="text-gray-500" />一鍵複製檢測報告 (可貼至 LINE)</>)}</button>
+
+{/* 新增的 Google AI 查詢按鈕 */}
+<a 
+    href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}`} 
+    target="_blank" 
+    rel="noopener noreferrer" 
+    className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border bg-white text-blue-600 border-blue-200 hover:bg-blue-50"
+>
+    <GoogleIcon size={20} />
+    Google AI 查詢詐騙網址結果
+</a>
+
+<MyGoPenSection domain={result.domain} />
                                                 </>)}</div></div><p className="text-center text-xs text-gray-400 max-w-lg mx-auto leading-relaxed px-4">免責聲明：本工具分析結果僅供參考，無法保證 100% 準確。詐騙手法日新月異，請務必保持警覺，切勿隨意提供銀行帳號或密碼。</p></div>
                             )}
                         </div></main>
