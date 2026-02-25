@@ -529,9 +529,16 @@
             if (blocklistListed) riskScore = 100;
             else {
                 // 1. 內容分析
-                if (siteStatusData.status === 'blank') riskScore += 95; 
-                else if (siteStatusData.status === 'error') riskScore += 80;
-                else if (siteStatusData.status === 'unknown') riskScore += isHighTraffic ? 20 : 75;
+// 如果是高流量網站或者是 .com.tw 等正規網域，降低因防爬蟲擋截造成的誤判懲罰
+if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
+    if (isHighTraffic || isTrustedTLD) {
+        riskScore += 10; // 可能是 WAF 阻擋，給予較低風險分數
+    } else {
+        riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
+    }
+} else if (siteStatusData.status === 'unknown') {
+    riskScore += (isHighTraffic || isTrustedTLD) ? 0 : 75;
+}
                 
                 // 2. 網域年齡分析 (修正：強加權重於極新網域)
                 let ageStatus = 'unknown';
