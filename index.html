@@ -569,8 +569,8 @@
                     if (isHighEntropy) riskScore += 20;
                 }
                 
-                // 修正：白名單且運作正常時歸零，但極新網域排除在外
-                if (isWhitelisted && siteStatusData.status === 'ok' && !isFakeGov && riskScore < 80) riskScore = 0;
+                // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
+if (isWhitelisted && !isFakeGov) riskScore = 0;
             }
 
             // 修正：網站內容狀態標籤邏輯
