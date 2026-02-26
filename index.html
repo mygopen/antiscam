@@ -713,6 +713,17 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
                                 <div ref={resultRef} className="animate-slide-up space-y-6 pb-12"><div className="bg-white rounded-3xl shadow-soft overflow-hidden border border-gray-100"><div className="p-6 md:p-8">{result.isInvalid ? (<div className="text-center py-8"><div className="inline-block p-4 bg-gray-100 rounded-full mb-4 text-gray-400"><Search size={48} /></div><h3 className="text-2xl font-bold text-gray-800 mb-2">無法連結此網站</h3><p className="text-gray-500">{result.invalidMsg}</p></div>) : (<>
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3></div><div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
                                                     <RiskMeter score={result.riskScore} />
+
+<a 
+    href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} 
+    target="_blank" 
+    rel="noopener noreferrer" 
+    className="w-full mt-2 mb-6 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border bg-white text-blue-600 border-blue-200 hover:bg-blue-50"
+>
+    <GoogleIcon size={20} />
+    Google AI 查詢詐騙檢測結果
+</a>
+                                    
                                                     {result.traceChain && result.traceChain.length > 1 && <TraceTimeline chain={result.traceChain} />}
                                                     {result.blocklistListed && (<div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-4"><div className="flex gap-3"><ShieldAlert className="text-red-600 flex-shrink-0" size={24} /><div><p className="font-bold text-red-800">警告：已列入詐騙黑名單</p><p className="text-sm text-red-700 mt-1">此網址存在於開源反詐騙資料庫中，極高機率為惡意網站。</p></div></div></div>)}
                                                     {result.checks.redirect.status !== 'safe' && (<div className="mb-4 p-4 rounded-xl bg-orange-50 border border-orange-200 flex items-start gap-3"><AlertTriangle className="text-orange-600 flex-shrink-0" size={24} /><div><h3 className="font-bold text-orange-800 text-base">⚠️ 發現轉址或異常</h3><p className="text-sm text-orange-700 mt-1">{result.checks.redirect.details}<br/>跨網域轉址常見於隱藏真實目的地的惡意連結。</p><a href={`https://wheregoes.com/trace/${result.scannedUrl}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-orange-700 hover:text-orange-900 underline"><ExternalLink size={12} />外部工具：檢查詳細轉址路徑 (WhereGoes)</a></div></div>)}
@@ -747,17 +758,7 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
     )}
 </button>
                                     
-                                    
-{/* 新增的 Google AI 查詢按鈕 */}
-<a 
-    href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} 
-    target="_blank" 
-    rel="noopener noreferrer" 
-    className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm border bg-white text-blue-600 border-blue-200 hover:bg-blue-50"
->
-    <GoogleIcon size={20} />
-    Google AI 查詢詐騙檢測結果
-</a>
+                                
 
 <MyGoPenSection domain={result.domain} />
                                                 </>)}</div></div><p className="text-center text-xs text-gray-400 max-w-lg mx-auto leading-relaxed px-4">免責聲明：本工具分析結果僅供參考，無法保證 100% 準確。詐騙手法日新月異，請務必保持警覺，切勿隨意提供銀行帳號或密碼。</p></div>
