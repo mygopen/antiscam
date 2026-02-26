@@ -524,57 +524,63 @@
             const hasSuspiciousParams = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='].some(key => fullUrl.toLowerCase().includes(key));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
 
-            // --- 精確風險權重判定 ---
-            let riskScore = 0;
-            if (blocklistListed) riskScore = 100;
-            else {
-                // 1. 內容分析
-// 如果是高流量網站或者是 .com.tw 等正規網域，降低因防爬蟲擋截造成的誤判懲罰
-if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
-    if (isHighTraffic || isTrustedTLD) {
-        riskScore += 10; // 可能是 WAF 阻擋，給予較低風險分數
-    } else {
-        riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
-    }
-} else if (siteStatusData.status === 'unknown') {
-    riskScore += (isHighTraffic || isTrustedTLD) ? 0 : 75;
-}
-                
-                // 2. 網域年齡分析 (修正：強加權重於極新網域)
-                let ageStatus = 'unknown';
-                let ageDetails = '無法自動獲取';
-                if (rdapDate) {
-                    const regDate = new Date(rdapDate);
-                    const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
-                    ageDetails = `註冊日期: ${regDate.toISOString().split('T')[0]} (約 ${(diffDays / 365).toFixed(1)} 年前)`;
-                    if (diffDays < 30) { riskScore += 85; ageStatus = 'danger'; ageDetails += ' - 極新網域！'; }
-                    else if (diffDays < 180) { riskScore += 30; ageStatus = 'danger'; ageDetails += ' - 半年內註冊網域'; }
-                    else if (diffDays < 365) ageStatus = 'warning';
-                    else ageStatus = 'safe';
-                } else if (isHighTraffic) { ageStatus = 'safe'; ageDetails = '長期穩定網域'; }
-                else if (isVeryHighRiskTLD) { ageStatus = 'danger'; ageDetails = '高風險字尾網域 (無法取得日期)'; }
+// --- [優化版] 精確風險權重判定 ---
+let riskScore = 0;
 
-                // 3. 其他特徵分析
-                if (!isWhitelisted) {
-                    if (isVeryHighRiskTLD) riskScore += 75;
-                    else if (isSuspiciousTLD) riskScore += 30;
-                    if (siteStatusData.hasIframe) riskScore += 15;
-                    if (isRedirected) {
-                        riskScore += 20;
-                        if (isKnownShortener) riskScore += 40;
-                    }
-                    if (isInputShortener) riskScore += 30;
-                    if (traceData && traceData.isHighRisk) riskScore += 40;
-                    if (privacyDetected && !isHighTraffic) riskScore += 15;
-                    if (isHighRiskRegistrar && !isHighTraffic) riskScore += 15;
-                    if (isDeepSubdomain && !isHighTraffic) riskScore += 60; 
-                    if (hasSuspiciousParams) riskScore += 40;
-                    if (isFakeGov) riskScore += 90;
-                    if (hasMultipleHyphens) riskScore += 60;
-                    if (isFreeHosting) riskScore += 25;
-                    if (!isHighTraffic) riskScore += 15;
-                    if (isHighEntropy) riskScore += 20;
-                }
+if (blocklistListed) {
+    riskScore = 100;
+} else {
+    // 1. 內容分析優化：區分「惡意阻擋」與「安全防護(WAF)」
+    if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
+        if (isHighTraffic || isTrustedTLD) {
+            riskScore += 10; // 知名網站或政府網域，僅輕微加分
+        } else {
+            riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
+        }
+    } else if (siteStatusData.status === 'unknown') {
+        // [關鍵修正]：針對 zoom.com 等知名 TLD 降低誤判
+        const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr'];
+        const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
+        
+        if (isHighTraffic || isTrustedTLD) {
+            riskScore += 0; 
+        } else if (isCommonInternational) {
+            // 如果是常見 .com 但抓不到內容，給予中度懷疑而非直接判定危險
+            riskScore += 25; 
+        } else {
+            riskScore += 75; // 偏僻網域且抓不到內容，維持高風險
+        }
+    }
+
+    // 2. 網域年齡與信譽分析
+    if (rdapData.date) {
+        const regDate = new Date(rdapData.date);
+        const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
+        if (diffDays < 30) { riskScore += 85; } // 極新網域
+        else if (diffDays < 180) { riskScore += 30; }
+    } else {
+        // 無法取得日期時，若非高流量網站，則視為潛在風險
+        if (!isHighTraffic && isVeryHighRiskTLD) riskScore += 40;
+    }
+
+    // 3. 其他特徵分析 (僅在非白名單時計算)
+    if (!isWhitelisted) {
+        if (isVeryHighRiskTLD) riskScore += 75;
+        if (isRedirected && isKnownShortener) riskScore += 40;
+        if (isFakeGov) riskScore += 90;
+        if (hasMultipleHyphens) riskScore += 60;
+        if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
+        if (hasSuspiciousParams) riskScore += 40;
+    }
+    
+    // 4. 白名單強制歸零補丁
+    if (isWhitelisted && !isFakeGov) riskScore = 0;
+}
+
+
+
+
+            
                 
                 // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
 if (isWhitelisted && !isFakeGov) riskScore = 0;
