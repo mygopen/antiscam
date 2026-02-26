@@ -584,7 +584,7 @@ if (blocklistListed) {
                 
                 // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
 if (isWhitelisted && !isFakeGov) riskScore = 0;
-            }
+            
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
