@@ -714,6 +714,7 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3></div><div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
                                                     <RiskMeter score={result.riskScore} />
 
+{/* 確保按鈕獨立放置，不要包在其他判斷式的大括號內 */}
 <a 
     href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} 
     target="_blank" 
@@ -723,6 +724,8 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
     <GoogleIcon size={20} />
     Google AI 查詢詐騙檢測結果
 </a>
+
+{/* 接續下一個條件判斷 */}
                                     
                                                     {result.traceChain && result.traceChain.length > 1 && <TraceTimeline chain={result.traceChain} />}
                                                     {result.blocklistListed && (<div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-4"><div className="flex gap-3"><ShieldAlert className="text-red-600 flex-shrink-0" size={24} /><div><p className="font-bold text-red-800">警告：已列入詐騙黑名單</p><p className="text-sm text-red-700 mt-1">此網址存在於開源反詐騙資料庫中，極高機率為惡意網站。</p></div></div></div>)}
