@@ -531,26 +531,26 @@ if (blocklistListed) {
     riskScore = 100;
 } else {
     // 1. 內容分析優化：區分「惡意阻擋」與「安全防護(WAF)」
-    if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
-        if (isHighTraffic || isTrustedTLD) {
-            riskScore += 10; // 知名網站或政府網域，僅輕微加分
-        } else {
-            riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
-        }
-    } else if (siteStatusData.status === 'unknown') {
-        // [關鍵修正]：針對 zoom.com 等知名 TLD 降低誤判
-        const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr'];
-        const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
-        
-        if (isHighTraffic || isTrustedTLD) {
-            riskScore += 0; 
-        } else if (isCommonInternational) {
-            // 如果是常見 .com 但抓不到內容，給予中度懷疑而非直接判定危險
-            riskScore += 25; 
-        } else {
-            riskScore += 75; // 偏僻網域且抓不到內容，維持高風險
-        }
+if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
+    if (isHighTraffic || isTrustedTLD) {
+        riskScore += 10; // 知名網站或政府網域，僅輕微加分
+    } else {
+        riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
     }
+} else if (siteStatusData.status === 'unknown') {
+    // [關鍵修正]：針對 zoom.com 等知名 TLD 降低誤判，並加入 '.tw' 以減少對台灣一般商業網域的誤判
+    const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr', '.tw'];
+    const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
+    
+    if (isHighTraffic || isTrustedTLD) {
+        riskScore += 0; 
+    } else if (isCommonInternational) {
+        // 如果是常見國際網域或台灣網域但抓不到內容，給予中度懷疑而非直接判定危險
+        riskScore += 25; 
+    } else {
+        riskScore += 75; // 偏僻網域且抓不到內容，維持高風險
+    }
+}
 
     // 2. 網域年齡與信譽分析
     if (rdapData.date) {
