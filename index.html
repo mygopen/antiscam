@@ -556,11 +556,18 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
     if (rdapData.date) {
         const regDate = new Date(rdapData.date);
         const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
-        if (diffDays < 30) { riskScore += 85; } // 極新網域
-        else if (diffDays < 180) { riskScore += 30; }
+        
+        if (diffDays < 120) { 
+            riskScore += 85; // 120天內視為極新網域，給予極高風險分
+        } else if (diffDays < 180) { 
+            riskScore += 50; // 半年內網域維持中高風險
+        } else if (diffDays < 365) {
+            riskScore += 25; // 一年內網域給予輕微警示
+        }
     } else {
         // 無法取得日期時，若非高流量網站，則視為潛在風險
         if (!isHighTraffic && isVeryHighRiskTLD) riskScore += 40;
+        else if (!isHighTraffic) riskScore += 45; // 查無日期的 .com 等也從嚴判定
     }
 
     // 3. 其他特徵分析 (僅在非白名單時計算)
@@ -597,7 +604,12 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
                     siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteContentMsg },
                     domainAnalysis: { status: isFakeGov || hasMultipleHyphens ? 'danger' : (isFreeHosting ? 'warning' : 'safe'), label: '網域特徵分析', details: isFakeGov ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' : (hasMultipleHyphens ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站` : '網域命名結構無明顯異常')) },
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
-                    age: { status: (riskScore >= 80 && rdapDate && (new Date() - new Date(rdapDate)) < 30 * 86400000) ? 'danger' : (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'danger' : (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'), label: '註冊時間', details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${(new Date() - new Date(rdapDate)) < 30 * 86400000 ? ' - 極新網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'), link: `https://who.is/whois/${domain}` },
+                    age: { status: (rdapDate && (new Date() - new Date(rdapDate)) < 120 * 86400000) ? 'danger' : 
+            (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' : 
+            (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'), 
+    label: '註冊時間', 
+    details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${(new Date() - new Date(rdapDate)) < 120 * 86400000 ? ' - 極新網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'), 
+    link: `https://who.is/whois/${domain}` },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
