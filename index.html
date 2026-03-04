@@ -661,6 +661,16 @@ const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+
+    // ⛔️ 新增：限制檔案大小 (例如最大 3MB)
+    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
+    if (file.size > MAX_FILE_SIZE) {
+        setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。');
+        // 清除 input 的值，讓使用者可以重新選擇同一張圖
+        e.target.value = ''; 
+        return;
+    }
+    
     // 清空網址檢測的結果，進入圖片分析的載入狀態
     setResult(null); 
     setAiReport(null);
