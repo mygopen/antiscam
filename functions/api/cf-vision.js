@@ -30,23 +30,29 @@ export async function onRequestPost(context) {
 
 請直接輸出分析結果：`;
 
-        // 🚀 更換為截圖中最新的 Llama 4 多模態模型
+// 🚀 確認使用最新的 Llama 4 多模態模型
         const model = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
         let response;
         try {
             response = await env.AI.run(model, {
-                prompt: promptText,
-                image: imageArray,
-                max_tokens: 1024 // 解決字數截斷的問題
+                // 修正：新版模型需改用 messages 陣列格式
+                messages: [
+                    { role: "user", content: promptText }
+                ],
+                // 修正：使用展開運算子，對 V8 引擎處理大陣列有時較友善
+                image: [...new Uint8Array(arrayBuffer)], 
+                max_tokens: 1024
             });
         } catch (aiError) {
             // 自動同意條款的防呆機制
             if (aiError.message && aiError.message.includes('agree')) {
-                await env.AI.run(model, { prompt: 'agree' });
+                await env.AI.run(model, { prompt: 'agree' }); // 注意：同意條款可能還是只吃 prompt
                 response = await env.AI.run(model, {
-                    prompt: promptText,
-                    image: imageArray,
+                    messages: [
+                        { role: "user", content: promptText }
+                    ],
+                    image: [...new Uint8Array(arrayBuffer)],
                     max_tokens: 1024
                 });
             } else {
