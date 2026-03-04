@@ -498,6 +498,9 @@
             const hyphenCount = (domain.match(/-/g) || []).length;
             const hasMultipleHyphens = hyphenCount >= 2;
 
+// [修改] 檢查網域是否包含 -tw、-com 或 -online 等常見詐騙字樣
+const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com') || domain.includes('-online');
+            
             let isRedirected = false;
             let finalDomain = '';
             let isKnownShortener = false;
@@ -578,6 +581,8 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         if (hasMultipleHyphens) riskScore += 60;
         if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
         if (hasSuspiciousParams) riskScore += 40;
+        // [新增/修改] 若帶有 -tw, -com 或 -online 的可疑字樣，加 70 分
+        if (hasSuspiciousTempDomain) riskScore += 70;
     }
     
     // 4. 白名單強制歸零補丁
@@ -602,7 +607,16 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
                 details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
                 checks: {
                     siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteContentMsg },
-                    domainAnalysis: { status: isFakeGov || hasMultipleHyphens ? 'danger' : (isFreeHosting ? 'warning' : 'safe'), label: '網域特徵分析', details: isFakeGov ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' : (hasMultipleHyphens ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' : (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站` : '網域命名結構無明顯異常')) },
+                    
+                    domainAnalysis: { 
+    status: isFakeGov || hasMultipleHyphens || hasSuspiciousTempDomain ? 'danger' : (isFreeHosting ? 'warning' : 'safe'), 
+    label: '網域特徵分析', 
+    details: hasSuspiciousTempDomain ? '網域包含 "-tw", "-com" 或 "-online" 等常見於短期詐騙之偽裝字樣，風險極高！' : 
+             (isFakeGov ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' : 
+             (hasMultipleHyphens ? '網域包含多個連字號 (-)，極高機率為詐騙偽裝' : 
+             (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站` : '網域命名結構無明顯異常'))) 
+},
+                    
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     age: { status: (rdapDate && (new Date() - new Date(rdapDate)) < 120 * 86400000) ? 'danger' : 
             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' : 
@@ -784,7 +798,8 @@ const handleScan = async (e) => {
                 const warnings = [];
                 if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
                 if (result.checks.domainAnalysis.status === 'danger') {
-                     if (result.domain.includes('gov') && !result.domain.endsWith('.gov') && !result.domain.endsWith('.gov.tw')) warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
+                     if (result.domain.includes('-tw') || result.domain.includes('-com') || result.domain.includes('-online')) warnings.push('⚠️ 網域包含 "-tw", "-com" 或 "-online" 偽裝字樣，風險極高');
+                     else if (result.domain.includes('gov') && !result.domain.endsWith('.gov') && !result.domain.endsWith('.gov.tw')) warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
                      else if ((result.domain.match(/-/g) || []).length >= 2) warnings.push('⚠️ 網域包含多個連字號 (-)，極高機率為詐騙');
                 } else if (result.checks.domainAnalysis.status === 'warning') warnings.push('⚠️ 使用免費架站平台，風險較高');
                 if (result.details.siteStatus.status === 'blank') warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
