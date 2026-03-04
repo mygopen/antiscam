@@ -12,10 +12,24 @@ export async function onRequestPost(context) {
         }
 
         const arrayBuffer = await imageFile.arrayBuffer();
-        const imageArray = Array.from(new Uint8Array(arrayBuffer));
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        // 修正 1：將圖片轉換為 Base64 格式 (Cloudflare Workers AI 多模態新版 API 要求)
+        // 使用迴圈處理避免大檔案造成 Call Stack Exceeded
+        let binary = '';
+        const len = uint8Array.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(uint8Array[i]);
+        }
+        const base64String = btoa(binary);
+        const mimeType = imageFile.type || 'image/jpeg';
+        // 組裝成 Data URI 格式
+        const imageUri = `data:${mimeType};base64,${base64String}`;
 
-        // 終極版提示詞：強化防幻覺與嚴格格式要求
-        const promptText = `👤 角色設定
+        // 修正 2：在開頭強硬宣告立即分析，防止 AI 進入「聊天等待」狀態
+        const promptText = `🚨現在請立刻分析隨附的這張圖片，絕對不要回覆「我準備好了」等寒暄語，請直接根據以下規則輸出你的分析報告。
+        
+👤 角色設定
 你是一位受過嚴格資安與事實查核訓練的頂尖分析專家。你的任務是精準分析使用者上傳的截圖，評估其詐騙或假訊息風險。
 🚨 核心最高準則（違反將導致系統崩潰，請嚴格遵守）
 1️⃣ 絕對禁用 Markdown：全程只能使用純文字與 Emoji排版。絕對不可以輸出星號粗體、井字號標題或列表縮排！
@@ -35,29 +49,39 @@ export async function onRequestPost(context) {
 🛡️ ［防護建議］：
 💡 【根據風險給予最精簡的一句話建議，高風險詐騙請提165專線，假新聞請提醒查證權威媒體】`;
 
-// 🚀 確認使用最新的 Llama 4 多模態模型
+        // 註：若此模型後續回報 404 或報錯，請改回官方穩定的: '@cf/meta/llama-3.2-11b-vision-instruct'
         const model = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
         let response;
         try {
             response = await env.AI.run(model, {
-                // 修正：新版模型需改用 messages 陣列格式
+                // 修正 3：使用 OpenAI 相容的 content 陣列格式，把圖文綁在一起發送
                 messages: [
-                    { role: "user", content: promptText }
+                    { 
+                        role: "user", 
+                        content: [
+                            { type: "text", text: promptText },
+                            { type: "image_url", image_url: { url: imageUri } }
+                        ] 
+                    }
                 ],
-                // 修正：使用展開運算子，對 V8 引擎處理大陣列有時較友善
-                image: [...new Uint8Array(arrayBuffer)], 
                 max_tokens: 1024
             });
         } catch (aiError) {
             // 自動同意條款的防呆機制
             if (aiError.message && aiError.message.includes('agree')) {
-                await env.AI.run(model, { prompt: 'agree' }); // 注意：同意條款可能還是只吃 prompt
+                await env.AI.run(model, { prompt: 'agree' }); 
+                // 同意後，再送出一次圖文請求
                 response = await env.AI.run(model, {
                     messages: [
-                        { role: "user", content: promptText }
+                        { 
+                            role: "user", 
+                            content: [
+                                { type: "text", text: promptText },
+                                { type: "image_url", image_url: { url: imageUri } }
+                            ] 
+                        }
                     ],
-                    image: [...new Uint8Array(arrayBuffer)],
                     max_tokens: 1024
                 });
             } else {
@@ -66,10 +90,8 @@ export async function onRequestPost(context) {
         }
 
         // 【雙重保險：程式碼後處理】
-        // 強制用正則表達式清除 Markdown 符號，確保前端排版乾淨
         let cleanReport = response.response;
         if (cleanReport) {
-            // 移除星號(*)、井字號(#)、底線(_)、反引號(`) 等常見 Markdown 標記
             cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
         }
 
