@@ -817,7 +817,7 @@ const handleImageUpload = async (e) => {
             <Search className="text-gray-400 group-focus-within:text-brand-red transition-colors" size={20} />
         </div>
         
-        <input type="text" className="w-full pl-12 pr-14 py-4 md:py-4 bg-gray-50 border-transparent focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red focus:outline-none transition-all text-base md:text-lg placeholder-gray-400" placeholder="輸入網址 (例如 www.shop.xyz)或上傳可疑截圖" value={url} onChange={(e) => setUrl(e.target.value)} onFocus={(e) => e.target.select()} />
+        <input type="text" className="w-full pl-12 pr-14 py-4 md:py-4 bg-gray-50 border-transparent focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red focus:outline-none transition-all text-base md:text-lg placeholder-gray-400" placeholder="貼上網址或上傳可疑截圖" value={url} onChange={(e) => setUrl(e.target.value)} onFocus={(e) => e.target.select()} />
         
         <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
             <input 
