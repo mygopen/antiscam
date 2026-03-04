@@ -16,18 +16,23 @@ export async function onRequestPost(context) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const imageArray = Array.from(new Uint8Array(arrayBuffer));
 
-        // 3. 提示詞工程 (Prompt Engineering)
-        const promptText = `你是一位台灣的專業防詐騙專家。請分析這張網頁或對話截圖，判斷是否為詐騙。
-請務必「嚴格」依照以下格式回覆，不要加入額外的寒暄用語，並根據截圖內容具體列出 3 點原因：
+        // 3. 【優化版】動態情境提示詞工程 (Prompt Engineering)
+        const promptText = `你是一位台灣的專業防詐騙專家。請仔細觀察這張圖片（可能是Email郵件、簡訊、對話或網頁截圖），判斷是否為詐騙。
 
-要當心這可能是詐騙，務必多方查證！
+請務必「嚴格」依照以下格式回覆，不要加入額外的寒暄用語：
+
+要當心這極可能是詐騙，務必多方查證！
 
 原因如下：
-1. 該訊息要求輸入信用卡詳細資料，包括卡號、安全碼等，這是典型的詐騙手法。 (如果圖片沒有提及信用卡，請根據圖片實際的詐騙手法改寫這一點)
-2. (請根據圖片內容指出冒用官方機構、語氣急迫或是不合理的高報酬風險)
-3. (請補充一個合理的詐騙可疑點，例如網址特徵或索取不必要的個資)
+1. (請根據圖片實際內容，具體點出第一個可疑處。如果是Email，請特別檢查並指出「寄件者信箱」是否為亂碼或非官方網域；如果是網頁，請指出是否要求輸入信用卡等敏感個資)
+2. (請指出冒用官方機構、不合理的中獎通知、繳費通知、或語氣製造急迫感等風險)
+3. (請補充其他可疑點，例如：非官方的網址特徵、誘騙點擊不明連結等)
 
-建議您不要輸入任何個人或金融資訊，並提高警覺。若有疑慮，可直接聯絡官方客服確認活動真偽。也可以撥打165反詐騙專線尋求協助。`;
+防詐建議：
+(請依據圖片情境給出專屬建議。
+若為 Email/簡訊 情境，請輸出：「請注意檢查郵件的寄件者地址和內容是否與官方資訊一致，避免點選可疑連結或提供個人資料，保持謹慎，確保安全！」
+若為 網頁填寫 情境，請輸出：「建議您絕對不要輸入任何信用卡號、安全碼等金融資訊，避免遭到盜刷。」
+最後統一在換行後補上一句：「若有疑慮，可直接聯絡官方客服確認，或撥打 165 反詐騙專線尋求協助。」)`;
 
         let response;
         try {
@@ -40,16 +45,15 @@ export async function onRequestPost(context) {
                 }
             );
         } catch (aiError) {
-            // 5. 【關鍵修正】攔截 5016 錯誤並自動同意條款
+            // 5. 攔截 5016 錯誤並自動同意條款
             if (aiError.message && aiError.message.includes('agree')) {
-                
-                // 發送同意聲明 (此動作針對您的帳號終身只需執行這一次)
+                // 發送同意聲明
                 await env.AI.run(
                     '@cf/meta/llama-3.2-11b-vision-instruct',
                     { prompt: 'agree' }
                 );
                 
-                // 同意完成後，立刻無縫重試剛剛使用者的圖片分析請求
+                // 同意完成後，立刻無縫重試
                 response = await env.AI.run(
                     '@cf/meta/llama-3.2-11b-vision-instruct',
                     {
@@ -58,7 +62,6 @@ export async function onRequestPost(context) {
                     }
                 );
             } else {
-                // 若是其他當機錯誤，則直接拋出
                 throw aiError;
             }
         }
