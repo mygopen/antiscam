@@ -755,7 +755,7 @@ const handleImageUpload = async (e) => {
                     .catch(() => setExternalWhitelist([]));
             }, []);
 
-            const handleScan = async (e) => {
+const handleScan = async (e) => {
                 e.preventDefault();
                 const inputUrl = url.trim();
                 if (!inputUrl) { setError('請輸入網址'); return; }
@@ -763,7 +763,15 @@ const handleImageUpload = async (e) => {
                 try {
                     const urlObj = new URL(urlToParse);
                     if (!urlObj.hostname.includes('.') || !/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(urlObj.hostname)) { setError('請輸入有效的網域 (如 google.com)'); return; }
-                    setError(''); setLoading(true); setResult(null); setCopyStatus('idle');
+                    
+                    // 👇 新增 setAiReport(null) 和 setIsImageAnalyzing(false)
+                    setError(''); 
+                    setLoading(true); 
+                    setResult(null); 
+                    setCopyStatus('idle');
+                    setAiReport(null); 
+                    setIsImageAnalyzing(false);
+                    
                     if (document.activeElement) document.activeElement.blur();
                     const data = await simulateScan(urlObj.hostname, urlObj.href, externalWhitelist);
                     setResult(data);
