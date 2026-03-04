@@ -14,7 +14,7 @@ export async function onRequestPost(context) {
 
         // 2. 將圖片轉換成 Cloudflare AI 支援的位元組陣列
         const arrayBuffer = await imageFile.arrayBuffer();
-        const imageArray = [...new Uint8Array(arrayBuffer)];
+        const imageArray = Array.from(new Uint8Array(arrayBuffer));
 
         // 3. 提示詞工程 (Prompt Engineering) - 強制指定回覆格式
         const promptText = `你是一位台灣的專業防詐騙專家。請分析這張網頁或對話截圖，判斷是否為詐騙。
