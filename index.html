@@ -657,6 +657,42 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
 const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
 const [aiReport, setAiReport] = useState(null);
 
+
+const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
+const [aiReport, setAiReport] = useState(null);
+// 👇 新增這行：管理 AI 報告專屬的複製狀態
+const [aiCopyStatus, setAiCopyStatus] = useState('idle');
+
+// 👇 新增這段函式：處理 AI 圖片分析報告的複製邏輯
+const handleCopyAiReport = () => {
+    if (!aiReport) return;
+    
+    // 組合要複製的文字內容
+    const report = `【截圖防詐 AI 分析報告】\n----------------------\n${aiReport}\n----------------------\n※ 分析結果由 AI 提供，請保持警覺，切勿隨意提供個資或匯款。`;
+    
+    const textArea = document.createElement("textarea");
+    textArea.value = report; 
+    textArea.style.position = "fixed"; 
+    textArea.style.left = "-9999px"; 
+    textArea.style.top = "0";
+    document.body.appendChild(textArea); 
+    textArea.focus(); 
+    textArea.select();
+    
+    try { 
+        if (document.execCommand('copy')) { 
+            setAiCopyStatus('copied'); 
+            setTimeout(() => setAiCopyStatus('idle'), 3000); 
+        } else {
+            alert('複製失敗，請手動複製'); 
+        }
+    } catch (err) { 
+        alert('複製失敗，請手動複製'); 
+    } 
+    document.body.removeChild(textArea);
+};
+
+            
 const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -823,15 +859,32 @@ const handleImageUpload = async (e) => {
         </div>
         
         {/* 利用 whitespace-pre-wrap 完美呈現我們在提示詞中設計的斷行格式 */}
-        <div className="bg-red-50 p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap border border-red-100 shadow-sm font-medium">
+        {/* 👇 加上 mb-6 與按鈕保持間距 */}
+        <div className="bg-red-50 p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap border border-red-100 shadow-sm font-medium mb-6">
             {aiReport}
         </div>
+        
+        {/* 👇 新增的綠色複製按鈕 */}
+        <button 
+            onClick={handleCopyAiReport} 
+            className={`w-full py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-sm ${
+                aiCopyStatus === 'copied' 
+                    ? 'bg-[#049b42] text-white' 
+                    : 'bg-[#06C755] hover:bg-[#05b34c] text-white'
+            }`}
+        >
+            {aiCopyStatus === 'copied' ? (
+                <><Check size={20} />已複製文字報告！</>
+            ) : (
+                <><Copy size={20} className="text-white" />一鍵複製檢測報告 (可貼至 LINE)</>
+            )}
+        </button>
         
         <p className="text-xs text-center text-gray-400 mt-6">
             本分析由 Cloudflare Workers AI 提供技術支援，AI 判斷可能偶有誤差，結果僅供參考。
         </p>
     </div>
-)}                        
+)}                    
                         
                         
                         {result && !loading && (
