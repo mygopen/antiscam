@@ -14,11 +14,13 @@ export async function onRequestPost(context) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const imageArray = Array.from(new Uint8Array(arrayBuffer));
 
-        // 【優化版提示詞】使用範例引導，強制純文字輸出
-        const promptText = `你是一位資安分析專家。請精準分析圖片中的詐騙風險：
-1. 僅限純文字與 Emoji，嚴禁使用任何星號(*)、井字號(#)或 Markdown 格式。
-2. 若無明顯破綻，請回覆「未發現明顯特徵」。
-3. 總字數嚴格控制在 150 字內，結尾需完整。
+        // 針對 Qwen2-VL 優化的提示詞：直接用明確的界線與範例約束
+        const promptText = `你是一位資安專家，負責審查圖片中是否有詐騙特徵。
+請嚴格遵守以下 4 條鐵律：
+1. 只能輸出純文字與 Emoji，【絕對禁止】使用 Markdown 語法（包含星號、井字號、粗體）。
+2. 只寫圖片中真正出現的資訊，沒有破綻就寫「未發現明顯特徵」，不准為了湊數而編造。
+3. 總字數限制在 150 字以內。
+4. 必須 100% 模仿下方的【輸出範例】格式。
 
 【輸出範例】
 ⚠️ ［風險評估］：高風險 - 一頁式網購詐騙
@@ -27,21 +29,20 @@ export async function onRequestPost(context) {
 🔸 誘導手法：出現「限時倒數」與「悲情行銷」字眼。
 🛡️ ［防護建議］：這是典型詐騙，請勿輸入信用卡資訊，疑問請撥 165。
 
-【待分析截圖內容】
-（請根據圖片內容，套用上方格式直接輸出結果）`;
+請分析使用者上傳的圖片，並直接輸出結果：`;
 
-        // 建議暫時維持使用 llama-3.2-11b-vision-instruct，因為它確定支援 image 參數
-        const model = '@cf/meta/llama-3.2-11b-vision-instruct';
+        // 換成專注於視覺與 OCR 的 Qwen2-VL 模型
+        const model = '@cf/qwen/qwen2-vl-7b-instruct';
 
         let response;
         try {
             response = await env.AI.run(model, {
                 prompt: promptText,
                 image: imageArray,
-                max_tokens: 1024 // 關鍵：解決截斷問題
+                max_tokens: 1024 // 保持這個參數以防止字數截斷
             });
         } catch (aiError) {
-            // 自動同意條款邏輯
+            // 自動同意條款的防呆機制
             if (aiError.message && aiError.message.includes('agree')) {
                 await env.AI.run(model, { prompt: 'agree' });
                 response = await env.AI.run(model, {
