@@ -678,8 +678,10 @@ const handleImageUpload = async (e) => {
         
         const data = await response.json();
         
+// 替換成這段 (把 data.details 加進去)：
         if (!response.ok || data.error) {
-            throw new Error(data.error || '伺服器發生錯誤');
+            // 如果後端有傳回 details，就優先顯示 details，這樣我們才知道 AI 到底抱怨什麼
+            throw new Error(data.details || data.error || '伺服器發生錯誤');
         }
         
         setAiReport(data.report);
