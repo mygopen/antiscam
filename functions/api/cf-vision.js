@@ -16,7 +16,7 @@ export async function onRequestPost(context) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const imageArray = Array.from(new Uint8Array(arrayBuffer));
 
-        // 3. 提示詞工程 (Prompt Engineering) - 強制指定回覆格式
+        // 3. 提示詞工程 (Prompt Engineering)
         const promptText = `你是一位台灣的專業防詐騙專家。請分析這張網頁或對話截圖，判斷是否為詐騙。
 請務必「嚴格」依照以下格式回覆，不要加入額外的寒暄用語，並根據截圖內容具體列出 3 點原因：
 
@@ -29,16 +29,41 @@ export async function onRequestPost(context) {
 
 建議您不要輸入任何個人或金融資訊，並提高警覺。若有疑慮，可直接聯絡官方客服確認活動真偽。也可以撥打165反詐騙專線尋求協助。`;
 
-        // 4. 呼叫 Cloudflare 的免費視覺模型
-        const response = await env.AI.run(
-            '@cf/meta/llama-3.2-11b-vision-instruct',
-            {
-                prompt: promptText,
-                image: imageArray
+        let response;
+        try {
+            // 4. 第一次嘗試正常呼叫視覺模型
+            response = await env.AI.run(
+                '@cf/meta/llama-3.2-11b-vision-instruct',
+                {
+                    prompt: promptText,
+                    image: imageArray
+                }
+            );
+        } catch (aiError) {
+            // 5. 【關鍵修正】攔截 5016 錯誤並自動同意條款
+            if (aiError.message && aiError.message.includes('agree')) {
+                
+                // 發送同意聲明 (此動作針對您的帳號終身只需執行這一次)
+                await env.AI.run(
+                    '@cf/meta/llama-3.2-11b-vision-instruct',
+                    { prompt: 'agree' }
+                );
+                
+                // 同意完成後，立刻無縫重試剛剛使用者的圖片分析請求
+                response = await env.AI.run(
+                    '@cf/meta/llama-3.2-11b-vision-instruct',
+                    {
+                        prompt: promptText,
+                        image: imageArray
+                    }
+                );
+            } else {
+                // 若是其他當機錯誤，則直接拋出
+                throw aiError;
             }
-        );
+        }
 
-        // 5. 回傳分析報告給前端
+        // 6. 回傳分析報告給前端
         return new Response(JSON.stringify({ report: response.response }), {
             headers: { 'Content-Type': 'application/json' }
         });
