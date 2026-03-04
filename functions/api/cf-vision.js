@@ -14,32 +14,31 @@ export async function onRequestPost(context) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const imageArray = Array.from(new Uint8Array(arrayBuffer));
 
-        // 針對 Qwen2-VL 優化的提示詞：直接用明確的界線與範例約束
-        const promptText = `你是一位資安專家，負責審查圖片中是否有詐騙特徵。
-請嚴格遵守以下 4 條鐵律：
-1. 只能輸出純文字與 Emoji，【絕對禁止】使用 Markdown 語法（包含星號、井字號、粗體）。
-2. 只寫圖片中真正出現的資訊，沒有破綻就寫「未發現明顯特徵」，不准為了湊數而編造。
+        // 終極版提示詞：強化防幻覺與嚴格格式要求
+        const promptText = `你是一位專業的資安分析專家，負責審查圖片中是否有詐騙特徵。
+請嚴格遵守以下規則：
+1. 只能輸出純文字與 Emoji，絕對不要使用任何 Markdown 標記。
+2. 【極度重要】只能根據圖片中「真正存在」的文字與畫面進行分析！如果看不出明顯破綻，請直接回答「未發現明顯特徵」，絕對不可以為了湊數而憑空捏造。
 3. 總字數限制在 150 字以內。
-4. 必須 100% 模仿下方的【輸出範例】格式。
 
-【輸出範例】
+【輸出範例】（請完全模仿此格式，不要加多餘的對話）
 ⚠️ ［風險評估］：高風險 - 一頁式網購詐騙
 🔍 ［具體破綻分析］：
 🔸 網域異常：使用「-tw.vip」等非官方網域。
 🔸 誘導手法：出現「限時倒數」與「悲情行銷」字眼。
 🛡️ ［防護建議］：這是典型詐騙，請勿輸入信用卡資訊，疑問請撥 165。
 
-請分析使用者上傳的圖片，並直接輸出結果：`;
+請直接輸出分析結果：`;
 
-        // 換成專注於視覺與 OCR 的 Qwen2-VL 模型
-        const model = '@cf/qwen/qwen2-vl-7b-instruct';
+        // 🚀 更換為截圖中最新的 Llama 4 多模態模型
+        const model = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
         let response;
         try {
             response = await env.AI.run(model, {
                 prompt: promptText,
                 image: imageArray,
-                max_tokens: 1024 // 保持這個參數以防止字數截斷
+                max_tokens: 1024 // 解決字數截斷的問題
             });
         } catch (aiError) {
             // 自動同意條款的防呆機制
@@ -55,7 +54,15 @@ export async function onRequestPost(context) {
             }
         }
 
-        return new Response(JSON.stringify({ report: response.response }), {
+        // 【雙重保險：程式碼後處理】
+        // 強制用正則表達式清除 Markdown 符號，確保前端排版乾淨
+        let cleanReport = response.response;
+        if (cleanReport) {
+            // 移除星號(*)、井字號(#)、底線(_)、反引號(`) 等常見 Markdown 標記
+            cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
+        }
+
+        return new Response(JSON.stringify({ report: cleanReport }), {
             headers: { 'Content-Type': 'application/json' }
         });
 
