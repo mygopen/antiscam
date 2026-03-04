@@ -683,8 +683,9 @@ const handleImageUpload = async (e) => {
         }
         
         setAiReport(data.report);
+// 改成這樣（印出 err.message）：
     } catch (err) {
-        setError('圖片分析失敗，請確認圖片格式或稍後再試。');
+        setError('圖片分析失敗：' + err.message);
     } finally {
         setIsImageAnalyzing(false);
     }
