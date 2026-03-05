@@ -27,7 +27,7 @@ export async function onRequestPost(context) {
         const imageUri = `data:${mimeType};base64,${base64String}`;
 
         // 優化版 Prompt：捨棄多餘的特徵庫與角色扮演，直接下達強硬指令以節省輸入神經元
-        const promptText = `請立刻分析這張圖片的詐騙或假訊息風險。禁止寒暄、禁用 Markdown (不可用星號粗體)。字數須在 150 字內，沒有破綻就不要湊數。
+        const promptText = `請立刻分析這張圖片的詐騙或價值不合理的風險。禁止寒暄、禁用 Markdown (不可用星號粗體)。字數須在 150 字內，沒有破綻就不要湊數。
         
 請嚴格依下列格式輸出：
 ⚠️ 風險評估：【高/中/低風險】 - 【一句話總結】
