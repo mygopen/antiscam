@@ -39,13 +39,17 @@ export async function onRequest(context) {
     while (redirectCount < MAX_REDIRECTS) {
       
       try {
-        // 發送請求 (使用 manual 模式，不讓系統自動跳轉，我們要自己控制)
+// 發送請求 (使用 manual 模式，不讓系統自動跳轉，我們要自己控制)
         const response = await fetch(currentUrl, {
           redirect: "manual", 
           signal: controller.signal, // 綁定計時器
           headers: {
-            // 偽裝成 iPhone，因為很多詐騙簡訊只對手機進行轉址，對電腦會顯示正常頁面
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+            // 👇 增強偽裝 1：假裝是台灣的 iPhone 用戶
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            // 👇 增強偽裝 2：假裝瀏覽器語系是台灣繁體中文
+            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            // 👇 增強偽裝 3：假裝接受一般的網頁格式，降低機器人特徵
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
           }
         });
 
