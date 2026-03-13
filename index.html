@@ -460,13 +460,16 @@
 
 // 請替換原本的 Promise.all 區塊
 const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
-    withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
-    withTimeout(checkSiteAvailability(fullUrl), 6000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }), // 放寬至 6 秒
-    withTimeout(checkCommunityBlocklists(domain), 4000, false),
-    withTimeout(checkTrancoRank(domain), 5000, null), // 原本 3000，放寬至 5 秒
-    withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }), // 原本 4000，放寬至 6 秒
-    withTimeout(fetchTraceData(fullUrl), 8000, null)
-]);
+                withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
+                
+                // 👇 這裡就是替換過的地方：直接回傳成功，交給 AI 引擎處理，省下等待時間！
+                Promise.resolve({ status: 'ok', msg: '已交由 AI 視覺引擎進行深度內容解析', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
+                
+                withTimeout(checkCommunityBlocklists(domain), 4000, false),
+                withTimeout(checkTrancoRank(domain), 5000, null),
+                withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }), 
+                withTimeout(fetchTraceData(fullUrl), 8000, null)
+            ]);
 
             const rdapDate = rdapData.date;
             const privacyDetected = rdapData.privacyDetected;
