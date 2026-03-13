@@ -513,10 +513,12 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
             let isKnownShortener = false;
             let redirectDetails = '未偵測到跨網域轉址';
             
-            // 👇 新增：用來儲存最終網域的惡意特徵
             let finalHyphenCount = 0; 
             let isFinalFakeGov = false; 
             let hasFinalSuspiciousTemp = false; 
+            let isFinalWhitelisted = false;
+            // 👇 新增：判斷最終網域是否為 .top / .xyz 等高危險後綴
+            let isFinalVeryHighRiskTLD = false; 
 
             if (traceData && traceData.finalUrl) siteStatusData.finalUrl = traceData.finalUrl;
             if (siteStatusData.finalUrl) {
@@ -531,10 +533,17 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
                         redirectDetails = `偵測到轉址至: ${finalDomain}`;
                         if (isKnownShortener) redirectDetails += ' (短網址服務)';
                         
-                        // 👇 擷取最終目標網域的特徵
                         finalHyphenCount = (finalDomain.match(/-/g) || []).length;
                         isFinalFakeGov = finalDomain.includes('gov') && !finalDomain.endsWith('.gov') && !finalDomain.endsWith('.gov.tw');
                         hasFinalSuspiciousTemp = finalDomain.includes('-tw') || finalDomain.includes('-com') || finalDomain.includes('-online');
+                        
+                        // 👇 檢查最終網域是否使用詐騙後綴
+                        isFinalVeryHighRiskTLD = highRiskSuffixes.some(s => finalDomain.endsWith(s));
+                        
+                        isFinalWhitelisted = currentWhitelist.some(w => {
+                            const lowerW = w.toLowerCase();
+                            return finalDomain === lowerW || finalDomain.endsWith('.' + lowerW);
+                        });
                     }
                 } catch(e) {}
             }
@@ -597,22 +606,29 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
 
 // 3. 其他特徵分析 (僅在非白名單時計算)
     if (!isWhitelisted) {
-        if (isVeryHighRiskTLD) riskScore += 75;
+        // 🚨 修改：只要來源「或」最終網域使用了 .top, .xyz 等高風險後綴，直接重罰
+        if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
         
-        // 👇 修改：如果發生轉址，針對「最終網域」進行連坐重罰
         if (isRedirected) {
             if (isKnownShortener) {
                 riskScore += 40;
+            } else if (!isFinalWhitelisted) {
+                // 私人跳板重罰
+                riskScore += 75; 
             } else {
-                riskScore += 25; // 基礎非預期的跨網域轉址扣分
+                riskScore += 15; 
             }
-            // 如果最終跳轉的網域有強烈詐騙特徵，直接加上致命分數
-            if (finalHyphenCount >= 2 || isFinalFakeGov || hasFinalSuspiciousTemp) {
+            
+            // 🚨 修改：如果最終跳轉的網域有強烈詐騙特徵（包含高風險後綴），直接加上致命分數
+            if (finalHyphenCount >= 2 || isFinalFakeGov || hasFinalSuspiciousTemp || isFinalVeryHighRiskTLD) {
                 riskScore += 80; 
             }
         }
         
-        // 👇 修改：聯集檢查，只要來源或最終網域有假 gov 或多個連字號，就嚴格扣分
+        if (traceData && traceData.isHighRisk) {
+            riskScore += 80;
+        }
+        
         if (isFakeGov || isFinalFakeGov) riskScore += 90;
         if (hasMultipleHyphens || finalHyphenCount >= 2) riskScore += 60;
         if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
@@ -646,6 +662,27 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
             let siteContentMsg = siteStatusData.msg;
             if (isWhitelisted && siteStatusData.status === 'ok') siteContentMsg = '受信賴的白名單網域';
 
+// 決定網域特徵卡片的 UI 文字
+        let domainAnalysisStatus = 'safe';
+        let domainAnalysisDetails = '網域命名結構無明顯異常';
+
+        if (isFakeGov || isFinalFakeGov) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '偵測到 "gov" 關鍵字但非政府網域，極高風險！';
+        } else if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '網域或轉址目標為高風險網址，請注意！';
+        } else if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '網域包含 "-tw", "-com" 等常見詐騙偽裝字樣，風險極高！';
+        } else if (hasMultipleHyphens || finalHyphenCount >= 2) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '網域(或轉址目標)包含多個連字號 (-)，極高機率為詐騙偽裝';
+        } else if (isFreeHosting) {
+            domainAnalysisStatus = 'warning';
+            domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
+        }
+            
             return {
                 domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed,
                 details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
@@ -653,13 +690,10 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
                     siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteContentMsg },
                     
 domainAnalysis: { 
-    status: (isFakeGov || hasMultipleHyphens || hasSuspiciousTempDomain || isFinalFakeGov || finalHyphenCount >= 2 || hasFinalSuspiciousTemp) ? 'danger' : (isFreeHosting ? 'warning' : 'safe'), 
-    label: '網域特徵分析', 
-    details: (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) ? '網域包含 "-tw", "-com" 或 "-online" 等常見於短期詐騙之偽裝字樣，風險極高！' : 
-             ((isFakeGov || isFinalFakeGov) ? '偵測到 "gov" 關鍵字但非政府網域，極高風險！' : 
-             ((hasMultipleHyphens || finalHyphenCount >= 2) ? '網域(或轉址目標)包含多個連字號 (-)，極高機率為詐騙偽裝' : 
-             (isFreeHosting ? `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站` : '網域命名結構無明顯異常'))) 
-},
+                        status: domainAnalysisStatus, 
+                        label: '網域特徵分析', 
+                        details: domainAnalysisDetails 
+                    },
                     
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     age: { status: (rdapDate && (new Date() - new Date(rdapDate)) < 120 * 86400000) ? 'danger' : 
