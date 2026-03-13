@@ -917,7 +917,7 @@ const handleScan = async (e) => {
                 // 3. 系統漏洞修補：AI 抓到品牌，但後端無法在資料庫驗證該品牌網域
                 // 👇 修正：順便將這裡的特定品牌名稱也移除，改為通用說法
                 scanData.checks.siteContent.status = 'info';
-                scanData.checks.siteContent.details = 'AI 偵測到特定品牌特徵，需進一步人工核實';
+                scanData.checks.siteContent.details = 'AI 偵測到此為特定品牌特徵';
             } else {
                 // 4. 沒有發現明顯偽裝的普通網站 (Unknown)
                 scanData.checks.siteContent.status = 'safe';
