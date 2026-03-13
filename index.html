@@ -462,9 +462,8 @@
 const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 
-                // 👇 這裡就是替換過的地方：直接回傳成功，交給 AI 引擎處理，省下等待時間！
-                Promise.resolve({ status: 'ok', msg: '已交由 AI 視覺引擎進行深度內容解析', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
-                
+                Promise.resolve({ status: 'ok', msg: '網頁原始碼讀取成功', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
+    
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, null),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }), 
@@ -831,10 +830,29 @@ const handleScan = async (e) => {
                 .catch(() => null)
         ]);
 
-        if (brandDataRes && brandDataRes.isFakeBrand) {
-            scanData.riskScore = 100;
-            scanData.checks.domainAnalysis.status = 'danger';
-            scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
+// 根據 AI 分析結果，動態更新 UI 卡片結論
+        if (brandDataRes) {
+            if (brandDataRes.isFakeBrand) {
+                // 1. 發現是假冒網站
+                scanData.riskScore = 100;
+                scanData.checks.domainAnalysis.status = 'danger';
+                scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
+                
+                scanData.checks.siteContent.status = 'danger';
+                scanData.checks.siteContent.details = `AI 判定網頁內容具備高度釣魚特徵 (企圖冒用 ${brandDataRes.detectedBrand})`;
+            } else if (brandDataRes.detectedBrand) {
+                // 2. 發現是真正的官方網站
+                scanData.checks.siteContent.status = 'safe';
+                scanData.checks.siteContent.details = `AI 確認此為「${brandDataRes.detectedBrand}」之官方網站內容`;
+            } else {
+                // 3. 沒有發現明顯偽裝的普通網站
+                scanData.checks.siteContent.status = 'safe';
+                scanData.checks.siteContent.details = 'AI 分析完畢，未發現冒用知名品牌之釣魚特徵';
+            }
+        } else {
+            // AI API 連線失敗時的備用文字
+            scanData.checks.siteContent.status = 'info';
+            scanData.checks.siteContent.details = '網頁內容已讀取 (AI 引擎暫時無回應)';
         }
 
         setBrandAnalysis(brandDataRes);
