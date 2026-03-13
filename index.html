@@ -458,14 +458,15 @@
             const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
             const isInputShortener = shorteners.some(s => domain.includes(s));
 
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
-                withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
-                withTimeout(checkSiteAvailability(fullUrl), 5000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }),
-                withTimeout(checkCommunityBlocklists(domain), 4000, false),
-                withTimeout(checkTrancoRank(domain), 3000, null),
-                withTimeout(fetchRDAPData(domain), 4000, { date: null, privacyDetected: false, registrarName: null }), 
-                withTimeout(fetchTraceData(fullUrl), 8000, null)
-            ]);
+// 請替換原本的 Promise.all 區塊
+const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
+    withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
+    withTimeout(checkSiteAvailability(fullUrl), 6000, { status: 'unknown', msg: '檢測逾時', hasIframe: false }), // 放寬至 6 秒
+    withTimeout(checkCommunityBlocklists(domain), 4000, false),
+    withTimeout(checkTrancoRank(domain), 5000, null), // 原本 3000，放寬至 5 秒
+    withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }), // 原本 4000，放寬至 6 秒
+    withTimeout(fetchTraceData(fullUrl), 8000, null)
+]);
 
             const rdapDate = rdapData.date;
             const privacyDetected = rdapData.privacyDetected;
@@ -559,22 +560,26 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
     }
 }
 
-    // 2. 網域年齡與信譽分析
+// 2. 網域年齡與信譽分析
     if (rdapData.date) {
         const regDate = new Date(rdapData.date);
         const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
         
         if (diffDays < 120) { 
-            riskScore += 85; // 120天內視為極新網域，給予極高風險分
+            riskScore += 85; 
         } else if (diffDays < 180) { 
-            riskScore += 50; // 半年內網域維持中高風險
+            riskScore += 50; 
         } else if (diffDays < 365) {
-            riskScore += 25; // 一年內網域給予輕微警示
+            riskScore += 25; 
         }
     } else {
         // 無法取得日期時，若非高流量網站，則視為潛在風險
-        if (!isHighTraffic && isVeryHighRiskTLD) riskScore += 40;
-        else if (!isHighTraffic) riskScore += 45; // 查無日期的 .com 等也從嚴判定
+        if (!isHighTraffic && isVeryHighRiskTLD) {
+            riskScore += 40;
+        } else if (!isHighTraffic) {
+            // 👇 將原本的 riskScore += 45 改為 15
+            riskScore += 15; // 降低因為 API 逾時查無日期的懲罰，避免誤判
+        }
     }
 
     // 3. 其他特徵分析 (僅在非白名單時計算)
