@@ -839,13 +839,20 @@ const handleScan = async (e) => {
                 scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
                 
                 scanData.checks.siteContent.status = 'danger';
+                // ⚠️ 假冒網站時保留具體名稱，明確警告使用者它想騙你以為它是誰
                 scanData.checks.siteContent.details = `AI 判定網頁內容具備高度釣魚特徵 (企圖冒用 ${brandDataRes.detectedBrand})`;
-            } else if (brandDataRes.detectedBrand) {
+            } else if (brandDataRes.detectedBrand && brandDataRes.officialDomain) {
                 // 2. 發現是真正的官方網站
+                // 👇 修正：統一顯示通用安全文案，避免名稱別名造成使用者困惑
                 scanData.checks.siteContent.status = 'safe';
-                scanData.checks.siteContent.details = `AI 確認此為「${brandDataRes.detectedBrand}」之官方網站內容`;
+                scanData.checks.siteContent.details = 'AI 確認此為正規之官方網站內容';
+            } else if (brandDataRes.detectedBrand && !brandDataRes.officialDomain) {
+                // 3. 系統漏洞修補：AI 抓到品牌，但後端無法在資料庫驗證該品牌網域
+                // 👇 修正：順便將這裡的特定品牌名稱也移除，改為通用說法
+                scanData.checks.siteContent.status = 'info';
+                scanData.checks.siteContent.details = 'AI 偵測到特定品牌特徵，需進一步人工核實';
             } else {
-                // 3. 沒有發現明顯偽裝的普通網站
+                // 4. 沒有發現明顯偽裝的普通網站 (Unknown)
                 scanData.checks.siteContent.status = 'safe';
                 scanData.checks.siteContent.details = 'AI 分析完畢，未發現冒用知名品牌之釣魚特徵';
             }
