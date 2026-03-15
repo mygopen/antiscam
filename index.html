@@ -62,6 +62,10 @@
             background-attachment: fixed;
             -webkit-tap-highlight-color: transparent;
         }
+        /* 當輸入框獲得焦點時，確保頁面底部有緩衝空間 */
+body.keyboard-open {
+    padding-bottom: 40vh; /* 預留 40% 螢幕高度給鍵盤 */
+}
         ::-webkit-scrollbar {
             width: 8px;
         }
@@ -997,7 +1001,23 @@ const handleScan = async (e) => {
         </div>
         
         {/* [修改] pr-14 改為 pr-16，預留更多空間給按鈕 */}
-        <input type="text" className="w-full pl-12 pr-16 py-4 md:py-4 bg-gray-50 border-transparent focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red focus:outline-none transition-all text-base md:text-lg placeholder-gray-400" placeholder="貼上網址或上傳可疑截圖" value={url} onChange={(e) => setUrl(e.target.value)} onFocus={(e) => e.target.select()} />
+        <input type="text" className="w-full pl-12 pr-16 py-4 md:py-4 bg-gray-50 border-transparent focus:bg-white rounded-xl focus:ring-2 focus:ring-brand-red focus:outline-none transition-all text-base md:text-lg placeholder-gray-400" placeholder="貼上網址或上傳可疑截圖" value={url} onChange={(e) => setUrl(e.target.value)}
+
+            // 👇 新增：點擊時自動向上捲動，並標記鍵盤已開啟
+    onFocus={(e) => {
+        document.body.classList.add('keyboard-open');
+        // 延遲一點執行捲動，等鍵盤彈出
+        setTimeout(() => {
+            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+    }}
+    
+    // 👇 新增：離開輸入框時移除補償空間
+    onBlur={() => {
+        document.body.classList.remove('keyboard-open');
+    }}
+            
+            onFocus={(e) => e.target.select()} />
         
         {/* [修改] pr-3 改為 pr-2.5，並為 label 加上明顯但不突兀的背景色、邊框與圓角 */}
         <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
