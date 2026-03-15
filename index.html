@@ -1109,26 +1109,12 @@ const handleScan = async (e) => {
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3></div><div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
                                                     <RiskMeter score={result.riskScore} />
 
-{/* ================= 新增：長輩友善核心結論區塊 ================= */}
-<div className={`mb-6 p-5 md:p-6 rounded-2xl border-2 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
-    <div className="flex items-center gap-3 mb-3">
-        {result.riskScore >= 70 ? <ShieldAlert size={32} className="text-red-600" /> : (result.riskScore >= 30 ? <AlertTriangle size={32} className="text-yellow-600" /> : <ShieldCheck size={32} className="text-green-600" />)}
-        <h3 className={`text-2xl md:text-3xl font-extrabold tracking-wide ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
-            {result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險')}
-        </h3>
-    </div>
-    <div className="ml-11 space-y-3 mt-4">
-        <p className="text-gray-800 text-lg font-bold flex items-start gap-2">
-            <span className="text-2xl flex-shrink-0">🤖</span> 
-            <span>{result.checks.siteContent.details}</span>
-        </p>
-        {result.checks.domainAnalysis.status !== 'safe' && (
-            <p className="text-gray-800 text-lg font-bold flex items-start gap-2">
-                <span className="text-2xl flex-shrink-0">🌐</span>
-                <span>{result.checks.domainAnalysis.details}</span>
-            </p>
-        )}
-    </div>
+{/* ================= 核心結論區塊 (精簡版) ================= */}
+<div className={`mb-6 p-5 md:p-8 rounded-2xl border-2 flex items-center gap-4 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
+    {result.riskScore >= 70 ? <ShieldAlert size={40} className="text-red-600 flex-shrink-0" /> : (result.riskScore >= 30 ? <AlertTriangle size={40} className="text-yellow-600 flex-shrink-0" /> : <ShieldCheck size={40} className="text-green-600 flex-shrink-0" />)}
+    <h3 className={`text-2xl md:text-3xl font-extrabold tracking-wide ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
+        {result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險')}
+    </h3>
 </div>
 
 {/* AI 品牌防偽比對結果 (保持在主要警告下方，增強威嚇力) */}
