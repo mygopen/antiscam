@@ -1142,7 +1142,6 @@ const handleScan = async (e) => {
     <div className="bg-white p-1 rounded-full flex items-center justify-center"><GoogleIcon size={18} /></div>用 Google AI 再檢查看看
 </a>
                                     
-{result.traceChain && result.traceChain.length > 1 && <TraceTimeline chain={result.traceChain} />}
 {result.blocklistListed && (<div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-4"><div className="flex gap-3"><ShieldAlert className="text-red-600 flex-shrink-0" size={24} /><div><p className="font-bold text-red-800">警告：已列入詐騙黑名單</p><p className="text-sm text-red-700 mt-1">此網址存在於開源反詐騙資料庫中，極高機率為惡意網站。</p></div></div></div>)}
 {result.checks.redirect.status !== 'safe' && (<div className="mb-4 p-4 rounded-xl bg-orange-50 border border-orange-200 flex items-start gap-3"><AlertTriangle className="text-orange-600 flex-shrink-0" size={24} /><div><h3 className="font-bold text-orange-800 text-base">⚠️ 發現轉址或異常</h3><p className="text-sm text-orange-700 mt-1">{result.checks.redirect.details}<br/>跨網域轉址常見於隱藏真實目的地的惡意連結。</p><a href={`https://wheregoes.com/trace/${result.scannedUrl}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-orange-700 hover:text-orange-900 underline"><ExternalLink size={12} />外部工具：檢查詳細轉址路徑 (WhereGoes)</a></div></div>)}
 
@@ -1164,6 +1163,12 @@ const handleScan = async (e) => {
 
 {/* ================= 隱藏的技術卡片區塊 ================= */}
 {showDetails && (
+
+    <div className="animate-fade-in mb-8">
+        
+        {/* 把跳轉紀錄貼到這裡，讓它在專家模式一展開時就顯示在最上方*/}
+        {result.traceChain && result.traceChain.length > 1 && <TraceTimeline chain={result.traceChain} />}
+    
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-fade-in bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
         {Object.values(result.checks).map((check, idx) => {
             if (check.label === '轉址/短網址' && check.status === 'safe') return null;
