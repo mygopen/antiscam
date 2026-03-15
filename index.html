@@ -1089,8 +1089,6 @@ const handleScan = async (e) => {
                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3></div><div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
                                                     <RiskMeter score={result.riskScore} />
 
-<RiskMeter score={result.riskScore} />
-
 {/* ================= 新增：長輩友善核心結論區塊 ================= */}
 <div className={`mb-6 p-5 md:p-6 rounded-2xl border-2 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
     <div className="flex items-center gap-3 mb-3">
