@@ -14,7 +14,10 @@ async function getOfficialDomain(brand) {
         "台灣積體電路製造": ["tsmc.com"],
         "zingala": ["zingala.com.tw", "zingala.cc"],
         "銀角零卡": ["zingala.com.tw", "zingala.cc"],
-        "中租": ["chailease.com.tw", "zingala.com.tw", "zingala.cc"]
+        "中租": ["chailease.com.tw", "zingala.com.tw", "zingala.cc"],
+        // 👇 新增：微軟與其官方短網址、登入網域
+        "microsoft": ["microsoft.com", "aka.ms", "live.com", "office.com"],
+        "微軟": ["microsoft.com", "aka.ms", "live.com", "office.com"]
     };
 
     // 將品牌名稱轉換為小寫來比對，增加容錯率
