@@ -1,23 +1,25 @@
 // 檔案路徑：functions/api/check-fake-brand.js
 
 async function getOfficialDomain(brand) {
-    // 1. 本地白名單：改為「陣列」格式，支援一個品牌擁有多個合法網域
+// 1. 本地白名單：改為「陣列」格式，支援一個品牌擁有多個合法網域
     const localBrandMap = {
         "台灣電力公司": ["taipower.com.tw"], "台電": ["taipower.com.tw"],
         "台灣自來水公司": ["water.gov.tw"], "遠通電收": ["fetc.net.tw"],
-        "中華郵政": ["post.gov.tw"], "中國信託": ["ctbcbank.com"],
+        "中華郵政": ["post.gov.tw"], 
+        "中國信託": ["ctbcbank.com"], "ctbc bank": ["ctbcbank.com"], "ctbc": ["ctbcbank.com"],
         "國泰世華": ["cathaybk.com.tw"], "玉山銀行": ["esunbank.com.tw"],
         "台新銀行": ["taishinbank.com.tw"], "富邦銀行": ["fubon.com"],
         "台北富邦銀行": ["taipeifubon.com.tw"], "財政部": ["mof.gov.tw"],
         "衛生福利部": ["mohw.gov.tw"], "台灣大哥大": ["taiwanmobile.com"],
         "中華電信": ["cht.com.tw"], "遠傳電信": ["fetnet.net"],
         "台灣積體電路製造": ["tsmc.com"],
-        "zingala": ["zingala.com.tw", "zingala.cc"],
-        "銀角零卡": ["zingala.com.tw", "zingala.cc"],
-        "中租": ["chailease.com.tw", "zingala.com.tw", "zingala.cc"],
-        // 👇 新增：微軟與其官方短網址、登入網域
+        "zingala": ["zingala.com.tw", "zingala.cc", "zingala.com"],
+        "銀角零卡": ["zingala.com.tw", "zingala.cc", "zingala.com"],
+        "中租": ["chailease.com.tw", "zingala.com.tw", "zingala.cc", "zingala.com"],
         "microsoft": ["microsoft.com", "aka.ms", "live.com", "office.com"],
-        "微軟": ["microsoft.com", "aka.ms", "live.com", "office.com"]
+        "微軟": ["microsoft.com", "aka.ms", "live.com", "office.com"],
+        "7-zip": ["7-zip.org"],
+        "7zip": ["7-zip.org"]
     };
 
     // 將品牌名稱轉換為小寫來比對，增加容錯率
