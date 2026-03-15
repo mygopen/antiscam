@@ -455,8 +455,9 @@
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
             
-            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn'];
+            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc', 'aka.ms'];
             const isInputShortener = shorteners.some(s => domain.includes(s));
+        
 
 // 請替換原本的 Promise.all 區塊
 const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
@@ -479,7 +480,7 @@ const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, t
             
             // 修正：只有在白名單內或高流量且不是免費空間時才視為高流量網站
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
-            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com'];
+            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com', 'aka.ms'];
 
             let trafficStatus = 'warning';
             let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
