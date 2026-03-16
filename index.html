@@ -645,6 +645,11 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
                 riskScore += 80; 
             }
         }
+
+        // 👇👇 新增這段：如果是已知跳板，帶有長度，卻刻意阻擋追蹤 (反掃描機制)
+        else if (isInputShortener && fullUrl.length > targetDomain.length + 12) {
+            riskScore = 100;
+        }
         
         if (traceData && traceData.isHighRisk) {
             riskScore += 80;
@@ -692,6 +697,13 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '🚨 偵測到「寄生網域」詐騙：利用合法社群連結，秘密跳轉至危險網站！';
         }
+
+       // 新增這段：隱匿型跳板警告
+        else if (!isRedirected && isInputShortener && fullUrl.length > targetDomain.length + 12) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '🚨 隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地，極度可疑！';
+        }
+            
         else if (isFakeGov || isFinalFakeGov) {    // 👈 這裡加上 else
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '偵測到 "gov" 關鍵字但非政府網域，極高風險！';
