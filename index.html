@@ -1225,8 +1225,6 @@ const handleScan = async (e) => {
     <div className="bg-white p-1 rounded-full flex items-center justify-center"><GoogleIcon size={18} /></div>用 Google AI 再檢查看看
 </a>
                                     
-{result.blocklistListed && (<div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-4"><div className="flex gap-3"><ShieldAlert className="text-red-600 flex-shrink-0" size={24} /><div><p className="font-bold text-red-800">警告：已列入詐騙黑名單</p><p className="text-sm text-red-700 mt-1">此網址存在於開源反詐騙資料庫中，極高機率為惡意網站。</p></div></div></div>)}
-
 {/* ================= 新增：折疊面板 (Accordion) 按鈕 ================= */}
 <div className="mt-8 mb-4">
     <button 
@@ -1250,7 +1248,21 @@ const handleScan = async (e) => {
         
         {/* 把跳轉紀錄貼到這裡，讓它在專家模式一展開時就顯示在最上方*/}
         {result.traceChain && result.traceChain.length > 1 && <TraceTimeline chain={result.traceChain} />}
-    
+
+{/* 👇👇👇 貼到這裡！(我順便幫你微調了圓角與陰影，讓它在面板內更好看) 👇👇👇 */}
+        {result.blocklistListed && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl mb-6 shadow-sm">
+                <div className="flex gap-3">
+                    <ShieldAlert className="text-red-600 flex-shrink-0" size={24} />
+                    <div>
+                        <p className="font-bold text-red-800">警告：已列入詐騙黑名單</p>
+                        <p className="text-sm text-red-700 mt-1">此網址存在於反詐騙資料庫或自訂黑名單中，極高機率為惡意網站。</p>
+                    </div>
+                </div>
+            </div>
+        )}
+        {/* 👆👆👆 貼到這裡！👆👆👆 */}
+        
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-fade-in bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
         {Object.values(result.checks).map((check, idx) => {
             if (check.label === '轉址/短網址' && check.status === 'safe') return null;
