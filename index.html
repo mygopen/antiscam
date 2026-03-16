@@ -1193,33 +1193,6 @@ const handleScan = async (e) => {
         {result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險')}
     </h3>
 </div>
-
-{/* AI 品牌防偽比對結果 (保持在主要警告下方，增強威嚇力) */}
-{brandAnalysis && brandAnalysis.isFakeBrand && (
-    <div className="bg-red-50 border-l-4 border-red-600 p-5 rounded-r-xl mb-6 shadow-sm animate-pulse">
-        <div className="flex gap-4">
-            <div className="bg-red-100 p-2 rounded-full h-fit flex-shrink-0">
-                <ShieldAlert className="text-red-600" size={28} />
-            </div>
-            <div>
-                <h3 className="text-xl font-extrabold text-red-800 mb-1">🚨 AI 深度檢測：這是一個假冒網站！</h3>
-                <p className="text-red-700 text-base mb-2">
-                    我們發現這個網頁企圖偽裝成「<strong className="text-red-900 bg-red-200 px-1 rounded">{brandAnalysis.detectedBrand}</strong>」。
-                </p>
-                <div className="bg-white/60 p-3 rounded-lg border border-red-200 text-sm">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-gray-600">真正的官方網址：</span>
-                        <span className="font-mono text-green-700 font-bold">{brandAnalysis.officialDomain}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-gray-600">你輸入的可疑網址：</span>
-                        <span className="font-mono text-red-600 font-bold line-through">{brandAnalysis.inputDomain}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-)}
                                     
 <a href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} target="_blank" rel="noopener noreferrer" className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-md bg-[#4285F4] hover:bg-[#3367D6] text-white">
     <div className="bg-white p-1 rounded-full flex items-center justify-center"><GoogleIcon size={18} /></div>用 Google AI 再檢查看看
@@ -1262,6 +1235,25 @@ const handleScan = async (e) => {
             </div>
         )}
         {/* 👆👆👆 貼到這裡！👆👆👆 */}
+
+
+        {/* 👇👇👇 將剛剛剪下的 AI 警告區塊，貼到這裡！ 👇👇👇 */}
+        {brandAnalysis && brandAnalysis.isFakeBrand && (
+            <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded-xl mb-6 shadow-sm">
+                <div className="flex gap-3">
+                    <ShieldAlert className="text-red-600 flex-shrink-0" size={24} />
+                    <div>
+                        <h3 className="font-bold text-red-800 mb-1">🚨 AI 深度檢測：假冒網站</h3>
+                        <p className="text-sm text-red-700 mb-2">此網頁企圖偽裝成「<strong className="text-red-900 bg-red-200 px-1 rounded">{brandAnalysis.detectedBrand}</strong>」。</p>
+                        <div className="bg-white/60 p-2 rounded border border-red-200 text-xs">
+                            <div>官方網址：<span className="text-green-700 font-bold">{brandAnalysis.officialDomain}</span></div>
+                            <div>輸入網址：<span className="text-red-600 font-bold line-through">{brandAnalysis.inputDomain}</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        {/* 👆👆👆 貼到這裡！ (稍微幫你調整了樣式讓它塞在專家面板裡更順眼) 👆👆👆 */}
         
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-fade-in bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
         {Object.values(result.checks).map((check, idx) => {
