@@ -1,0 +1,9 @@
+{
+  "description": "麥擱騙自訂專屬黑名單 - 用於攔截漏網之魚的詐騙網址",
+  "version": "1.0.0",
+  "updatedAt": "2026-03-16",
+  "domains": [
+    "farted.net",
+    "another-scam-example.com"
+  ]
+}
