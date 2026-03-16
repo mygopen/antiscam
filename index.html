@@ -842,6 +842,15 @@ const handleImageUpload = async (e) => {
         }
         
         setAiReport(data.report);
+
+// 👇 新增：GA4 AI 截圖分析行為追蹤
+        if (typeof gtag === 'function') {
+            gtag('event', 'image_analyze', {
+                'status': 'success',
+                'file_size': file.size
+            });
+        }
+        
 // 改成這樣（印出 err.message）：
     } catch (err) {
         setError('圖片分析失敗：' + err.message);
@@ -950,6 +959,16 @@ const handleScan = async (e) => {
 
         setBrandAnalysis(brandDataRes);
         setResult(scanData);
+
+        // 👇 新增：GA4 網址檢測行為追蹤
+        if (typeof gtag === 'function') {
+            gtag('event', 'url_check', {
+                'target_domain': urlObj.hostname,      // 民眾查的網域
+                'risk_score': scanData.riskScore,       // 系統判定的風險分數
+                'is_blocked': scanData.blocklistListed ? 'yes' : 'no', // 是否在黑名單內
+                'detected_brand': brandDataRes?.detectedBrand || 'none' // AI 偵測到的品牌
+            });
+        }
 
     } catch (err) { 
         setError('網址格式錯誤'); 
