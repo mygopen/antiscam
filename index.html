@@ -626,7 +626,13 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         
         if (isRedirected) {
             if (isKnownShortener) {
-                riskScore += 40;
+                // 👇 改善點 1：合法社群跳板若導向「非白名單」，直接給 100 分死刑
+                if (!isFinalWhitelisted) {
+                    riskScore = 100;
+                    redirectDetails = `⚠️ 惡意社群跳板導向: ${finalDomain}`;
+                } else {
+                    riskScore += 15;
+                }
             } else if (!isFinalWhitelisted) {
                 // 私人跳板重罰
                 riskScore += 75; 
@@ -681,6 +687,12 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
         let domainAnalysisStatus = 'safe';
         let domainAnalysisDetails = '網域命名結構無明顯異常';
 
+// 改善點 2：新增寄生跳板的專屬警告文字 (放在最上面優先判斷)
+        if (isRedirected && isKnownShortener && !isFinalWhitelisted) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '🚨 偵測到「寄生網域」詐騙：利用合法社群連結，秘密跳轉至危險網站！';
+        }
+            
         if (isFakeGov || isFinalFakeGov) {
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '偵測到 "gov" 關鍵字但非政府網域，極高風險！';
@@ -932,10 +944,14 @@ const handleScan = async (e) => {
                 scanData.riskScore = 100;
                 scanData.checks.domainAnalysis.status = 'danger';
                 scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
-                
                 scanData.checks.siteContent.status = 'danger';
                 // ⚠️ 假冒網站時保留具體名稱，明確警告使用者它想騙你以為它是誰
                 scanData.checks.siteContent.details = `AI 判定網頁內容具備高度釣魚特徵 (企圖冒用 ${brandDataRes.detectedBrand})`;
+                // 👇 改善點 3：如果系統已抓到寄生跳板，強制覆蓋 AI 的安全判定
+            else if (scanData.riskScore === 100 && scanData.checks.domainAnalysis.details.includes('寄生網域')) {
+                scanData.checks.siteContent.status = 'danger';
+                scanData.checks.siteContent.details = '系統已鎖定其惡意轉址行為 (詐騙集團試圖規避 AI 掃描)';
+            }
             } else if (brandDataRes.detectedBrand && brandDataRes.officialDomain) {
                 // 2. 發現是真正的官方網站
                 // 👇 修正：統一顯示通用安全文案，避免名稱別名造成使用者困惑
