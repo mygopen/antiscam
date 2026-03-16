@@ -961,10 +961,11 @@ const handleScan = async (e) => {
                 scanData.checks.siteContent.details = `AI 判定網頁內容具備高度釣魚特徵 (企圖冒用 ${brandDataRes.detectedBrand})`;
             } 
             // 👇 改善點 3：如果系統已抓到寄生跳板，強制覆蓋 AI 的安全判定
-            else if (scanData.riskScore === 100 && scanData.checks.domainAnalysis.details.includes('寄生網域')) {
+            // 👇 修改這行：將 .includes('寄生網域') 改為 .includes('跳板')，這樣兩種情況都能覆蓋
+            else if (scanData.riskScore === 100 && scanData.checks.domainAnalysis.details.includes('跳板')) {
                 scanData.checks.siteContent.status = 'danger';
-                scanData.checks.siteContent.details = '系統已鎖定其惡意轉址行為 (詐騙集團試圖規避 AI 掃描)';
-            } 
+                scanData.checks.siteContent.details = '系統已鎖定其惡意轉址或隱匿行為 (詐騙集團試圖規避掃描)';
+            }
             else if (brandDataRes.detectedBrand && brandDataRes.officialDomain) {
                 // 2. 發現是真正的官方網站
                 // 👇 修正：統一顯示通用安全文案，避免名稱別名造成使用者困惑
