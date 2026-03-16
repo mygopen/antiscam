@@ -59,30 +59,53 @@ export async function onRequest(context) {
           status: response.status
         });
 
-        // 檢查狀態碼是否為轉址 (301, 302, 303, 307, 308)
+        // 檢查狀態碼是否為 HTTP 標準轉址
         if (response.status >= 300 && response.status < 400) {
           const location = response.headers.get("Location");
-          
-          // 如果是空的 Location，視為終止
           if (!location) break;
-
-          // 解析下一層網址 (處理相對路徑，如 "/login.php")
           let nextUrl = new URL(location, currentUrl).href;
 
-          // 保險 3: 迴圈偵測 (Loop Detection)
           if (seenUrls.has(nextUrl)) {
             isHighRisk = true;
             riskReason = "偵測到惡意迴圈 (Loop)，網站試圖導向重複路徑，企圖癱瘓檢測。";
-            break; // 強制跳出
+            break; 
           }
-
-          // 準備進入下一層
           seenUrls.add(nextUrl);
           currentUrl = nextUrl;
           redirectCount++;
+          
+        } else if (response.status === 200) {
+          // 👇 新增：破解前端轉址 (Meta Refresh & JS Redirect)
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("text/html")) {
+              const text = await response.text();
+              // 抓取 <meta http-equiv="refresh" content="0;url=...">
+              const metaMatch = text.match(/content=["']?\d+;\s*url=([^"'>\s]+)["']?/i);
+              // 抓取 window.location = "..."
+              const jsMatch = text.match(/location(?:\.href|\.replace|\.assign)?\s*=\s*["']([^"'>]+)["']/i);
+              
+              let nextUrlStr = null;
+              if (metaMatch) nextUrlStr = metaMatch[1];
+              else if (jsMatch) nextUrlStr = jsMatch[1];
 
+              if (nextUrlStr) {
+                  nextUrlStr = nextUrlStr.replace(/&amp;/g, '&'); // 解碼 HTML 實體
+                  let nextUrl = new URL(nextUrlStr, currentUrl).href;
+                  
+                  if (seenUrls.has(nextUrl)) {
+                      isHighRisk = true;
+                      riskReason = "偵測到前端惡意迴圈 (JS Loop)。";
+                      break;
+                  }
+                  seenUrls.add(nextUrl);
+                  currentUrl = nextUrl;
+                  redirectCount++;
+                  continue; // 繼續剝下一層洋蔥
+              }
+          }
+          // 如果 200 OK 裡面沒有發現前端轉址，才真正結束
+          break; 
         } else {
-          // 不是轉址 (例如 200 OK, 404, 403)，代表到達終點
           break; 
         }
 
