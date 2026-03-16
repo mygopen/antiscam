@@ -688,7 +688,6 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
         let domainAnalysisDetails = '網域命名結構無明顯異常';
 
 // 改善點 2：新增寄生跳板的專屬警告文字 (放在最上面優先判斷)
-// 改善點 2：新增寄生跳板的專屬警告文字 (放在最上面優先判斷)
         if (isRedirected && isKnownShortener && !isFinalWhitelisted) {
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '🚨 偵測到「寄生網域」詐騙：利用合法社群連結，秘密跳轉至危險網站！';
