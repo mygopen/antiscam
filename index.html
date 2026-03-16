@@ -357,7 +357,16 @@ body.keyboard-open {
             } catch (e) { return null; }
         };
 
-        const checkCommunityBlocklists = async (domain) => {
+// 👇 接收 customBlacklist 參數
+        const checkCommunityBlocklists = async (domain, customBlacklist = []) => {
+            const lowerDomain = domain.toLowerCase();
+
+            // 👇 攔截點：如果在外部載入的自訂黑名單內，直接判死刑 (回傳 true)
+            // 這裡的 lowerDomain.endsWith 就能完美捕捉 sdwd.farted.net 這種子網域！
+            if (customBlacklist.some(badDomain => lowerDomain === badDomain || lowerDomain.endsWith('.' + badDomain))) {
+                return true;
+            }
+
             try {
                 const sources = [
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt',
@@ -440,7 +449,7 @@ body.keyboard-open {
         );
 
         // --- Modified simulateScan with refined whitelist and risk scoring ---
-        const simulateScan = async (targetDomain, fullUrl, currentWhitelist = []) => {
+        const simulateScan = async (targetDomain, fullUrl, currentWhitelist = [], currentBlacklist = []) => {
             let resolvedIp = null;
             try {
                 const dnsRes = await fetch(`https://dns.google/resolve?name=${targetDomain}&type=A`);
@@ -479,7 +488,7 @@ const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, t
                 
                 Promise.resolve({ status: 'ok', msg: '網頁原始碼讀取成功', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
     
-                withTimeout(checkCommunityBlocklists(domain), 4000, false),
+                withTimeout(checkCommunityBlocklists(domain, currentBlacklist), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, null),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }), 
                 withTimeout(fetchTraceData(fullUrl), 8000, null)
@@ -889,7 +898,10 @@ const handleImageUpload = async (e) => {
             const [result, setResult] = useState(null);
             const [error, setError] = useState('');
             const [copyStatus, setCopyStatus] = useState('idle');
+            
             const [externalWhitelist, setExternalWhitelist] = useState([]);
+            // 👇 新增黑名單的 State
+            const [externalBlacklist, setExternalBlacklist] = useState([]); 
             const resultRef = useRef(null);
 
             useEffect(() => {
@@ -897,6 +909,12 @@ const handleImageUpload = async (e) => {
                     .then(res => res.ok ? res.json() : { domains: [] })
                     .then(data => setExternalWhitelist(data.domains || []))
                     .catch(() => setExternalWhitelist([]));
+                    
+                // 👇 新增讀取 blacklist.json 的邏輯
+                fetch('./blacklist.json')
+                    .then(res => res.ok ? res.json() : { domains: [] })
+                    .then(data => setExternalBlacklist(data.domains || []))
+                    .catch(() => setExternalBlacklist([]));
             }, []);
 
 const handleScan = async (e) => {
@@ -942,7 +960,8 @@ const handleScan = async (e) => {
         
         // 平行處理
         const [scanData, brandDataRes] = await Promise.all([
-            simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
+            // 👇 把 externalBlacklist 傳進去
+            simulateScan(urlObj.hostname, urlObj.href, externalWhitelist, externalBlacklist),
             fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`)
                 .then(res => res.json())
                 .catch(() => null)
