@@ -92,11 +92,12 @@ export async function onRequest(context) {
         }
 
         // 2. AI Agent 1：萃取品牌名稱 (利用 Workers AI)
-        // 🚨 優化提示詞：移除具體品牌暗示，給予更嚴格的 Unknown 判定標準
-        const prompt = `你是一位資安分析師。請閱讀以下的網頁內容，判斷這個網頁企圖代表或偽裝成哪一家知名的「台灣公司、品牌或政府機關」？
-        - 如果能明確看出是特定知名品牌（如某銀行、某政府單位、某電信），請直接輸出該「品牌名稱」。
-        - 如果是綜合性網站、論壇、無法辨識內容，或是你無法 100% 確定，請嚴格回答「Unknown」。
-        請只輸出品牌名稱，不要任何標點符號、不要任何解釋。
+        // 🚨 優化提示詞：嚴格禁止胡亂猜測，並新增「一般購物詐騙」的判斷
+        const prompt = `你是一位嚴格的資安分析師。請閱讀以下的網頁內容，進行判斷：
+        1. 如果網頁「明確」冒用特定知名品牌（如：中國信託、台灣大哥大、中華郵政等），請直接輸出該「品牌名稱」。
+        2. 如果這是一般的「購物網站」、「一頁式廣告」，且沒有明確聲稱自己是知名大廠，或是你無法 100% 確定，請嚴格輸出「Unknown」。絕對禁止胡亂猜測銀行或品牌。
+        3. 如果內容包含強烈的通用詐騙特徵（如：保證獲利、高薪免經驗代工、要求加 LINE 領飆股等），請輸出「Generic_Scam」。
+        請只輸出單一詞彙（品牌名稱、Generic_Scam 或 Unknown），絕對不要有任何標點符號或解釋。
         
         網頁內容：
         ${markdownText}`;
@@ -113,6 +114,17 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({ isFakeBrand: false, message: "未偵測到明顯品牌偽裝" }));
         }
 
+        // 👇 如果 AI 發現是一般購物詐騙，就不會回傳 isFakeBrand: true
+        if (detectedBrand === "Generic_Scam") {
+            return new Response(JSON.stringify({
+                detectedBrand: "Generic_Scam",
+                isFakeBrand: false,
+                isGenericScam: true,
+                warningMessage: "嚴重警告：此網站內容包含強烈的通用型詐騙特徵！"
+            }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+        }
+
+        
         // 3. AI Agent 2：取得官方網域並比對
         const officialDomains = await getOfficialDomain(detectedBrand);
         
