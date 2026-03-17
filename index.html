@@ -479,7 +479,8 @@ body.keyboard-open {
             const isSuspiciousTLD = domain.endsWith('.info');
             
             const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc', 'aka.ms', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com', 'l.messenger.com', 'line.me'];
-            const isInputShortener = shorteners.some(s => domain.includes(s));
+            // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
+            const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
         
 
 // 請替換原本的 Promise.all 區塊
@@ -551,9 +552,10 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
                     finalDomain = finalUrlObj.hostname.toLowerCase();
                     const cleanDomain = domain.replace(/^www\./, '');
                     const cleanFinalDomain = finalDomain.replace(/^www\./, '');
-                    if (cleanDomain !== cleanFinalDomain) {
+                        if (cleanDomain !== cleanFinalDomain) {
                         isRedirected = true;
-                        isKnownShortener = shorteners.some(s => cleanDomain.includes(s));
+                        // 修正：同樣改為嚴格的網域比對
+                        isKnownShortener = shorteners.some(s => cleanDomain === s || cleanDomain.endsWith('.' + s));
                         redirectDetails = `偵測到轉址至: ${finalDomain}`;
                         if (isKnownShortener) redirectDetails += ' (短網址服務)';
                         
