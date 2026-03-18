@@ -556,9 +556,16 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
                         isRedirected = true;
                         // 修正：同樣改為嚴格的網域比對
                         isKnownShortener = shorteners.some(s => cleanDomain === s || cleanDomain.endsWith('.' + s));
+
+                        // 👇 新增：判斷是否為同一個主網域的子網域互轉 (如 brand.com -> shop.brand.com)
+                        const isSameRoot = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
+                        
                         redirectDetails = `偵測到轉址至: ${finalDomain}`;
                         if (isKnownShortener) redirectDetails += ' (短網址服務)';
+                        else if (isSameRoot) redirectDetails += ' (內部子網域跳轉)'; // 標記為內部跳轉
                         
+                        finalHyphenCount = (finalDomain.match(/-/g) || []).length;
+                            
                         finalHyphenCount = (finalDomain.match(/-/g) || []).length;
                         isFinalFakeGov = finalDomain.includes('gov') && !finalDomain.endsWith('.gov') && !finalDomain.endsWith('.gov.tw');
                         hasFinalSuspiciousTemp = finalDomain.includes('-tw') || finalDomain.includes('-com') || finalDomain.includes('-online');
@@ -636,22 +643,28 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
         
         if (isRedirected) {
+            // 再次確認是否為內部同網域跳轉
+            const isSameRoot = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
+            
             if (isKnownShortener) {
-                // 👇 改善點 1：合法社群跳板若導向「非白名單」，直接給 100 分死刑
+                // 合法社群跳板若導向「非白名單」，直接給 100 分死刑
                 if (!isFinalWhitelisted) {
                     riskScore = 100;
                     redirectDetails = `⚠️ 惡意社群跳板導向: ${finalDomain}`;
                 } else {
                     riskScore += 15;
                 }
+            } else if (isSameRoot) {
+                // 👇 修正 1：如果是同網域的子站跳轉，完全不扣分！
+                riskScore += 0;
             } else if (!isFinalWhitelisted) {
-                // 私人跳板重罰
-                riskScore += 75; 
-            } else {
+                // 👇 修正 2：一般跨網域轉址降為 15 分 (原本 75 分會誤殺所有電商平台跳轉)
                 riskScore += 15; 
+            } else {
+                riskScore += 0; 
             }
             
-            // 🚨 修改：如果最終跳轉的網域有強烈詐騙特徵（包含高風險後綴），直接加上致命分數
+            // 🚨 這裡維持不變：如果最終跳轉的網域有強烈詐騙特徵，依然給予致命分數
             if (finalHyphenCount >= 2 || isFinalFakeGov || hasFinalSuspiciousTemp || isFinalVeryHighRiskTLD) {
                 riskScore += 80; 
             }
