@@ -125,12 +125,12 @@ export async function onRequest(context) {
     clearTimeout(timeoutId);
 
     // --- 最終風險智慧判定 ---
-    if (!isHighRisk) { 
+if (!isHighRisk) { 
         // 如果上面沒抓到迴圈或超時，這裡進行次數判斷
         if (redirectCount >= MAX_REDIRECTS) {
             isHighRisk = true;
             riskReason = `轉址路徑過深 (超過 ${MAX_REDIRECTS} 層)，強制中止。正常網站極少轉址這麼多次。`;
-        } else if (redirectCount >= 3) {
+        } else if (redirectCount >= 5) { // 👈 修正：將 3 改為 5，容忍正常電商的多次跳轉
             isHighRisk = true;
             riskReason = `偵測到多重轉址 (${redirectCount} 次)，常見於詐騙連結規避掃描。`;
         } else {
