@@ -679,7 +679,8 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         }
         
         if (isFakeGov || isFinalFakeGov) riskScore += 90;
-        if (hasMultipleHyphens || finalHyphenCount >= 2) riskScore += 60;
+        // 👇 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分，避免誤殺正常品牌
+        if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
         if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
         if (hasSuspiciousParams) riskScore += 40;
         if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
@@ -736,9 +737,10 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
         } else if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) {
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '網域包含 "-tw", "-com" 等常見詐騙偽裝字樣，風險極高！';
-        } else if (hasMultipleHyphens || finalHyphenCount >= 2) {
-            domainAnalysisStatus = 'danger';
-            domainAnalysisDetails = '網域(或轉址目標)包含多個連字號 (-)，極高機率為詐騙偽裝';
+        // 👇 修正：改為警告等級，且數量改為 >= 3
+        } else if (hyphenCount >= 3 || finalHyphenCount >= 3) {
+            domainAnalysisStatus = 'warning';
+            domainAnalysisDetails = '網域(或轉址目標)包含多個連字號 (-)，請稍加留意';
         } else if (isFreeHosting) {
             domainAnalysisStatus = 'warning';
             domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
