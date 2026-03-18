@@ -478,7 +478,7 @@ body.keyboard-open {
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
             
-            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc', 'aka.ms', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com', 'l.messenger.com', 'line.me'];
+            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc', 'aka.ms', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com', 'l.messenger.com'];
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
         
