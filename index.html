@@ -988,7 +988,7 @@ const handleScan = async (e) => {
         ]);
 
 // 根據 AI 分析結果，動態更新 UI 卡片結論
-// 👇 補上漏掉的這段：攔截通用型詐騙 (如不明購物網)，只給紅燈，不顯示假冒大廠區塊
+        if (brandDataRes) {   
             if (brandDataRes.isGenericScam) {
                 scanData.riskScore = 100;
                 scanData.checks.domainAnalysis.status = 'danger';
