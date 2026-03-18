@@ -109,11 +109,12 @@ export async function onRequest(context) {
           break; 
         }
 
-      } catch (fetchError) {
+    } catch (fetchError) {
         // 特別處理超時錯誤
         if (fetchError.name === 'AbortError') {
-           isHighRisk = true;
-           riskReason = "檢測超時 (Timeout)，轉址過程過長或伺服器惡意延遲回應。";
+           // 👇 修正：超時不代表一定是詐騙，許多正規電商有防爬蟲機制，改為 false 不重罰
+           isHighRisk = false; 
+           riskReason = "檢測超時 (Timeout)，網站可能有防護機制阻擋自動掃描。";
            break;
         }
         // 其他網路錯誤 (DNS解析失敗等)，視為檢查結束
