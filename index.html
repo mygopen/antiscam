@@ -643,7 +643,11 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
     }
 
 // 3. 其他特徵分析 (僅在非白名單時計算)
-    if (isRedirected) {
+    if (!isWhitelisted) {  // 👈 就是這行不小心被刪掉了！
+        // 🚨 修改：只要來源「或」最終網域使用了 .top, .xyz 等高風險後綴，直接重罰
+        if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
+
+        if (isRedirected) {
             // 再次確認是否為內部同網域跳轉
             const isSameRoot = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
             
@@ -655,20 +659,20 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
                     riskScore += 15;
                 }
             } else if (isSameRoot || isFinalSafePlatform) {
-                // 👇 修正：同網域跳轉、或導向合法開店平台 (如 Shopline)，視為正常商業行為，不扣分！
+                // 👇 修正 1：如果是同網域的子站跳轉，完全不扣分！
                 riskScore += 0;
             } else if (!isFinalWhitelisted) {
+                // 👇 修正 2：一般跨網域轉址降為 15 分 (原本 75 分會誤殺所有電商平台跳轉)
                 riskScore += 15; 
             } else {
                 riskScore += 0; 
             }
             
-            // 👇 修正：移除「多重連字號 (finalHyphenCount >= 2)」的 80 分重罰，因為許多電商子網域自帶連字號
+            // 👇 修正：移除「多重連字號」重罰，因為許多電商子網域自帶連字號
             if (isFinalFakeGov || hasFinalSuspiciousTemp || isFinalVeryHighRiskTLD) {
                 riskScore += 80; 
             }
         }
-
         // 👇👇 新增這段：如果是已知跳板，帶有長度，卻刻意阻擋追蹤 (反掃描機制)
         else if (isInputShortener && fullUrl.length > targetDomain.length + 12) {
             riskScore = 100;
@@ -679,7 +683,7 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         }
         
         if (isFakeGov || isFinalFakeGov) riskScore += 90;
-        // 👇 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分，避免誤殺正常品牌
+        // 👇 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分
         if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
         if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
         if (hasSuspiciousParams) riskScore += 40;
@@ -691,13 +695,13 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         } else if (isHighEntropy && !isHighTraffic) {
             riskScore += 30;
         }
-    }
+    } // 👈 關閉 if (!isWhitelisted)
     
     if (isWhitelisted && !isFakeGov && !isFinalFakeGov) riskScore = 0;
     
     // 4. 白名單強制歸零補丁
     if (isWhitelisted && !isFakeGov) riskScore = 0;
-}
+} // 👈 關閉最外層的 if (!blocklistListed) else 區塊
 
 
 
