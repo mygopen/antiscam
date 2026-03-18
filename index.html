@@ -679,7 +679,16 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         }
         
         if (traceData && traceData.isHighRisk) {
-            riskScore += 80;
+            // 再次判斷是否為同網域或合法平台
+            const currentFinalDomain = finalDomain || domain;
+            const isSameRoot = currentFinalDomain.replace(/^www\./, '').endsWith(domain.replace(/^www\./, '')) || domain.replace(/^www\./, '').endsWith(currentFinalDomain.replace(/^www\./, ''));
+            
+            // 👇 修正：如果是合法電商平台或同網域內部造成的追蹤異常（如前端路由 JS Loop），給予豁免不重罰
+            if (isFinalSafePlatform || isSameRoot) {
+                riskScore += 0; 
+            } else {
+                riskScore += 80;
+            }
         }
         
         if (isFakeGov || isFinalFakeGov) riskScore += 90;
