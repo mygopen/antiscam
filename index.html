@@ -545,6 +545,8 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
             // 👇 新增：判斷最終網域是否為 .top / .xyz 等高危險後綴
             let isFinalVeryHighRiskTLD = false; 
 
+            let isFinalSafePlatform = false; // 1. 新增這行：合法開店平台標記
+            
             if (traceData && traceData.finalUrl) siteStatusData.finalUrl = traceData.finalUrl;
             if (siteStatusData.finalUrl) {
                 try {
@@ -577,6 +579,9 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
                             const lowerW = w.toLowerCase();
                             return finalDomain === lowerW || finalDomain.endsWith('.' + lowerW);
                         });
+                           // 👇 2. 新增：判斷是否導向台灣常見的合法開店平台
+                        const safePlatforms = ['shoplineapp.com', 'cyberbiz.co', 'meepshoper.com', 'waca.tw', 'waca.ec', 'waca.store', 'easystore.co', '91app.com', 'qdm.tw', 'boutir.com', 'myshopify.com'];
+                        isFinalSafePlatform = safePlatforms.some(p => finalDomain === p || finalDomain.endsWith('.' + p));
                     }
                 } catch(e) {}
             }
@@ -638,34 +643,28 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
     }
 
 // 3. 其他特徵分析 (僅在非白名單時計算)
-    if (!isWhitelisted) {
-        // 🚨 修改：只要來源「或」最終網域使用了 .top, .xyz 等高風險後綴，直接重罰
-        if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
-        
-        if (isRedirected) {
+    if (isRedirected) {
             // 再次確認是否為內部同網域跳轉
             const isSameRoot = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
             
             if (isKnownShortener) {
-                // 合法社群跳板若導向「非白名單」，直接給 100 分死刑
                 if (!isFinalWhitelisted) {
                     riskScore = 100;
                     redirectDetails = `⚠️ 惡意社群跳板導向: ${finalDomain}`;
                 } else {
                     riskScore += 15;
                 }
-            } else if (isSameRoot) {
-                // 👇 修正 1：如果是同網域的子站跳轉，完全不扣分！
+            } else if (isSameRoot || isFinalSafePlatform) {
+                // 👇 修正：同網域跳轉、或導向合法開店平台 (如 Shopline)，視為正常商業行為，不扣分！
                 riskScore += 0;
             } else if (!isFinalWhitelisted) {
-                // 👇 修正 2：一般跨網域轉址降為 15 分 (原本 75 分會誤殺所有電商平台跳轉)
                 riskScore += 15; 
             } else {
                 riskScore += 0; 
             }
             
-            // 🚨 這裡維持不變：如果最終跳轉的網域有強烈詐騙特徵，依然給予致命分數
-            if (finalHyphenCount >= 2 || isFinalFakeGov || hasFinalSuspiciousTemp || isFinalVeryHighRiskTLD) {
+            // 👇 修正：移除「多重連字號 (finalHyphenCount >= 2)」的 80 分重罰，因為許多電商子網域自帶連字號
+            if (isFinalFakeGov || hasFinalSuspiciousTemp || isFinalVeryHighRiskTLD) {
                 riskScore += 80; 
             }
         }
