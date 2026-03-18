@@ -648,8 +648,10 @@ if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
         if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
 
         if (isRedirected) {
-            // 再次確認是否為內部同網域跳轉
-            const isSameRoot = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
+            // 👇 修正：重新宣告乾淨的網域變數，因為之前的變數被關在 try 區塊裡面拿不到！
+            const currentCleanDomain = domain.replace(/^www\./, '');
+            const currentCleanFinalDomain = finalDomain.replace(/^www\./, '');
+            const isSameRoot = currentCleanFinalDomain.endsWith(currentCleanDomain) || currentCleanDomain.endsWith(currentCleanFinalDomain);
             
             if (isKnownShortener) {
                 if (!isFinalWhitelisted) {
@@ -1055,9 +1057,11 @@ const handleScan = async (e) => {
             });
         }
 
-    } catch (err) { 
-        setError('網址格式錯誤'); 
-    } finally { 
+} catch (err) { 
+        // 👇 修正：把真實的錯誤印在開發者 Console，並給予更精準的 UI 提示
+        console.error("系統解析異常:", err);
+        setError('網址格式錯誤 或 系統解析失敗 (請確認網址是否完整)'); 
+    } finally {
         if (loadingTimer) clearInterval(loadingTimer);
         setLoading(false); 
         setIsBrandAnalyzing(false);
