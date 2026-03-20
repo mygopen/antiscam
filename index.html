@@ -743,10 +743,11 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
             domainAnalysisDetails = '🚨 隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地，極度可疑！';
         }
             
-        else if (isFakeGov || isFinalFakeGov) {    // 👈 這裡加上 else
+else if (isFakeGov || isFinalFakeGov) {    
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '偵測到 "gov" 關鍵字但非政府網域，極高風險！';
-            // 👇 新增：公共事業偽裝警告
+        }  
+        // 👇 新增：公共事業偽裝警告
         else if (isFakeService) {
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '🚨 偵測到偽裝成公共事業 (如電子發票、水電費、遠通)，極高風險！';
