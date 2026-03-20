@@ -19,7 +19,10 @@ async function getOfficialDomain(brand) {
         "microsoft": ["microsoft.com", "aka.ms", "live.com", "office.com"],
         "微軟": ["microsoft.com", "aka.ms", "live.com", "office.com"],
         "7-zip": ["7-zip.org"],
-        "7zip": ["7-zip.org"]
+        "7zip": ["7-zip.org"],
+        "電子發票": ["einvoice.nat.gov.tw", "mof.gov.tw"],
+        "電子發票整合服務平台": ["einvoice.nat.gov.tw", "mof.gov.tw"],
+        "財政部電子發票": ["einvoice.nat.gov.tw", "mof.gov.tw"]
     };
 
     // 將品牌名稱轉換為小寫來比對，增加容錯率
