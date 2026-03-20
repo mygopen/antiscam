@@ -591,6 +591,9 @@ const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com'
             const isDeepSubdomain = domain.split('.').length >= 5;
             const hasSuspiciousParams = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='].some(key => fullUrl.toLowerCase().includes(key));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
+            //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
+            const fakeServiceKeywords = ['einvoice', 'taipower', 'water', 'fetc'];
+            const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
 
 // --- [優化版] 精確風險權重判定 ---
 let riskScore = 0;
@@ -689,7 +692,9 @@ if (isRedirected) {
         }
         
         if (isFakeGov || isFinalFakeGov) riskScore += 90;
-        // 👇 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分
+        // 新增：如果包含公共事業關鍵字卻非白名單，視為極高風險
+        if (isFakeService) riskScore += 90;
+        // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分
         if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
         if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
         if (hasSuspiciousParams) riskScore += 40;
@@ -741,6 +746,10 @@ if (isWhitelisted && !isFakeGov) riskScore = 0;
         else if (isFakeGov || isFinalFakeGov) {    // 👈 這裡加上 else
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '偵測到 "gov" 關鍵字但非政府網域，極高風險！';
+            // 👇 新增：公共事業偽裝警告
+        else if (isFakeService) {
+            domainAnalysisStatus = 'danger';
+            domainAnalysisDetails = '🚨 偵測到偽裝成公共事業 (如電子發票、水電費、遠通)，極高風險！';
         } else if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) {
             domainAnalysisStatus = 'danger';
             domainAnalysisDetails = '網域或轉址目標為高風險網址，請注意！';
