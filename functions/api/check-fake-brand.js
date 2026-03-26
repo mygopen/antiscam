@@ -22,7 +22,12 @@ async function getOfficialDomain(brand) {
         "7zip": ["7-zip.org"],
         "電子發票": ["einvoice.nat.gov.tw", "mof.gov.tw"],
         "電子發票整合服務平台": ["einvoice.nat.gov.tw", "mof.gov.tw"],
-        "財政部電子發票": ["einvoice.nat.gov.tw", "mof.gov.tw"]
+        "財政部電子發票": ["einvoice.nat.gov.tw", "mof.gov.tw"],
+        // 👇 新增 7-11 賣貨便相關防護
+        "統一超商": ["7-11.com.tw", "myship.7-11.com.tw"],
+        "7-11": ["7-11.com.tw", "myship.7-11.com.tw"],
+        "賣貨便": ["7-11.com.tw", "myship.7-11.com.tw"],
+        "交貨便": ["7-11.com.tw", "myship.7-11.com.tw"]
     };
 
     // 將品牌名稱轉換為小寫來比對，增加容錯率
