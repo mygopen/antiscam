@@ -731,7 +731,8 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
         
         // 👇 新增：嚴懲「用連字號假冒知名網域」的行為
         // 詐騙集團喜歡用 com-tw, 7-11-com 等字眼來騙人
-        const hasFakeDomainKeywords = domain.includes('com-tw') || domain.includes('7-11-com') || domain.includes('myship-711');
+        // 👇 擴大攔截網，只要包含 myship 或 711-tw 就一律重罰 80 分
+        const hasFakeDomainKeywords = domain.includes('com-tw') || domain.includes('7-11-com') || domain.includes('myship-711') || domain.includes('711-tw') || domain.includes('myship');
         if (hasFakeDomainKeywords) riskScore += 80;
 
         // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分 (如果已經因為上面的假冒網域扣分了，這裡就當作疊加懲罰)
@@ -1037,8 +1038,13 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                 fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
                             ]);
 
+                            // 👇 修正：同步主畫面的 AI 判定邏輯！如果 AI 說是假冒品牌，強制判死刑 100 分
+                            if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {   
+                                scanData.riskScore = 100;
+                            }
+
                             // 3. 組合聊天室風格的檢測報告
-                            let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '🟡 中度風險' : '🟢 安全');
+                            let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 安全');
                             let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
 
                             if (scanData.riskScore >= 70) {
