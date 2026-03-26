@@ -1388,16 +1388,18 @@ const handleScan = async (e) => {
        2. 去除紅底：將 bg-brand-red 修改為 bg-white (因為圖片本身是透明底圓形，用白底可搭配 border)。
        3. 內距微調：p-0.5 to p-1，在大尺寸下看起來更協調。
        4. 修改 focus 樣式：去除原本紅色 ring，改為灰色 focus:ring-gray-300。 */}
-    <button 
-        onClick={() => console.log('可愛小獅子被點選了！這裡可以觸發聊天室開啟。')}
-        className="w-24 h-24 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white overflow-hidden p-1 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-    >
-        <img 
-            src="https://ik.imagekit.io/mygopen/callme.png" 
-            alt="MyGoPen Cute Lion Logo" 
-            className="w-full h-full rounded-full object-cover"
-        />
-    </button>
+<button 
+                            onClick={() => console.log('可愛小獅子被點選了！這裡可以觸發聊天室開啟。')}
+                            // 👇 修正：移除 overflow-hidden
+                            className="w-24 h-24 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white p-1 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
+                        >
+                            <img 
+                                src="https://ik.imagekit.io/mygopen/callme.png" 
+                                alt="MyGoPen Cute Lion Logo" 
+                                // 👇 修正：將 object-cover 改為 object-contain
+                                className="w-full h-full rounded-full object-contain"
+                            />
+                        </button>
 </div>
                     
                 </div>
