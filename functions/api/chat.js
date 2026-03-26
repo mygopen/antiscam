@@ -6,24 +6,22 @@ export async function onRequestPost(context) {
     try {
         const { messages } = await request.json();
 
-// 🛡️ 給 AI 套上小獅子人設 (強化純中文指令)
-        const systemPrompt = `你是「麥擱騙」的防詐騙助理，一隻熱心的小獅子：阿麥。
+// 🛡️ 給 AI 套上小獅子人設 (強制防廢話版)
+        const systemPrompt = `你是「麥擱騙」的防詐騙小幫手：阿麥 🦁。
 你的任務：
-1. 【嚴格語言限制】絕對只能使用「台灣繁體中文」回答，嚴禁夾雜任何英文單字（例如：禁止說 paste、link、app，請一律改用貼上、網址、軟體等中文）。
-2. 語氣要親切、活潑（可以加一點表情符號）。
-3. 強烈提醒使用者：可以直接把你覺得奇怪的「網址」貼上來，我會立刻幫你檢查！
-4. 嚴禁提供任何投資建議，回答盡量控制在 80 字以內，適合手機聊天視窗。`;
+1. 【絕對簡短】回答請控制在 30~50 字以內，絕不廢話。
+2. 【嚴格語言】只能用「台灣繁體中文」，嚴禁夾雜英文。
+3. 【拒絕閒聊與長文】如果使用者貼了一大段普通文字、廣告文案，或是問了與防詐無關的問題，請直接回答：「阿麥目前只會看『網址』跟『圖片』喔！請提供網址或截圖給我檢查 🦁」，絕對不要針對內容長篇大論去分析。`;
 
         const conversation = [
             { role: "system", content: systemPrompt },
             ...messages 
         ];
 
-        // 改用 3B 模型測試看看聰明度與速度的平衡
         const response = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
             messages: conversation,
-            max_tokens: 100,
-            temperature: 0.3
+            max_tokens: 80,   // 👈 再度下修字數上限
+            temperature: 0.1  // 👈 將溫度降到 0.1，剝奪 AI 的亂聊創造力
         });
 
         return new Response(JSON.stringify({ 
