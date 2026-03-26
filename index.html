@@ -1113,16 +1113,44 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                     <button onClick={() => setView('closed')} className="hover:bg-white/20 p-1 rounded-full"><XCircle size={20} /></button>
                                 </div>
 
-                                {/* 對話顯示區 */}
+{/* 對話顯示區 */}
                                 <div className="flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4">
                                     {messages.map((msg, idx) => (
-                                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[85%] rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm ${msg.role === 'user' ? 'bg-brand-red text-white rounded-br-none' : 'bg-white text-gray-700 border border-gray-200 rounded-bl-none'}`}>
+                                        <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            
+                                            {/* 阿麥的頭像 (在左側) */}
+                                            {msg.role === 'assistant' && (
+                                                <div className="w-8 h-8 rounded-full flex-shrink-0 border border-gray-200 shadow-sm overflow-hidden bg-white">
+                                                    <img src="https://ik.imagekit.io/mygopen/myhead.png" alt="阿麥" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+
+                                            {/* 對話泡泡本體 */}
+                                            <div className={`max-w-[75%] rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm ${msg.role === 'user' ? 'bg-brand-red text-white rounded-br-none' : 'bg-white text-gray-700 border border-gray-200 rounded-tl-none'}`}>
                                                 {msg.content}
                                             </div>
+
+                                            {/* 使用者的頭像 (在右側) */}
+                                            {msg.role === 'user' && (
+                                                <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-200 flex items-center justify-center text-gray-500 shadow-sm">
+                                                    <UserX size={16} /> {/* 我們借用之前定義的 UserX 或也可以改用一般 User Icon */}
+                                                </div>
+                                            )}
+
                                         </div>
                                     ))}
-                                    {isTyping && <div className="text-gray-400 text-xs px-2 animate-pulse">阿麥打字中...</div>}
+                                    
+                                    {/* 打字中狀態也加上頭像 */}
+                                    {isTyping && (
+                                        <div className="flex gap-2 justify-start items-center">
+                                            <div className="w-8 h-8 rounded-full flex-shrink-0 border border-gray-200 shadow-sm overflow-hidden bg-white">
+                                                <img src="https://ik.imagekit.io/mygopen/myhead.png" alt="阿麥" className="w-full h-full object-cover" />
+                                            </div>
+                                            <div className="text-gray-400 text-xs px-2 animate-pulse bg-white border border-gray-200 rounded-2xl rounded-tl-none py-2 shadow-sm">
+                                                阿麥思考中...
+                                            </div>
+                                        </div>
+                                    )}
                                     <div ref={messagesEndRef} />
                                 </div>
 
