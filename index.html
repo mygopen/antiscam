@@ -1133,7 +1133,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                             {/* 使用者的頭像 (在右側) */}
                                             {msg.role === 'user' && (
                                                 <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-200 flex items-center justify-center text-gray-500 shadow-sm">
-                                                    <UserX size={16} /> {/* 我們借用之前定義的 UserX 或也可以改用一般 User Icon */}
+                                                    <User size={16} /> {/* 我們借用之前定義的 UserX 或也可以改用一般 User Icon */}
                                                 </div>
                                             )}
 
@@ -1306,7 +1306,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
             const handleCopyReport = () => {
                 if (!result) return;
-                const riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '🟡 中度風險' : '🟢 低度風險');
+                const riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 低度風險');
                 const warnings = [];
                 if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
                 if (result.checks.domainAnalysis.status === 'danger') {
