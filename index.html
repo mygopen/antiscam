@@ -1126,18 +1126,35 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                                 </div>
                                             )}
 
-                                            {/* 對話泡泡本體 */}
-                                            <div className={`max-w-[75%] rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm ${msg.role === 'user' ? 'bg-brand-red text-white rounded-br-none' : 'bg-white text-gray-700 border border-gray-200 rounded-tl-none'}`}>
-                                                {msg.content}
-                                            </div>
+                                            {/*👇 修改使用者訊息結構👇 */}
+                                            {msg.role === 'user' ? (
+                                                /* 外層容器加上 relative group，並稍微增加底間距 (mb-4) 以容納重疊頭像 */
+                                                <div className="relative group max-w-[85%] mb-4 flex-shrink-0">
+                                                    {/* 對話泡泡本體 */}
+                                                    {/* 修正：
+                                                       1. 增加內距：pr-10 (右) 與 pb-5 (下)，為頭像騰出空間，避免文字被遮擋。
+                                                       2. rounded-br-none 維持原本設定，但將頭像對齊此角落。 */}
+                                                    <div className={`rounded-2xl px-4 py-2 pr-10 pb-5 whitespace-pre-wrap break-words text-sm shadow-lg bg-brand-red text-white rounded-br-none`}>
+                                                        {msg.content}
+                                                    </div>
 
-                                            {/* 使用者的頭像 (在右側) */}
-                                            {msg.role === 'user' && (
-                                                <div className="w-8 h-8 rounded-full flex-shrink-0 bg-gray-200 flex items-center justify-center text-gray-500 shadow-sm">
-                                                    <User size={16} /> {/* 我們借用之前定義的 UserX 或也可以改用一般 User Icon */}
+                                                    {/* 使用者的頭像 (移動到右下角，並重疊一部分) */}
+                                                    {/* 修正：
+                                                       1. 使用絕對定位：absolute -bottom-2 -right-2 (往外推 2px) 進行重疊，更顯著也更具發話感。
+                                                       2. 稍微變大 w-10 h-10，加入白底 p-1 與陰影 shadow-xl，使其脫離泡泡背景，看起來像是獨立附著的發話 cue。
+                                                       3. 使用剛剛定義的乾淨 User Icon。 */}
+                                                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full flex-shrink-0 bg-white p-1 shadow-2xl border border-gray-100 opacity-90 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+                                                            <User size={20} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* 阿麥的泡泡邏輯維持原樣 (不需要 relative) */
+                                                <div className={`max-w-[75%] rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
+                                                    {msg.content}
                                                 </div>
                                             )}
-
                                         </div>
                                     ))}
                                     
