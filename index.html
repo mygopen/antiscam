@@ -725,11 +725,17 @@
                         }
                     }
 
-                    if (isFakeGov || isFinalFakeGov) riskScore += 90;
-                    // 新增：如果包含公共事業關鍵字卻非白名單，視為極高風險
-                    if (isFakeService) riskScore += 90;
-                    // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分
-                    if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
+if (isFakeGov || isFinalFakeGov) riskScore += 90;
+        // 新增：如果包含公共事業關鍵字卻非白名單，視為極高風險
+        if (isFakeService) riskScore += 90;
+        
+        // 👇 新增：嚴懲「用連字號假冒知名網域」的行為
+        // 詐騙集團喜歡用 com-tw, 7-11-com 等字眼來騙人
+        const hasFakeDomainKeywords = domain.includes('com-tw') || domain.includes('7-11-com') || domain.includes('myship-711');
+        if (hasFakeDomainKeywords) riskScore += 80;
+
+        // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分 (如果已經因為上面的假冒網域扣分了，這裡就當作疊加懲罰)
+        if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
                     if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
                     if (hasSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
