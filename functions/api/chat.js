@@ -18,9 +18,10 @@ export async function onRequestPost(context) {
             ...messages 
         ];
 
-        const response = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+        // 改用 3B 模型測試看看聰明度與速度的平衡
+        const response = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
             messages: conversation,
-            max_tokens: 150,
+            max_tokens: 100,
             temperature: 0.3
         });
 
