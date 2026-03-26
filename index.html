@@ -95,6 +95,24 @@ body.keyboard-open {
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.5);
         }
+
+        /* 檔案路徑：index.html (滑到 style 區塊最下方) */
+
+        /* Define bubble bounce animation keyframes */
+        @keyframes bubble-bounce {
+            0%, 100% {
+                transform: translateY(0);
+                opacity: 0.95;
+            }
+            50% {
+                transform: translateY(-8px); /* 輕柔向上彈跳 8px */
+                opacity: 1; /* 彈到頂點時完全不透明 */
+            }
+        }
+        /* Define the class that uses the animation */
+        .animate-bubble-bounce {
+            animation: bubble-bounce 3s ease-in-out infinite; /* 持續 3秒的循環彈跳 */
+        }
     </style>
 </head>
 <body class="text-gray-700 antialiased min-h-screen flex flex-col">
@@ -1350,6 +1368,29 @@ const handleScan = async (e) => {
                             )}
                         </div></main>
                     <footer className="py-6 text-center text-gray-400 text-sm border-t border-gray-100 bg-white"><p>&copy; {new Date().getFullYear()} MyGoPen 麥擱騙. All rights reserved.</p></footer>
+
+{/* 👇 新增：浮動小獅子 Logo 與動態對話泡泡 👇 */}
+                    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end group">
+                        {/* 動態對話泡泡 (仿 165 風格) */}
+                        <div className="relative bg-white text-gray-800 px-4 py-2 rounded-full shadow-lg text-sm whitespace-nowrap font-bold mb-3 opacity-95 group-hover:opacity-100 transition-opacity animate-bubble-bounce">
+                            問我問我
+                            {/* 對話泡泡尾巴 (小三角) */}
+                            <div className="absolute bottom-[-6px] right-6 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
+                        </div>
+
+                        {/* 可愛小獅子 Logo (按鈕) */}
+                        <button 
+                            onClick={() => console.log('可愛小獅子被點選了！這裡可以觸發聊天室開啟。')}
+                            className="w-16 h-16 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white overflow-hidden p-0.5 bg-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red focus:ring-offset-2"
+                        >
+                            <img 
+                                src="https://ik.imagekit.io/mygopen/callme.png" 
+                                alt="MyGoPen Cute Lion Logo" 
+                                className="w-full h-full rounded-full object-cover"
+                            />
+                        </button>
+                    </div>
+                    
                 </div>
             );
         };
