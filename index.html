@@ -1155,11 +1155,19 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                     <div ref={messagesEndRef} />
                                 </div>
 
-                                {/* 輸入區 */}
-                                <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex gap-2 rounded-b-2xl">
-                                    <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="貼上網址或問我問題..." className="flex-grow bg-gray-100 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-red/30 text-sm" />
-                                    <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition"><ArrowRight size={18} /></button>
-                                </form>
+                                {/* 輸入與免責聲明區 */}
+                                <div className="bg-white border-t border-gray-100 rounded-b-2xl flex flex-col">
+                                    {/* 將原本 form 的 border 和 rounded 移到外層 div 統一控制 */}
+                                    <form onSubmit={handleSend} className="p-3 flex gap-2 items-center">
+                                        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="貼上網址或問我問題..." className="flex-grow bg-gray-100 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-red/30 text-sm" disabled={isTyping} />
+                                        <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition flex-shrink-0"><ArrowRight size={18} /></button>
+                                    </form>
+                                    
+                                    {/* 👇 新增的免責聲明小字 👇 */}
+                                    <div className="pb-3 px-4 text-center text-[10px] text-gray-400 select-none">
+                                        免責聲明：阿麥的回答由 AI 生成，僅供防詐參考，務必自行查證且勿隨意提供個資。
+                                    </div>
+                                </div>
                             </div>
                         )}
 
