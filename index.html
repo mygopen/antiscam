@@ -732,8 +732,8 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
         
         // 👇 新增：嚴懲「用連字號假冒知名網域」的行為
         // 詐騙集團喜歡用 com-tw, 7-11-com 等字眼來騙人
-        // 👇 擴大攔截網，只要包含 myship 或 711-tw 就一律重罰 80 分
-        const hasFakeDomainKeywords = domain.includes('com-tw') || domain.includes('7-11-com') || domain.includes('myship-711') || domain.includes('711-tw') || domain.includes('myship');
+        // 👇 擴大攔截網，只要包含 myship, 711-tw, familytw 等字眼就一律重罰 80 分
+        const hasFakeDomainKeywords = domain.includes('com-tw') || domain.includes('7-11-com') || domain.includes('myship-711') || domain.includes('711-tw') || domain.includes('myship') || domain.includes('familytw') || domain.includes('famiport');
         if (hasFakeDomainKeywords) riskScore += 80;
 
         // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分 (如果已經因為上面的假冒網域扣分了，這裡就當作疊加懲罰)
