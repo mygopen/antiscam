@@ -27,7 +27,13 @@ async function getOfficialDomain(brand) {
         "統一超商": ["7-11.com.tw", "myship.7-11.com.tw"],
         "7-11": ["7-11.com.tw", "myship.7-11.com.tw"],
         "賣貨便": ["7-11.com.tw", "myship.7-11.com.tw"],
-        "交貨便": ["7-11.com.tw", "myship.7-11.com.tw"]
+        "交貨便": ["7-11.com.tw", "myship.7-11.com.tw"],
+        // 👇 新增全家便利商店與好賣+ 相關防護
+        "全家": ["family.com.tw", "famiport.com.tw", "famistore.com.tw"],
+        "全家便利商店": ["family.com.tw", "famiport.com.tw", "famistore.com.tw"],
+        "familymart": ["family.com.tw", "famiport.com.tw", "famistore.com.tw"],
+        "好賣+": ["family.com.tw", "famiport.com.tw", "famistore.com.tw"],
+        "好賣": ["family.com.tw", "famiport.com.tw", "famistore.com.tw"]
     };
 
     // 將品牌名稱轉換為小寫來比對，增加容錯率
