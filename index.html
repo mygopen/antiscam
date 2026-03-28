@@ -392,16 +392,20 @@
             } catch (e) { return null; }
         };
 
-        // 👇 接收 customBlacklist 參數
-        const checkCommunityBlocklists = async (domain, customBlacklist = []) => {
+// 👇 移除 customBlacklist 參數
+        const checkCommunityBlocklists = async (domain) => {
             const lowerDomain = domain.toLowerCase();
 
-            // 👇 攔截點：如果在外部載入的自訂黑名單內，直接判死刑 (回傳 true)
-            // 這裡的 lowerDomain.endsWith 就能完美捕捉 sdwd.farted.net 這種子網域！
-            if (customBlacklist.some(badDomain => lowerDomain === badDomain || lowerDomain.endsWith('.' + badDomain))) {
-                return true;
-            }
+            // 🔒 1. 呼叫後端 API 檢查私有隱藏黑名單 (使用者看不到名單)
+            try {
+                const res = await fetch(`/api/check-blacklist?domain=${encodeURIComponent(lowerDomain)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.isBlacklisted) return true; // 如果後端說是黑名單，直接判死刑
+                }
+            } catch (e) { console.error("黑名單 API 連線失敗", e); }
 
+            // 2. 檢查開源社群黑名單 (這些是公開來源，留前端無妨)
             try {
                 const sources = [
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt',
@@ -484,7 +488,7 @@
         );
 
         // --- Modified simulateScan with refined whitelist and risk scoring ---
-        const simulateScan = async (targetDomain, fullUrl, currentWhitelist = [], currentBlacklist = []) => {
+        const simulateScan = async (targetDomain, fullUrl, currentWhitelist = []) => {
             let resolvedIp = null;
             try {
                 const dnsRes = await fetch(`https://dns.google/resolve?name=${targetDomain}&type=A`);
@@ -524,7 +528,7 @@
 
                 Promise.resolve({ status: 'ok', msg: '網頁原始碼讀取成功', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
 
-                withTimeout(checkCommunityBlocklists(domain, currentBlacklist), 4000, false),
+                withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, null),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null)
@@ -978,10 +982,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             const [result, setResult] = useState(null);
             const [error, setError] = useState('');
             const [copyStatus, setCopyStatus] = useState('idle');
-
             const [externalWhitelist, setExternalWhitelist] = useState([]);
-            // 👇 新增黑名單的 State
-            const [externalBlacklist, setExternalBlacklist] = useState([]);
             const resultRef = useRef(null);
 
             useEffect(() => {
@@ -989,12 +990,6 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     .then(res => res.ok ? res.json() : { domains: [] })
                     .then(data => setExternalWhitelist(data.domains || []))
                     .catch(() => setExternalWhitelist([]));
-
-                // 👇 新增讀取 blacklist.json 的邏輯
-                fetch('./blacklist.json')
-                    .then(res => res.ok ? res.json() : { domains: [] })
-                    .then(data => setExternalBlacklist(data.domains || []))
-                    .catch(() => setExternalBlacklist([]));
             }, []);
 
 
@@ -1035,7 +1030,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
                             // 呼叫原本的檢測核心 (這裡共用了外部的 state，請確保變數名稱一致)
                             const [scanData, brandDataRes] = await Promise.all([
-                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist, externalBlacklist),
+                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist)
                                 fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
                             ]);
 
