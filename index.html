@@ -1249,7 +1249,6 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     const [scanData, brandDataRes] = await Promise.all([
                         simulateScan(urlObj.hostname, urlObj.href, externalWhitelist), 
                         fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`)
-                        fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`)
                             .then(res => res.json())
                             .catch(() => null)
                     ]);
