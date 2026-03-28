@@ -1482,16 +1482,17 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                 <RiskMeter score={result.riskScore} />
 
                                 {/* ================= 核心結論區塊 (精簡版) ================= */}
-                                <div className={`mb-6 p-5 md:p-8 rounded-2xl border-2 flex items-center gap-4 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
-                                    {/* 👇 根據風險等級，動態切換圖示與角色圖片 👇 */}
+                                <div className={`mb-6 p-4 sm:p-5 md:p-8 rounded-2xl border-2 flex items-center gap-3 sm:gap-4 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
+                                    {/* 👇 根據風險等級，動態切換圖示與角色圖片 (手機版縮小為 w-10 h-10 節省空間) 👇 */}
                                     {result.riskScore >= 70 ? (
-                                        <img src="https://ik.imagekit.io/mygopen/danger.png" alt="危險警告" className="w-12 h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
+                                        <img src="https://ik.imagekit.io/mygopen/danger.png" alt="危險警告" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
                                     ) : result.riskScore >= 30 ? (
-                                        <AlertTriangle size={40} className="text-yellow-600 flex-shrink-0" />
+                                        <AlertTriangle size={40} className="text-yellow-600 flex-shrink-0 w-10 h-10 sm:w-10 sm:h-10 md:w-12 md:h-12" />
                                     ) : (
-                                        <img src="https://ik.imagekit.io/mygopen/safe02.png" alt="安全無虞" className="w-12 h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
+                                        <img src="https://ik.imagekit.io/mygopen/safe02.png" alt="安全無虞" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
                                     )}
-                                    <h3 className={`text-2xl md:text-3xl font-extrabold tracking-wide ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
+                                    {/* 👇 加入 whitespace-nowrap 強制不換行，並設定手機版字體為 [1.15rem] 搭配緊湊字距 👇 */}
+                                    <h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide whitespace-nowrap ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
                                         {result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險')}
                                     </h3>
                                 </div>
@@ -1502,16 +1503,18 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
                                 {/* ================= 新增：折疊面板 (Accordion) 按鈕 ================= */}
                                 <div className="mt-8 mb-4">
+                                    {/* 👇 手機版減少 padding (px-3 py-3)，字體設定為 text-[13px] 搭配緊密字距 👇 */}
                                     <button
                                         onClick={() => setShowDetails(!showDetails)}
-                                        className="w-full flex items-center justify-between px-6 py-4 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold rounded-xl transition-all border border-gray-200 shadow-sm active:scale-95 text-base md:text-lg"
+                                        className="w-full flex items-center justify-between px-3 py-3 sm:px-6 sm:py-4 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold rounded-xl transition-all border border-gray-200 shadow-sm active:scale-95 text-[13px] sm:text-base md:text-lg tracking-tighter sm:tracking-normal"
                                     >
-                                        <span className="flex items-center gap-3">
-                                            <Search size={22} className="text-gray-500" />
+                                        <span className="flex items-center gap-1.5 sm:gap-3 whitespace-nowrap">
+                                            {/* 圖示在手機版也微調變小 */}
+                                            <Search className="text-gray-500 flex-shrink-0 w-4 h-4 sm:w-[22px] sm:h-[22px]" />
                                             展開詳細技術分析報告 (資安專家模式)
                                         </span>
-                                        <div className={`transform transition-transform duration-300 ${showDetails ? 'rotate-180' : ''}`}>
-                                            <ChevronDown size={24} className="text-gray-500" />
+                                        <div className={`transform transition-transform duration-300 flex-shrink-0 ml-1 ${showDetails ? 'rotate-180' : ''}`}>
+                                            <ChevronDown className="text-gray-500 w-5 h-5 sm:w-[24px] sm:h-[24px]" />
                                         </div>
                                     </button>
                                 </div>
