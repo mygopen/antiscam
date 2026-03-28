@@ -1030,7 +1030,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
                             // 呼叫原本的檢測核心 (這裡共用了外部的 state，請確保變數名稱一致)
                             const [scanData, brandDataRes] = await Promise.all([
-                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist)
+                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
                                 fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
                             ]);
 
