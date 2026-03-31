@@ -1051,7 +1051,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             } else if (scanData.riskScore >= 30) {
                                 replyText += `⚠️ 注意：這個網站有點可疑，請保持警覺，不要隨意給出個資。`;
                             } else {
-                                replyText += `目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
+                                replyText += `就網址來說，目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
                             }
 
                             setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
