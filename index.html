@@ -467,7 +467,9 @@
                             <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red focus:border-transparent outline-none bg-white text-gray-700 shadow-sm transition-all" placeholder="輸入關鍵字..." />
                             <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"><Edit size={16} /></div>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-1 ml-1">提示: 可修改為詐騙簡訊內容、電話或 LINE ID 進行更精確的搜尋。</p>
+                        <p className="text-[10px] text-gray-400 mt-2 ml-1 leading-relaxed">
+                            💡 <b>阿麥防詐小秘訣：</b> 遇到可疑 Email 或簡訊中的網址，請不要只看表面文字。請在手機上<b>「長按連結」</b>並選擇<b>「複製連結」</b>，貼到上方讓我幫你掃描真實的網域背景！
+                        </p>
                     </div>
                     <div className="flex flex-col md:flex-row gap-3">
                         <a href={`https://www.mygopen.com/search?q=${encodeURIComponent(keyword)}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-white border border-brand-red text-brand-red hover:bg-brand-red hover:text-white font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"><Search size={18} /><span>在 MyGoPen 搜尋</span></a>
