@@ -22,8 +22,8 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 終極極簡提示詞：不要求特殊格式、不要求表情符號，只求最口語的「兩句話」
-        const promptText = `請判斷圖片有無詐騙風險，全使用繁體中文。`;
+        // 👇 採用你的極簡提示詞，解放 Gemma 的運算負擔
+        const promptText = `請用2句話判斷圖片有無詐騙風險與原因，全使用繁體中文，嚴禁解釋。`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
@@ -41,7 +41,7 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 👇 因為只要求兩句話，我們把最大 Tokens 壓縮到 60，只要它講超過大概 40 個中文字就會被強制切斷！
+                    // 只要 2 句話，Tokens 給 60 就足夠了
                     generationConfig: { maxOutputTokens: 60, temperature: 0.1 }
                 })
             });
@@ -56,41 +56,43 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 極簡物理攔截器：直接抓前兩句話，忽略後面所有的廢話與英文
-        const extractCleanReport = (rawText) => {
-            // 將 AI 回傳的文字用「句號、驚嘆號、換行」等常見分隔符號切開
-            const sentences = rawText.split(/[。\n！]/).map(s => s.trim()).filter(s => s.length > 0);
+        // 👇 智慧排版攔截器：把 AI 吐出的一整段話，硬生生切成漂亮的 3 行
+        const formatReport = (rawText) => {
+            // 清理掉任何 AI 可能偷渡的 Markdown 符號
+            let text = rawText.replace(/[*#_`~]/g, '').trim();
             
-            // 如果它很囉唆，我們就只冷酷地抓前兩句話，並手動加上句號
-            if (sentences.length >= 2) {
-                return `${sentences[0]}。\n${sentences[1]}。`;
+            // 判斷風險高低 (粗略的關鍵字比對)
+            let riskLevel = "待確認";
+            if (text.includes("高") || text.includes("詐騙") || text.includes("可疑") || text.includes("釣魚")) {
+                riskLevel = "高";
+            } else if (text.includes("低") || text.includes("正常") || text.includes("安全")) {
+                riskLevel = "低";
             }
-            
-            // 萬一它只講了一句話，就直接回傳
-            return rawText.replace(/[*#_`~]/g, '').trim();
+
+            // 把 AI 的回覆用標點符號切開，取前兩句當作原因
+            const sentences = text.split(/[。！？\n]/).map(s => s.trim()).filter(s => s.length > 2);
+            const reason = sentences.length > 0 ? sentences[0] : "細節待查證";
+            const advice = sentences.length > 1 ? sentences[1] : "請勿隨意點擊連結或提供個資";
+
+            // 由程式碼強制套上我們想要的 UI 格式
+            return `⚠️ 風險：【${riskLevel}】\n🔍 分析：${reason}\n🛡️ 建議：${advice}`;
         };
 
         let cleanReport = '';
 
-        // ====================================================================
-        // 🌟 引擎一：Google Gemma 4 26B (主將)
-        // ====================================================================
         try {
             const rawReport = await callGoogleGemmaAPI('gemma-4-26b-a4b-it');
-            cleanReport = extractCleanReport(rawReport);
+            cleanReport = formatReport(rawReport);
             
         } catch (err26b) {
-            console.log("⚠️ Gemma 4 26B 失敗或塞車，切換至 31B 備援...", err26b.message);
+            console.log("⚠️ Gemma 4 26B 失敗，切換至 31B...", err26b.message);
             
-            // ====================================================================
-            // 🌟 引擎二：Google Gemma 4 31B (副將)
-            // ====================================================================
             try {
                 const rawReport = await callGoogleGemmaAPI('gemma-4-31b-it');
-                cleanReport = extractCleanReport(rawReport);
+                cleanReport = formatReport(rawReport);
                 
             } catch (err31b) {
-                throw new Error(`雙引擎皆無法服務。\n26B 錯誤: ${err26b.message}\n31B 錯誤: ${err31b.message}`);
+                throw new Error(`雙引擎無法服務。\n26B: ${err26b.message}\n31B: ${err31b.message}`);
             }
         }
 
