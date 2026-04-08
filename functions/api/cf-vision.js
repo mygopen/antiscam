@@ -40,7 +40,8 @@ export async function onRequestPost(context) {
         // ====================================================================
         if (env.GEMINI_API_KEY) {
             try {
-                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+                // 👇 修正為正確的 Gemini 1.5 Flash 呼叫路徑
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${env.GEMINI_API_KEY}`;
                 
                 const geminiRes = await fetch(geminiUrl, {
                     method: 'POST',
