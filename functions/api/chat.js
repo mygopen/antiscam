@@ -6,7 +6,7 @@ export async function onRequestPost(context) {
     try {
         const { messages } = await request.json();
 
-// 🛡️ 給 AI 套上小獅子人設 (強制防廢話版)
+        // 🛡️ 給 AI 套上小獅子人設 (強制防廢話版)
         const systemPrompt = `你是「麥擱騙」的防詐騙小幫手：阿麥 🦁。
 你的任務：
 1. 【絕對簡短】回答請控制在 30~50 字以內，絕不廢話。
@@ -18,10 +18,11 @@ export async function onRequestPost(context) {
             ...messages 
         ];
 
-        const response = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
+        // 👇 已經替換為 Google Gemma 4 26B 模型 👇
+        const response = await env.AI.run('@cf/google/gemma-4-26b-a4b-it', {
             messages: conversation,
-            max_tokens: 80,   // 👈 再度下修字數上限
-            temperature: 0.1  // 👈 將溫度降到 0.1，剝奪 AI 的亂聊創造力
+            max_tokens: 80,   // 維持低字數上限，防止廢話消耗額度
+            temperature: 0.1  // 保持低溫度，回答更穩定精準
         });
 
         return new Response(JSON.stringify({ 
