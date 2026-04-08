@@ -22,12 +22,12 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 重點 1：提示詞給予明確模板，並嚴禁「Input:」等前言
-        const promptText = `判斷圖片有無詐騙風險。嚴禁英文、思考過程與「Input:」前言。
-直接以繁體中文輸出以下3行：
-⚠️ 風險：[高/中/低]
-🔍 分析：[1句話說明可疑處]
-🛡️ 建議：[1句話防護建議]`;
+        // 👇 終極防呆提示詞：明確要求「替換括號內容」，防止 AI 照抄模板
+        const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或「Input:」前言。
+請用台灣繁體中文，根據圖片內容直接回答並「替換括號中的提示」，輸出以下3行：
+⚠️ 風險：【只回答 高、中 或 低】
+🔍 分析：【一句話指出圖片最可疑的地方】
+🛡️ 建議：【一句話給予防護建議】`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
@@ -45,8 +45,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 給予 120 Tokens 確保它有空間印出這 3 行
-                    generationConfig: { maxOutputTokens: 120, temperature: 0.1 }
+                    // 👇 將溫度微調至 0.2，給它一點點思考空間，避免它因為太死板而照抄模板
+                    generationConfig: { maxOutputTokens: 120, temperature: 0.2 }
                 })
             });
 
@@ -60,16 +60,16 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 重點 2：金鐘罩攔截器 (Regex)
-        // 就算 AI 不聽話寫了英文，我們只精準「抽出」帶有這三個符號的句子！
+        // 金鐘罩攔截器 (Regex)
         const extractCleanReport = (rawText) => {
             const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
             const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
             const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
 
-            const risk = riskMatch ? riskMatch[0].trim() : "⚠️ 風險：待確認";
-            const analysis = analysisMatch ? analysisMatch[0].trim() : "🔍 分析：細節待查證";
-            const advice = adviceMatch ? adviceMatch[0].trim() : "🛡️ 建議：請勿隨意點擊連結或提供個資";
+            // 移除 AI 可能加上的 Markdown 粗體星號
+            const risk = riskMatch ? riskMatch[0].replace(/[*#_`~]/g, '').trim() : "⚠️ 風險：待確認";
+            const analysis = analysisMatch ? analysisMatch[0].replace(/[*#_`~]/g, '').trim() : "🔍 分析：細節待查證";
+            const advice = adviceMatch ? adviceMatch[0].replace(/[*#_`~]/g, '').trim() : "🛡️ 建議：請勿隨意點擊連結或提供個資";
 
             return `${risk}\n${analysis}\n${advice}`;
         };
