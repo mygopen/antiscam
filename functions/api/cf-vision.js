@@ -45,9 +45,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 👇 極限壓縮！既然我們只取第一筆，就把最大字數鎖死在剛好夠印出這三行的長度 (約 80 Tokens)
-                    // 這樣就算它想繼續碎碎念，API 也會直接把它切斷，省下大把等待時間！
-                    generationConfig: { maxOutputTokens: 80, temperature: 0.1 }
+                    // 稍微放寬 Tokens，讓它有空間把腦內的碎碎念跑完，才不會切斷最終答案
+                    generationConfig: { maxOutputTokens: 200, temperature: 0.1 }
                 })
             });
 
@@ -61,18 +60,21 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 🌟 極速攔截器：只取第一組符合的 3 行 🌟 👇
+        // 👇 🌟 終極殺手鐧：物理攔截器 🌟 👇
         const extractCleanReport = (rawText) => {
+            // 將所有文字按換行切開
             const lines = rawText.split('\n').map(line => line.trim());
+            // 只保留開頭是這三個表情符號的句子
             const validLines = lines.filter(line => 
                 line.startsWith('⚠️') || line.startsWith('🔍') || line.startsWith('🛡️')
             );
             
-            // 👇 改變邏輯：只要抓到第一組 (前 3 行) 就直接回傳，不管它後面寫了什麼！
+            // 由於 AI 可能會在草稿中重複寫出這些格式，我們只取「最後出現的 3 行」（通常是最完美的定稿）
             if (validLines.length >= 3) {
-                return validLines.slice(0, 3).join('\n');
+                return validLines.slice(-3).join('\n');
             }
             
+            // 萬一它真的沒照格式，就退回基本的去除特殊符號
             return rawText.replace(/[*#_`~]/g, '').trim();
         };
 
@@ -83,6 +85,7 @@ export async function onRequestPost(context) {
         // ====================================================================
         try {
             const rawReport = await callGoogleGemmaAPI('gemma-4-26b-a4b-it');
+            // 將原始的長篇大論丟給攔截器處理
             cleanReport = extractCleanReport(rawReport);
             
         } catch (err26b) {
@@ -93,6 +96,7 @@ export async function onRequestPost(context) {
             // ====================================================================
             try {
                 const rawReport = await callGoogleGemmaAPI('gemma-4-31b-it');
+                // 同樣使用攔截器處理
                 cleanReport = extractCleanReport(rawReport);
                 
             } catch (err31b) {
