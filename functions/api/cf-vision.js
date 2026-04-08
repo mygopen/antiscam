@@ -22,16 +22,13 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 黃金比例提示詞：保留兩大核心指令，但強制規範極簡輸出格式
-        const promptText = `請分析這張圖片是否有詐騙風險。嚴禁廢話與解釋。
-        
-🚨【最高優先指令 1】：請仔細掃描圖片頂部是否有「瀏覽器網址列」。若有網址，優先判斷該網域是否可疑（如假冒品牌、亂碼、.top/.xyz等異常後綴），並列為第一點疑慮！
-🚨【最高優先指令 2】：若為「Email、簡訊、LINE 對話」截圖，務必在建議中強制加入：「注意！詐騙常將惡意網址隱藏在文字底層，請長按複製真實網址檢測，勿直接點擊！」
+        // 👇 終極壓制版提示詞：加入強制繁中宣告與嚴格字數鎖定
+        const promptText = `【系統強制指令】：你是一個只能輸出「台灣繁體中文」的防詐分析機器人。嚴禁輸出任何英文、嚴禁解釋思考過程、嚴禁重複我的問題！
 
-請嚴格依照以下格式輸出（務必極度精簡，總字數 80 字內）：
-⚠️ 風險：【高/中/低】 - 【10字內總結】
-🔍 疑慮：【列出最重要的1個可疑點】
-🛡️ 建議：【10字內防護建議 或 直接套用指令2】`;
+請直接給出結果，嚴格遵循以下3行格式（絕不可超過 60 個字）：
+⚠️ 風險：【高/中/低】 - 【5字內總結】
+🔍 疑慮：【指出網址異常或最可疑處，無則寫待查】
+🛡️ 建議：【若是對話截圖，強制寫：注意！惡意網址常隱藏於文字底層，勿點擊！】`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
@@ -49,8 +46,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 👇 稍微放寬到 120 Tokens，確保「指令2」那長長的一句話不會被中途切斷
-                    generationConfig: { maxOutputTokens: 120, temperature: 0.1 }
+                    // 👇 終極壓制設定：將 maxOutputTokens 砍半至 80，並將溫度降至絕對的 0.0 (強迫它像機器一樣死板輸出)
+                    generationConfig: { maxOutputTokens: 80, temperature: 0.0 }
                 })
             });
 
