@@ -1080,6 +1080,60 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     }
                 };
 
+
+                // 👇 新增：處理阿麥聊天室內的圖片上傳邏輯
+                const handleBotImageUpload = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    // 每次選完清空，允許重複上傳同一張
+                    e.target.value = '';
+
+                    // 檢查檔案大小
+                    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
+                    if (file.size > MAX_FILE_SIZE) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 圖片檔案過大 (超過3MB)，請裁切或壓縮後再傳給我喔！' }]);
+                        return;
+                    }
+
+                    // 1. 顯示使用者上傳了圖片
+                    setMessages(prev => [...prev, { role: 'user', content: '[傳送了一張圖片 📷]' }]);
+                    setIsTyping(true);
+
+                    const formData = new FormData();
+                    formData.append('image', file);
+
+                    // 2. 呼叫後端 AI 視覺 API
+                    try {
+                        const response = await fetch('/api/cf-vision', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok || data.error) {
+                            throw new Error(data.details || data.error || '伺服器發生錯誤');
+                        }
+
+                        // 3. 把 AI 的報告排版後傳回聊天室
+                        setMessages(prev => [...prev, { 
+                            role: 'assistant', 
+                            content: `【阿麥的截圖分析報告】\n\n${data.report}` 
+                        }]);
+
+                        if (typeof gtag === 'function') {
+                            gtag('event', 'bot_image_analyze', { 'status': 'success' });
+                        }
+
+                    } catch (err) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: `❌ 阿麥看不太清楚這張圖，分析失敗了：${err.message}` }]);
+                    } finally {
+                        setIsTyping(false);
+                    }
+                };
+                    
+
                 // --- UI 渲染區 ---
                 return (
                     <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end font-sans">
@@ -1167,12 +1221,27 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                     <div ref={messagesEndRef} />
                                 </div>
 
-                                {/* 輸入與免責聲明區 */}
+                               {/* 輸入與免責聲明區 */}
                                 <div className="bg-white border-t border-gray-100 rounded-b-2xl flex flex-col">
-                                    {/* 將原本 form 的 border 和 rounded 移到外層 div 統一控制 */}
                                     <form onSubmit={handleSend} className="p-3 flex gap-2 items-center">
-                                        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="貼上網址或問我問題..." className="flex-grow bg-gray-100 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-red/30 text-sm" disabled={isTyping} />
-                                        <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition flex-shrink-0"><ArrowRight size={18} /></button>
+                                        
+                                        {/* 👇 新增：聊天室專屬的上傳相機按鈕 👇 */}
+                                        <div className="relative flex-shrink-0">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                id="bot-image-upload"
+                                                onChange={handleBotImageUpload}
+                                                disabled={isTyping}
+                                            />
+                                            <label htmlFor="bot-image-upload" className={`p-2 bg-gray-100 text-gray-500 hover:text-brand-red rounded-full cursor-pointer transition-all flex items-center justify-center border border-transparent hover:border-brand-red/30 ${isTyping ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-light'}`} title="上傳可疑截圖">
+                                                <Camera size={20} />
+                                            </label>
+                                        </div>
+
+                                        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="貼網址、傳截圖或問問題..." className="flex-grow bg-gray-100 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-red/30 text-sm" disabled={isTyping} />
+                                        <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition flex-shrink-0 shadow-sm"><ArrowRight size={18} /></button>
                                     </form>
                                     
                                     {/* 👇 新增的免責聲明小字 👇 */}
