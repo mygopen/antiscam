@@ -1324,50 +1324,50 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             .catch(() => null)
                     ]);
 
-                    // 根據 AI 分析結果，動態更新 UI 卡片結論
-                    if (brandDataRes) {
-                        if (brandDataRes.isGenericScam) {
-                            scanData.riskScore = 100;
-                            scanData.checks.domainAnalysis.status = 'danger';
-                            scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
-                            scanData.checks.siteContent.status = 'danger';
-                            scanData.checks.siteContent.details = 'AI 判定網頁內容具備強烈的「通用型詐騙」話術與特徵';
-                        }
-                        else if (brandDataRes.isFakeBrand) {
-                            // 1. 發現是假冒網站
-                            scanData.riskScore = 100;
-                            scanData.checks.domainAnalysis.status = 'danger';
-                            scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
-
-                            scanData.checks.siteContent.status = 'danger';
-                            // ⚠️ 假冒網站時保留具體名稱，明確警告使用者它想騙你以為它是誰
-                            scanData.checks.siteContent.details = `AI 判定網頁內容具備高度釣魚特徵 (企圖冒用 ${brandDataRes.detectedBrand})`;
-                        }
-                        // 👇 改善點 3：如果系統已抓到寄生跳板，強制覆蓋 AI 的安全判定
-                        // 👇 修改這行：將 .includes('寄生網域') 改為 .includes('跳板')，這樣兩種情況都能覆蓋
-                        else if (scanData.riskScore === 100 && scanData.checks.domainAnalysis.details.includes('跳板')) {
-                            scanData.checks.siteContent.status = 'danger';
-                            scanData.checks.siteContent.details = '系統已鎖定其惡意轉址或隱匿行為 (詐騙集團試圖規避掃描)';
-                        }
-                        else if (brandDataRes.detectedBrand && brandDataRes.officialDomain) {
-                            // 2. 發現是真正的官方網站
-                            // 👇 修正：統一顯示通用安全文案，避免名稱別名造成使用者困惑
-                            scanData.checks.siteContent.status = 'safe';
-                            scanData.checks.siteContent.details = 'AI 確認此為正規之官方網站內容';
-                        } else if (brandDataRes.detectedBrand && !brandDataRes.officialDomain) {
-                            // 3. 系統漏洞修補：AI 抓到品牌，但後端無法在資料庫驗證該品牌網域
-                            // 👇 修正：順便將這裡的特定品牌名稱也移除，改為通用說法
-                            scanData.checks.siteContent.status = 'info';
-                            scanData.checks.siteContent.details = 'AI 偵測到此為特定品牌特徵';
+                    // 👇 新增防呆：如果網域已經掛掉或不存在 (isInvalid)，就不需要把 AI 結果塞進去，避免程式崩潰
+                    if (!scanData.isInvalid) {
+                        // 根據 AI 分析結果，動態更新 UI 卡片結論
+                        if (brandDataRes) {
+                            if (brandDataRes.isGenericScam) {
+                                scanData.riskScore = 100;
+                                scanData.checks.domainAnalysis.status = 'danger';
+                                scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
+                                scanData.checks.siteContent.status = 'danger';
+                                scanData.checks.siteContent.details = 'AI 判定網頁內容具備強烈的「通用型詐騙」話術與特徵';
+                            }
+                            else if (brandDataRes.isFakeBrand) {
+                                // 1. 發現是假冒網站
+                                scanData.riskScore = 100;
+                                scanData.checks.domainAnalysis.status = 'danger';
+                                scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
+    
+                                scanData.checks.siteContent.status = 'danger';
+                                // ⚠️ 假冒網站時保留具體名稱，明確警告使用者它想騙你以為它是誰
+                                scanData.checks.siteContent.details = `AI 判定網頁內容具備高度釣魚特徵 (企圖冒用 ${brandDataRes.detectedBrand})`;
+                            }
+                            // 👇 改善點 3：如果系統已抓到寄生跳板，強制覆蓋 AI 的安全判定
+                            else if (scanData.riskScore === 100 && scanData.checks.domainAnalysis.details.includes('跳板')) {
+                                scanData.checks.siteContent.status = 'danger';
+                                scanData.checks.siteContent.details = '系統已鎖定其惡意轉址或隱匿行為 (詐騙集團試圖規避掃描)';
+                            }
+                            else if (brandDataRes.detectedBrand && brandDataRes.officialDomain) {
+                                // 2. 發現是真正的官方網站
+                                scanData.checks.siteContent.status = 'safe';
+                                scanData.checks.siteContent.details = 'AI 確認此為正規之官方網站內容';
+                            } else if (brandDataRes.detectedBrand && !brandDataRes.officialDomain) {
+                                // 3. 系統漏洞修補：AI 抓到品牌，但後端無法在資料庫驗證該品牌網域
+                                scanData.checks.siteContent.status = 'info';
+                                scanData.checks.siteContent.details = 'AI 偵測到此為特定品牌特徵';
+                            } else {
+                                // 4. 沒有發現明顯偽裝的普通網站 (Unknown)
+                                scanData.checks.siteContent.status = 'safe';
+                                scanData.checks.siteContent.details = 'AI 分析完畢，未發現冒用知名品牌之釣魚特徵';
+                            }
                         } else {
-                            // 4. 沒有發現明顯偽裝的普通網站 (Unknown)
-                            scanData.checks.siteContent.status = 'safe';
-                            scanData.checks.siteContent.details = 'AI 分析完畢，未發現冒用知名品牌之釣魚特徵';
+                            // AI API 連線失敗時的備用文字
+                            scanData.checks.siteContent.status = 'info';
+                            scanData.checks.siteContent.details = '網頁內容已讀取 (AI 引擎暫時無回應)';
                         }
-                    } else {
-                        // AI API 連線失敗時的備用文字
-                        scanData.checks.siteContent.status = 'info';
-                        scanData.checks.siteContent.details = '網頁內容已讀取 (AI 引擎暫時無回應)';
                     }
 
                     setBrandAnalysis(brandDataRes);
