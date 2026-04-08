@@ -23,7 +23,7 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 防詐專用提示詞 (加入強制檢查網址列指令與信件超連結警告)
+        // 防詐專用提示詞
         const promptText = `請立刻分析這張圖片的詐騙或風險。禁止寒暄、禁用 Markdown (不可用星號粗體)。字數控制在 180 字內。
         
 🚨【最高優先指令 1】：請務必仔細掃描圖片頂部是否有「瀏覽器網址列」。若有出現網址，請優先判斷該網域是否可疑（例如：拼字錯誤的假冒品牌、亂碼、異常後綴如 .top/.xyz/.vip，或直接使用 IP），並將「可疑網址」列為第一點疑慮！
@@ -35,93 +35,60 @@ export async function onRequestPost(context) {
 1. 【網址異常/風險類別】：「【引用圖中網址或文字】」【說明可疑處】
 🛡️ 防護建議：【一句話防護建議】`;
 
-        // ====================================================================
-        // 🌟 引擎一：Google Gemini 2.5 Flash (主將 - 每日免費 1500 次)
-        // ====================================================================
-        if (env.GEMINI_API_KEY) {
-            try {
-                // 呼叫最新且免費的 gemini-2.5-flash
-                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
-                
-                const geminiRes = await fetch(geminiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: promptText },
-                                { inlineData: { mimeType: mimeType, data: base64String } }
-                            ]
-                        }],
-                        generationConfig: { maxOutputTokens: 250, temperature: 0.2 }
-                    })
-                });
-
-                // 如果 Gemini 額度用盡 (429) 或是像剛剛一樣塞車 (503)，強制拋出錯誤讓下方 Catch 接手
-                if (!geminiRes.ok) {
-                    throw new Error(`Gemini API Failed with status: ${geminiRes.status}`);
-                }
-
-                const geminiData = await geminiRes.json();
-                let cleanReport = geminiData.candidates[0].content.parts[0].text;
-                cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
-                
-                return new Response(JSON.stringify({ report: cleanReport }), {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-            } catch (geminiErr) {
-                // Gemini 失敗，不中斷程式，繼續往下交給 Cloudflare 備援引擎
-                console.log("⚠️ Gemini 處理失敗或額度耗盡，自動切換至 Cloudflare 備援引擎...", geminiErr);
-            }
+        if (!env.GEMINI_API_KEY) {
+            throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
         }
 
-        // ====================================================================
-        // 🌟 引擎二：Cloudflare Workers AI (副將 - 自動備援機制)
-        // ====================================================================
-        const imageUri = `data:${mimeType};base64,${base64String}`;
-        const model = '@cf/meta/llama-4-scout-17b-16e-instruct';
-
-        let response;
-        try {
-            response = await env.AI.run(model, {
-                messages: [
-                    { 
-                        role: "user", 
-                        content: [
-                            { type: "text", text: promptText },
-                            { type: "image_url", image_url: { url: imageUri } }
-                        ] 
-                    }
-                ],
-                max_tokens: 250,
-                temperature: 0.2
+        // 定義一個專門用來呼叫 Google AI Studio API 的共用函式
+        const callGoogleGemmaAPI = async (modelName) => {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${env.GEMINI_API_KEY}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: promptText },
+                            { inlineData: { mimeType: mimeType, data: base64String } }
+                        ]
+                    }],
+                    generationConfig: { maxOutputTokens: 250, temperature: 0.2 }
+                })
             });
-        } catch (aiError) {
-            // 自動同意條款的防呆機制
-            if (aiError.message && aiError.message.includes('agree')) {
-                await env.AI.run(model, { prompt: 'agree' }); 
-                response = await env.AI.run(model, {
-                    messages: [
-                        { 
-                            role: "user", 
-                            content: [
-                                { type: "text", text: promptText },
-                                { type: "image_url", image_url: { url: imageUri } }
-                            ] 
-                        }
-                    ],
-                    max_tokens: 250,
-                    temperature: 0.2
-                });
-            } else {
-                throw aiError; // 如果連 Cloudflare 都掛了，才會真正拋出錯誤
-            }
-        }
 
-        let cleanReport = response.response;
-        if (cleanReport) {
-            cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                const errorMsg = data.error ? data.error.message : res.statusText;
+                throw new Error(`${modelName} API 失敗 (${res.status}): ${errorMsg}`);
+            }
+
+            const data = await res.json();
+            return data.candidates[0].content.parts[0].text;
+        };
+
+        let cleanReport = '';
+
+        // ====================================================================
+        // 🌟 引擎一：Google Gemma 4 26B (主將)
+        // ====================================================================
+        try {
+            const rawReport = await callGoogleGemmaAPI('gemma-4-26b-a4b-it');
+            cleanReport = rawReport.replace(/[*#_`~]/g, '').trim();
+            
+        } catch (err26b) {
+            console.log("⚠️ Gemma 4 26B 失敗或塞車，切換至 31B 備援...", err26b.message);
+            
+            // ====================================================================
+            // 🌟 引擎二：Google Gemma 4 31B (副將)
+            // ====================================================================
+            try {
+                const rawReport = await callGoogleGemmaAPI('gemma-4-31b-it');
+                cleanReport = rawReport.replace(/[*#_`~]/g, '').trim();
+                
+            } catch (err31b) {
+                // 如果兩個 Google Gemma 模型都掛了，才會真正拋出錯誤給前端
+                throw new Error(`雙引擎皆無法服務。\n26B 錯誤: ${err26b.message}\n31B 錯誤: ${err31b.message}`);
+            }
         }
 
         return new Response(JSON.stringify({ report: cleanReport }), {
