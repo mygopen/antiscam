@@ -23,7 +23,7 @@ export async function onRequestPost(context) {
         const mimeType = imageFile.type || 'image/jpeg';
 
         // 👇 終極極簡提示詞：不要求特殊格式、不要求表情符號，只求最口語的「兩句話」
-        const promptText = `請判斷圖片有無詐騙風險，用「兩句話」回答原因和結果，並翻譯成台灣的繁體中文。`;
+        const promptText = `請判斷圖片有無詐騙風險，全使用繁體中文。`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
