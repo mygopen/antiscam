@@ -14,7 +14,6 @@ export async function onRequestPost(context) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         
-        // 將圖片轉換為 Base64 格式
         let binary = '';
         const len = uint8Array.byteLength;
         for (let i = 0; i < len; i++) {
@@ -23,23 +22,21 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 防詐專用提示詞
-        const promptText = `請立刻分析這張圖片的詐騙或風險。禁止寒暄、禁用 Markdown (不可用星號粗體)。字數控制在 180 字內。
+        // 👇 黃金比例提示詞：保留兩大核心指令，但強制規範極簡輸出格式
+        const promptText = `請分析這張圖片是否有詐騙風險。嚴禁廢話與解釋。
         
-🚨【最高優先指令 1】：請務必仔細掃描圖片頂部是否有「瀏覽器網址列」。若有出現網址，請優先判斷該網域是否可疑（例如：拼字錯誤的假冒品牌、亂碼、異常後綴如 .top/.xyz/.vip，或直接使用 IP），並將「可疑網址」列為第一點疑慮！
-🚨【最高優先指令 2】：若圖片看起來像是「電子郵件 (Email)」、「簡訊」或「LINE 對話」，請務必在防護建議中強制加入這句警告：「請注意！詐騙常將惡意網址隱藏在正常的文字底層（超連結偽裝），請長按複製真實網址後來此文字框進行檢測，勿直接點擊！」
+🚨【最高優先指令 1】：請仔細掃描圖片頂部是否有「瀏覽器網址列」。若有網址，優先判斷該網域是否可疑（如假冒品牌、亂碼、.top/.xyz等異常後綴），並列為第一點疑慮！
+🚨【最高優先指令 2】：若為「Email、簡訊、LINE 對話」截圖，務必在建議中強制加入：「注意！詐騙常將惡意網址隱藏在文字底層，請長按複製真實網址檢測，勿直接點擊！」
 
-請嚴格依下列格式輸出：
-⚠️ 風險評估：【高/中/低風險】 - 【一句話總結】
-🔍 疑慮分析：(最多2點，若無疑慮請寫「細節尚待查證」)
-1. 【網址異常/風險類別】：「【引用圖中網址或文字】」【說明可疑處】
-🛡️ 防護建議：【一句話防護建議】`;
+請嚴格依照以下格式輸出（務必極度精簡，總字數 80 字內）：
+⚠️ 風險：【高/中/低】 - 【10字內總結】
+🔍 疑慮：【列出最重要的1個可疑點】
+🛡️ 建議：【10字內防護建議 或 直接套用指令2】`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
         }
 
-        // 定義一個專門用來呼叫 Google AI Studio API 的共用函式
         const callGoogleGemmaAPI = async (modelName) => {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${env.GEMINI_API_KEY}`;
             const res = await fetch(url, {
@@ -52,7 +49,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    generationConfig: { maxOutputTokens: 250, temperature: 0.2 }
+                    // 👇 稍微放寬到 120 Tokens，確保「指令2」那長長的一句話不會被中途切斷
+                    generationConfig: { maxOutputTokens: 120, temperature: 0.1 }
                 })
             });
 
@@ -86,7 +84,6 @@ export async function onRequestPost(context) {
                 cleanReport = rawReport.replace(/[*#_`~]/g, '').trim();
                 
             } catch (err31b) {
-                // 如果兩個 Google Gemma 模型都掛了，才會真正拋出錯誤給前端
                 throw new Error(`雙引擎皆無法服務。\n26B 錯誤: ${err26b.message}\n31B 錯誤: ${err31b.message}`);
             }
         }
