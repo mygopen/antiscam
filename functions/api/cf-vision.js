@@ -28,7 +28,7 @@ export async function onRequestPost(context) {
 🚨【最高優先指令 1】：請仔細掃描圖片頂部是否有「瀏覽器網址列」。若有網址，優先判斷該網域是否可疑（如假冒品牌、亂碼、.top/.xyz等異常後綴），並列為第一點疑慮！
 🚨【最高優先指令 2】：若為「Email、簡訊、LINE 對話」截圖，務必在建議中強制加入：「注意！詐騙常將惡意網址隱藏在文字底層，請長按複製真實網址檢測，勿直接點擊！」
 
-請嚴格依照以下格式輸出（務必極度精簡，總字數 120 字內）：
+請嚴格依照以下格式輸出（務必極度精簡，總字數 80 字內）：
 ⚠️ 風險：【高/中/低】 - 【10字內總結】
 🔍 疑慮：【列出最重要的1個可疑點】
 🛡️ 建議：【10字內防護建議 或 直接套用指令2】`;
@@ -50,7 +50,7 @@ export async function onRequestPost(context) {
                         ]
                     }],
                     // 👇 將溫度微調至 0.2，給它一點點思考空間，避免它因為太死板而照抄模板
-                    generationConfig: { maxOutputTokens: 120, temperature: 0.5 }
+                    generationConfig: { maxOutputTokens: 120, temperature: 0.2 }
                 })
             });
 
