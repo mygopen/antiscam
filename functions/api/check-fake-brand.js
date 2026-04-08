@@ -116,7 +116,8 @@ export async function onRequest(context) {
         網頁內容：
         ${markdownText}`;
 
-        const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+        // 👇 已經替換為 Google Gemma 4 26B 模型 👇
+        const aiResponse = await env.AI.run('@cf/google/gemma-4-26b-a4b-it', {
             messages: [{ role: "user", content: prompt }],
             max_tokens: 20,
             temperature: 0.1
