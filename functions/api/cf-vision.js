@@ -77,24 +77,24 @@ export async function onRequestPost(context) {
         let cleanReport = '';
 
         // ====================================================================
-        // 🌟 引擎一：Google Gemma 3 12B (主將 - 速度與智力的完美平衡，14.4K 額度)
+        // 🌟 引擎一：Google Gemma 3 4B (主將 - 極限速度，14.4K 額度)
         // ====================================================================
         try {
-            const rawReport = await callGoogleGemmaAPI('gemma-3-12b-it');
+            const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
             cleanReport = extractCleanReport(rawReport);
             
-        } catch (err12b) {
-            console.log("⚠️ Gemma 3 12B 失敗，切換至 4B 備援...", err12b.message);
+        } catch (err4b) {
+            console.log("⚠️ Gemma 3 4B 失敗，切換至 12B 備援...", err4b.message);
             
             // ====================================================================
-            // 🌟 引擎二：Google Gemma 3 4B (副將 - 極限速度)
+            // 🌟 引擎二：Google Gemma 3 12B (副將 - 速度與智力的完美平衡)
             // ====================================================================
             try {
-                const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
+                const rawReport = await callGoogleGemmaAPI('gemma-3-12b-it');
                 cleanReport = extractCleanReport(rawReport);
                 
-            } catch (err4b) {
-                throw new Error(`雙引擎無法服務。\n主將: ${err12b.message}\n備援: ${err4b.message}`);
+            } catch (err12b) {
+                throw new Error(`雙引擎無法服務。\n主將: ${err4b.message}\n備援: ${err12b.message}`);
             }
         }
 
