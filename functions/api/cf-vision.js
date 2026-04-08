@@ -14,7 +14,6 @@ export async function onRequestPost(context) {
         const arrayBuffer = await imageFile.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         
-        // 將圖片轉換為 Base64 格式
         let binary = '';
         const len = uint8Array.byteLength;
         for (let i = 0; i < len; i++) {
@@ -23,7 +22,6 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-// 防詐專用提示詞 (加入強制檢查網址列指令與信件超連結警告)
         const promptText = `請立刻分析這張圖片的詐騙或風險。禁止寒暄、禁用 Markdown (不可用星號粗體)。字數控制在 180 字內。
         
 🚨【最高優先指令 1】：請務必仔細掃描圖片頂部是否有「瀏覽器網址列」。若有出現網址，請優先判斷該網域是否可疑（例如：拼字錯誤的假冒品牌、亂碼、異常後綴如 .top/.xyz/.vip，或直接使用 IP），並將「可疑網址」列為第一點疑慮！
@@ -36,99 +34,46 @@ export async function onRequestPost(context) {
 🛡️ 防護建議：【一句話防護建議】`;
 
         // ====================================================================
-        // 🌟 引擎一：Google Gemini 1.5 Flash (主將 - 每日免費 1500 次)
+        // 🌟 抓漏模式：強制只使用 Google Gemini，並捕捉真實錯誤
         // ====================================================================
-        if (env.GEMINI_API_KEY) {
-            try {
-                // 👇 修正為正確的 Gemini 1.5 Flash 呼叫路徑
-                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${env.GEMINI_API_KEY}`;
-                
-                const geminiRes = await fetch(geminiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: promptText },
-                                { inlineData: { mimeType: mimeType, data: base64String } }
-                            ]
-                        }],
-                        generationConfig: { maxOutputTokens: 250, temperature: 0.2 }
-                    })
-                });
-
-                // 如果 Gemini 額度用盡 (429) 或發生異常，強制拋出錯誤讓下方 Catch 接手
-                if (!geminiRes.ok) {
-                    throw new Error(`Gemini API Failed with status: ${geminiRes.status}`);
-                }
-
-                const geminiData = await geminiRes.json();
-                let cleanReport = geminiData.candidates[0].content.parts[0].text;
-                cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
-                
-                return new Response(JSON.stringify({ report: cleanReport }), {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-            } catch (geminiErr) {
-                // Gemini 失敗，不中斷程式，繼續往下交給 Cloudflare 備援引擎
-                console.log("⚠️ Gemini 處理失敗或額度耗盡，自動切換至 Cloudflare 備援引擎...");
-            }
+        if (!env.GEMINI_API_KEY) {
+            throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY，請確認是否設定正確！");
         }
 
-        // ====================================================================
-        // 🌟 引擎二：Cloudflare Workers AI (副將 - 自動備援機制)
-        // ====================================================================
-        const imageUri = `data:${mimeType};base64,${base64String}`;
-        const model = '@cf/meta/llama-4-scout-17b-16e-instruct';
+        // 使用最穩定的官方模型名稱
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+        
+        const geminiRes = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: promptText },
+                        { inlineData: { mimeType: mimeType, data: base64String } }
+                    ]
+                }],
+                generationConfig: { maxOutputTokens: 250, temperature: 0.2 }
+            })
+        });
 
-        let response;
-        try {
-            response = await env.AI.run(model, {
-                messages: [
-                    { 
-                        role: "user", 
-                        content: [
-                            { type: "text", text: promptText },
-                            { type: "image_url", image_url: { url: imageUri } }
-                        ] 
-                    }
-                ],
-                max_tokens: 250,
-                temperature: 0.2
-            });
-        } catch (aiError) {
-            // 自動同意條款的防呆機制
-            if (aiError.message && aiError.message.includes('agree')) {
-                await env.AI.run(model, { prompt: 'agree' }); 
-                response = await env.AI.run(model, {
-                    messages: [
-                        { 
-                            role: "user", 
-                            content: [
-                                { type: "text", text: promptText },
-                                { type: "image_url", image_url: { url: imageUri } }
-                            ] 
-                        }
-                    ],
-                    max_tokens: 250,
-                    temperature: 0.2
-                });
-            } else {
-                throw aiError;
-            }
+        const geminiData = await geminiRes.json();
+
+        // 🚨 抓漏核心：如果 Google 拒絕連線，直接把 Google 的錯誤訊息丟到畫面上
+        if (!geminiRes.ok) {
+            const errorMsg = geminiData.error ? geminiData.error.message : '未知錯誤';
+            throw new Error(`Google Gemini 拒絕處理 (${geminiRes.status})：${errorMsg}`);
         }
 
-        let cleanReport = response.response;
-        if (cleanReport) {
-            cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
-        }
-
+        let cleanReport = geminiData.candidates[0].content.parts[0].text;
+        cleanReport = cleanReport.replace(/[*#_`~]/g, '').trim();
+        
         return new Response(JSON.stringify({ report: cleanReport }), {
             headers: { 'Content-Type': 'application/json' }
         });
 
     } catch (err) {
+        // 將具體的錯誤訊息回傳給前端 UI 顯示
         return new Response(JSON.stringify({ error: 'AI 圖片分析失敗', details: err.message }), { 
             status: 500,
             headers: { 'Content-Type': 'application/json' }
