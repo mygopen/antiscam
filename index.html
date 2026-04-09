@@ -994,6 +994,53 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             const [externalWhitelist, setExternalWhitelist] = useState([]);
             const resultRef = useRef(null);
 
+
+
+
+// 👇 新增這整個 useEffect 區塊：全域監聽貼上事件 (Ctrl+V / Cmd+V)
+            useEffect(() => {
+                const handlePaste = (e) => {
+                    // 如果正在分析中，不要理會新的貼上動作
+                    if (isImageAnalyzing || loading) return;
+
+                    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                    let imageFile = null;
+
+                    // 尋找剪貼簿中是否有圖片檔案
+                    for (let index in items) {
+                        const item = items[index];
+                        if (item.kind === 'file' && item.type.startsWith('image/')) {
+                            imageFile = item.getAsFile();
+                            break; // 找到第一張圖就跳出
+                        }
+                    }
+
+                    if (imageFile) {
+                        // 建立一個假的 event 物件，丟給現有的 handleImageUpload 處理
+                        const fakeEvent = {
+                            target: {
+                                files: [imageFile],
+                                value: '' // 清除 value，行為與點擊上傳一致
+                            }
+                        };
+                        handleImageUpload(fakeEvent);
+                    }
+                };
+
+                // 綁定事件到全域 document
+                document.addEventListener('paste', handlePaste);
+
+                // 元件卸載時清除監聽器，避免記憶體洩漏
+                return () => {
+                    document.removeEventListener('paste', handlePaste);
+                };
+            }, [isImageAnalyzing, loading]); // 依賴這兩個狀態，確保分析中不會重複觸發
+
+
+            
+
+            
+
             useEffect(() => {
                 fetch('./whitelist.json')
                     .then(res => res.ok ? res.json() : { domains: [] })
