@@ -116,14 +116,27 @@ export async function onRequest(context) {
         網頁內容：
         ${markdownText}`;
 
-        // 👇 已經替換為 Google Gemma 4 26B 模型 👇
-        const aiResponse = await env.AI.run('@cf/google/gemma-4-26b-a4b-it', {
-            messages: [{ role: "user", content: prompt }],
-            max_tokens: 20,
-            temperature: 0.1
+        if (!env.GEMINI_API_KEY) {
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "未設定 API Key" }));
+        }
+
+        // 👇 將品牌偵測大腦也搬到 Google Gemma 3 4B
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${env.GEMINI_API_KEY}`;
+        const aiRes = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 20, temperature: 0.1 }
+            })
         });
 
-        const detectedBrand = aiResponse.response.trim().replace(/[*#_`~]/g, '');
+        if (!aiRes.ok) {
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "AI 品牌分析 API 連線失敗" }));
+        }
+
+        const aiData = await aiRes.json();
+        const detectedBrand = aiData.candidates[0].content.parts[0].text.trim().replace(/[*#_`~]/g, '');
 
         if (!detectedBrand || detectedBrand === "Unknown" || detectedBrand.toLowerCase().includes("unknown")) {
             return new Response(JSON.stringify({ isFakeBrand: false, message: "未偵測到明顯品牌偽裝" }));
