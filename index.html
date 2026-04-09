@@ -1072,7 +1072,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                         }
 
                     } else {
-                        // 🌟 如果沒有網址，呼叫後端 LLM 聊天 API (需要你在後端新增 chat.js)
+                        // 🌟 如果沒有網址，呼叫後端 LLM 聊天 API
                         try {
                             const res = await fetch('/api/chat', {
                                 method: 'POST',
@@ -1081,16 +1081,15 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             });
                             const data = await res.json();
                             
-                            // 👇 新增錯誤捕捉：如果 API 壞掉，就拋出錯誤，不要被備用文字蓋掉
+                            // 👇 新增錯誤捕捉：把真實的 data.details 印出來
                             if (!res.ok || data.error) {
-                                throw new Error(data.error || 'API 錯誤');
+                                throw new Error(data.details || data.error || 'API 錯誤');
                             }
                             
-                            // 正常情況下，只印出 AI 的回覆
                             setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
                         } catch (err) {
-                            // 萬一真的連不上 API，給予明確的系統錯誤提示
-                            setMessages(prev => [...prev, { role: 'assistant', content: '阿麥的文字大腦暫時連線上線，請直接貼網址或截圖給我吧！🦁' }]);
+                            // 👇 把錯誤訊息印在對話框裡，這樣你就知道發生什麼事了
+                            setMessages(prev => [...prev, { role: 'assistant', content: `[系統除錯訊息] ${err.message}` }]);
                         } finally {
                             setIsTyping(false);
                         }
