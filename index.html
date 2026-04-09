@@ -888,6 +888,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
             const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
             const [aiReport, setAiReport] = useState(null);
+            const [uploadedImageUrl, setUploadedImageUrl] = useState(null);
             const [brandAnalysis, setBrandAnalysis] = useState(null);
             const [isBrandAnalyzing, setIsBrandAnalyzing] = useState(false);
             const [loadingMessage, setLoadingMessage] = useState('分析中...');
@@ -946,7 +947,12 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                 setError('');
                 setIsImageAnalyzing(true);
                 setLoadingMessage('AI 正在仔細辨識截圖內容...');
+                // 👇 新增這行：如果之前有舊的預覽圖，先釋放記憶體
+                if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
+                // 👇 新增這行：產生新圖片的預覽網址並存起來
+                setUploadedImageUrl(URL.createObjectURL(file));
 
+                
                 const formData = new FormData();
                 formData.append('image', file);
 
@@ -1657,6 +1663,34 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                     <h3 className="text-xl md:text-2xl font-bold text-gray-800">截圖防詐 AI 分析報告</h3>
                                 </div>
 
+
+                                {/* 👇 新增的排版：分為左右兩塊 (手機版會變成上下) */}
+                                <div className="flex flex-col md:flex-row gap-6 mb-6">
+                                    
+                                    {/* 左側/上側：顯示縮圖 */}
+                                    {uploadedImageUrl && (
+                                        <div className="w-full md:w-1/3 flex-shrink-0 flex flex-col items-center justify-start">
+                                            <div className="w-full rounded-2xl overflow-hidden border-4 border-gray-100 shadow-sm relative group">
+                                                {/* 讓圖片維持比例，最大高度限制避免把版面撐破 */}
+                                                <img src={uploadedImageUrl} alt="上傳的截圖" className="w-full max-h-64 md:max-h-80 object-contain bg-gray-50" />
+                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                                    <span className="text-white font-bold text-sm bg-black/60 px-3 py-1 rounded-full">原始截圖</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 右側/下側：顯示 AI 的分析文字 */}
+                                    <div className="w-full md:w-2/3 flex flex-col justify-start">
+                                        <div className="bg-red-50 p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words break-all border border-red-100 shadow-sm font-medium h-full flex items-center">
+                                            {aiReport}
+                                        </div>
+                                    </div>
+                                    
+                                </div>
+
+
+                                
                                 {/* 利用 whitespace-pre-wrap 完美呈現我們在提示詞中設計的斷行格式 */}
                                 {/* 👇 加上 mb-6 與按鈕保持間距 */}
                                 <div className="bg-red-50 p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words break-all border border-red-100 shadow-sm font-medium mb-6">
