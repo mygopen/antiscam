@@ -929,25 +929,23 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             };
 
 
+            // 👇 升級版的影像上傳處理：結合 AI 視覺與系統資料庫交叉比對
             const handleImageUpload = async (e) => {
-                const file = e.target.files[0];
+                const file = e.target.files?.[0]; // 支援從 fakeEvent 傳入
                 if (!file) return;
 
-
-                // ⛔️ 新增：限制檔案大小 (例如最大 3MB)
                 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
                 if (file.size > MAX_FILE_SIZE) {
                     setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。');
-                    // 清除 input 的值，讓使用者可以重新選擇同一張圖
-                    e.target.value = '';
+                    if(e.target.value !== undefined) e.target.value = '';
                     return;
                 }
 
-                // 清空網址檢測的結果，進入圖片分析的載入狀態
                 setResult(null);
                 setAiReport(null);
                 setError('');
                 setIsImageAnalyzing(true);
+                setLoadingMessage('AI 正在仔細辨識截圖內容...');
 
                 const formData = new FormData();
                 formData.append('image', file);
@@ -960,15 +958,61 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
                     const data = await response.json();
 
-                    // 替換成這段 (把 data.details 加進去)：
                     if (!response.ok || data.error) {
-                        // 如果後端有傳回 details，就優先顯示 details，這樣我們才知道 AI 到底抱怨什麼
                         throw new Error(data.details || data.error || '伺服器發生錯誤');
                     }
 
-                    setAiReport(data.report);
+                    let finalReport = data.report;
 
-                    // 👇 新增：GA4 AI 截圖分析行為追蹤
+                    // 🌟 混合式分析核心：從 AI 報告中抓出網址
+                    const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
+                    let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
+
+                    // 如果 AI 有成功抓到網址，且不是「無」
+                    if (extractedUrl && extractedUrl !== "無" && extractedUrl !== "None") {
+                        setLoadingMessage('發現網址！正在調用防詐資料庫交叉比對...');
+                        
+                        try {
+                            // 補上 http 以便解析
+                            let urlToParse = /^https?:\/\//i.test(extractedUrl) ? extractedUrl : 'https://' + extractedUrl;
+                            const urlObj = new URL(urlToParse);
+
+                            // 👉 將網址丟入我們寫好的核心檢測系統
+                            const [scanData, brandDataRes] = await Promise.all([
+                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
+                                fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
+                            ]);
+
+                            let isHighlyDangerous = false;
+                            let dbWarning = "";
+
+                            // 🚨 系統資料庫判定邏輯
+                            if (scanData.blocklistListed) {
+                                isHighlyDangerous = true;
+                                dbWarning = "🚨 系統警告：此網址已列入 165 詐騙黑名單！";
+                            } else if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
+                                isHighlyDangerous = true;
+                                dbWarning = `🚨 系統警告：資料庫確認此為假冒網站 (${brandDataRes.detectedBrand || '高風險特徵'})！`;
+                            } else if (scanData.riskScore >= 70) {
+                                isHighlyDangerous = true;
+                                dbWarning = "🚨 系統警告：此網址經系統掃描具備極高風險特徵！";
+                            }
+
+                            // 💥 竄改 AI 報告：如果資料庫說是詐騙，強制改寫 AI 的風險等級！
+                            if (isHighlyDangerous) {
+                                // 1. 強制修改風險標籤為高風險
+                                finalReport = finalReport.replace(/⚠️ 風險：.*?風險/, '⚠️ 風險：高風險 (系統資料庫強制標記)');
+                                // 2. 在分析結果的下一行，插入紅色的系統警告
+                                finalReport = finalReport.replace(/(🔍 分析：.*)/, `$1\n${dbWarning}`);
+                            }
+                        } catch(e) {
+                            console.log("網址比對解析失敗", e);
+                        }
+                    }
+
+                    // 輸出最終過濾後的報告
+                    setAiReport(finalReport);
+
                     if (typeof gtag === 'function') {
                         gtag('event', 'image_analyze', {
                             'status': 'success',
@@ -976,11 +1020,11 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                         });
                     }
 
-                    // 改成這樣（印出 err.message）：
                 } catch (err) {
                     setError('圖片分析失敗：' + err.message);
                 } finally {
                     setIsImageAnalyzing(false);
+                    setLoadingMessage('分析中...');
                 }
             };
 
