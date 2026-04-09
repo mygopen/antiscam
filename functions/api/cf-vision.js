@@ -22,14 +22,13 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 提示詞優化：增加「網址擷取」欄位
+        // 👇 提示詞優化：移除「畫面」，將「風險」置頂
         const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或前言。
 【特別指令】：
 1. 務必優先檢查圖片最上方的「瀏覽器網址列」或文字中的網址。若發現網址是拼湊字詞、異常後綴(如.site, .vip, .top)或假冒知名品牌，請強制判定為「高」風險。
 2. 盡可能將圖片中看到的「網址」精準擷取出來，若無網址請填寫「無」。
 
-請用台灣繁體中文，根據圖片內容直接回答，並將括號替換為你的判斷結果，只輸出以下5行：
-👀 畫面：這應該是【填寫圖片來源，例如：購物網頁、LINE對話等】的截圖喔！
+請用台灣繁體中文，根據圖片內容直接回答，並將括號替換為你的判斷結果，只輸出以下4行：
 ⚠️ 風險：判斷為【高、中 或 低】風險。
 🔍 分析：【一句話指出圖片最可疑的地方】
 🔗 網址：【擷取到的網址，例如：myship-711.twox.site，若無請填「無」】
@@ -51,8 +50,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 放寬 tokens 到 180，確保 5 行字能完整輸出
-                    generationConfig: { maxOutputTokens: 180, temperature: 0.2 }
+                    // 4 行字，放寬 tokens 到 150
+                    generationConfig: { maxOutputTokens: 150, temperature: 0.2 }
                 })
             });
 
@@ -66,21 +65,19 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 攔截器更新：支援擷取第 5 行的網址
+        // 👇 攔截器更新：移除 view 擷取，直接回傳 4 行
         const extractCleanReport = (rawText) => {
-            const viewMatch = rawText.match(/👀.*?(?=\n|$)/);
             const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
             const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
             const urlMatch = rawText.match(/🔗.*?(?=\n|$)/);
             const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
 
-            const view = viewMatch ? viewMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "👀 畫面：這看起來像是一張截圖";
             const risk = riskMatch ? riskMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "⚠️ 風險：待確認";
             const analysis = analysisMatch ? analysisMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🔍 分析：細節待查證";
             const urlExtract = urlMatch ? urlMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🔗 網址：無";
             const advice = adviceMatch ? adviceMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
 
-            return `${view}\n${risk}\n${analysis}\n${urlExtract}\n${advice}`;
+            return `${risk}\n${analysis}\n${urlExtract}\n${advice}`;
         };
 
         let cleanReport = '';
