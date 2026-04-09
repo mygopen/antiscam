@@ -974,6 +974,11 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
                     let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
 
+                    // 👇 新增這段：如果 AI 抓到的是 Email，自動過濾只取 @ 後面的網域
+                    if (extractedUrl.includes('@')) {
+                        extractedUrl = extractedUrl.split('@')[1].trim();
+                    }
+                    
                     // 如果 AI 有成功抓到網址，且不是「無」
                     if (extractedUrl && extractedUrl !== "無" && extractedUrl !== "None") {
                         setLoadingMessage('發現網址！正在調用防詐資料庫交叉比對...');
