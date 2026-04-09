@@ -1007,7 +1007,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             // 💥 竄改 AI 報告：如果資料庫說是詐騙，強制改寫 AI 的風險等級！
                             if (isHighlyDangerous) {
                                 // 1. 強制修改風險標籤為高風險
-                                finalReport = finalReport.replace(/⚠️ 風險：.*?風險/, '⚠️ 風險：高風險 (系統資料庫強制標記)');
+                                finalReport = finalReport.replace(/⚠️ 風險：.*?風險/, '⚠️ 風險：高風險');
                                 // 2. 在分析結果的下一行，插入紅色的系統警告
                                 finalReport = finalReport.replace(/(🔍 分析：.*)/, `$1\n${dbWarning}`);
                             }
