@@ -1018,6 +1018,10 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             }
                         } catch(e) {
                             console.log("網址比對解析失敗", e);
+                            const suspiciousKeywords = ['.top', '.xyz', '.site', '.vip', '.shop'];
+                            if (suspiciousKeywords.some(kw => extractedUrl.toLowerCase().includes(kw))) {
+                                finalReport = finalReport.replace(/⚠️ 風險：.*/, '⚠️ 風險：高風險');
+                            }
                         }
                     }
 
