@@ -991,98 +991,54 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
                         setLoadingMessage('發現網址！正在調用防詐資料庫交叉比對...');
                         
-                        try {
-                            // 1. 處理多網址情況：只取第一個
-                            let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
+try {
+                    const response = await fetch('/api/cf-vision', {
+                        method: 'POST',
+                        body: formData
+                    });
 
-                            // 2. 處理 Email 情況：如果字串包含 @，只取 @ 後面的網域
+                    const data = await response.json();
+
+                    if (!response.ok || data.error) {
+                        throw new Error(data.details || data.error || '伺服器發生錯誤');
+                    }
+
+                    // 1. 拿到後端已經完美審核並竄改過的報告
+                    let finalReport = data.report;
+
+                    // 2. 如果報告裡有網址，我們仍然需要在前端執行一次 simulateScan，這是為了在畫面下方畫出那張美麗的「圓餅圖與詳細技術分析卡片」
+                    const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
+                    let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
+
+                    if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
+                        setLoadingMessage('正在產生詳細技術分析卡片...');
+                        try {
+                            let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
                             if (firstTarget.includes('@')) {
                                 firstTarget = firstTarget.split('@').pop().trim();
                             }
-
-                            // 補上 http 以便解析
                             let urlToParse = /^https?:\/\//i.test(firstTarget) ? firstTarget : 'https://' + firstTarget;
                             const urlObj = new URL(urlToParse);
                             const parsedHostname = urlObj.hostname.toLowerCase();
 
-                            // 👉 系統鐵腕查核：將網域丟入核心檢測系統
                             const [scanData, brandDataRes] = await Promise.all([
                                 simulateScan(parsedHostname, urlObj.href, externalWhitelist),
                                 fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
                             ]);
 
-                            // 💡 最高指導原則：系統查核結果永遠大於 AI 判斷！
-                            
-                            // 判斷是否為官方白名單網域
-                            const isSafeWhitelisted = externalWhitelist.some(w => {
-                                const lowerW = w.toLowerCase();
-                                return parsedHostname === lowerW || parsedHostname.endsWith('.' + lowerW);
-                            });
-
-                            if (isSafeWhitelisted) {
-                                // ✅ 系統權威：確認為白名單，強制推翻 AI 判定並洗白
-                                finalReport = finalReport.replace(/⚠️.*/, '⚠️ 風險：低風險 (官方白名單網域)');
-                                finalReport = finalReport.replace(/(🔍.*)/, `$1\n✅ 系統驗證：資料庫確認此為官方網址，請安心使用。`);
-                            } else {
-                                // 🚨 系統權威：檢視惡意特徵與資料庫
-                                const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
-                                const isSuspiciousSuffix = highRiskSuffixes.some(s => parsedHostname.endsWith(s));
-
-                                let systemRiskLevel = null;
-                                let dbWarning = "";
-
-                                // 階層式給定系統分數與警告詞
-                                if (isSuspiciousSuffix) {
-                                    systemRiskLevel = "高風險";
-                                    dbWarning = "🚨 系統警告：此網址使用高風險異常後綴，極高機率為詐騙！";
-                                } else if (scanData.details?.siteStatus?.hasApk) { // 👈 插入這三行
-                                    systemRiskLevel = "高風險";
-                                    dbWarning = "🚨 系統警告：此網站誘導下載不明 APK 檔案，極可能是夾帶木馬的惡意軟體！";
-                                } else if (scanData.blocklistListed) {
-                                    systemRiskLevel = "高風險";
-                                    dbWarning = "🚨 系統警告：此網址已列入 165 詐騙黑名單！";
-                                } else if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
-                                    systemRiskLevel = "高風險";
-                                    dbWarning = `🚨 系統警告：資料庫確認此為假冒網站 (${brandDataRes.detectedBrand || '高風險特徵'})！`;
-                                } else if (scanData.isInvalid) {
-                                    systemRiskLevel = "高風險";
-                                    dbWarning = "🚨 系統警告：此網址目前已失效或被封鎖，這是詐騙免洗網站的常見特徵！";
-                                } else if (scanData.riskScore >= 70) {
-                                    systemRiskLevel = "高風險";
-                                    dbWarning = "🚨 系統警告：此網址經系統掃描具備極高風險特徵！";
-                                } else if (scanData.riskScore >= 30) {
-                                    systemRiskLevel = "中風險";
-                                    dbWarning = "⚠️ 系統注意：此網址存在部分可疑特徵，請小心留意！";
-                                }
-
-                                // 💥 強制竄改 AI 報告：完全依照系統的判定覆寫
-                                if (systemRiskLevel === "高風險" || systemRiskLevel === "中風險") {
-                                    finalReport = finalReport.replace(/⚠️.*/, `⚠️ 風險：${systemRiskLevel}`);
-                                    
-                                    // 插入對應的系統警告標籤
-                                    if (!finalReport.includes('系統警告') && !finalReport.includes('系統注意')) {
-                                        finalReport = finalReport.replace(/(🔍.*)/, `$1\n${dbWarning}`);
-                                    }
-                                }
-                            }
+                            // 設定 Result，讓畫面下方的圓餅圖與技術卡片顯現出來
+                            setBrandAnalysis(brandDataRes);
+                            setResult(scanData);
                         } catch(e) {
-                            console.log("網址比對解析失敗", e);
-                            // 極端情況：網址亂碼導致系統無法解析，退回簡單的後綴檢查防呆
-                            const suspiciousKeywords = ['.top', '.xyz', '.site', '.vip', '.shop'];
-                            if (suspiciousKeywords.some(kw => extractedUrl.toLowerCase().includes(kw))) {
-                                finalReport = finalReport.replace(/⚠️.*/, '⚠️ 風險：高風險');
-                            }
+                            console.log("前端視覺卡片產生失敗", e);
                         }
                     }
 
-                    // 輸出最終過濾後的報告
+                    // 3. 輸出報告給 UI
                     setAiReport(finalReport);
-
+                    
                     if (typeof gtag === 'function') {
-                        gtag('event', 'image_analyze', {
-                            'status': 'success',
-                            'file_size': file.size
-                        });
+                        gtag('event', 'image_analyze', { 'status': 'success', 'file_size': file.size });
                     }
 
                 } catch (err) {
@@ -1091,6 +1047,8 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     setIsImageAnalyzing(false);
                     setLoadingMessage('分析中...');
                 }
+
+                        
             };
 
 
@@ -1290,7 +1248,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     const formData = new FormData();
                     formData.append('image', file);
 
-// 2. 呼叫後端 AI 視覺 API 與混合式分析
+// 2. 呼叫後端 AI 視覺 API (內含混合式防詐分析)
                     try {
                         const response = await fetch('/api/cf-vision', {
                             method: 'POST',
@@ -1303,93 +1261,10 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             throw new Error(data.details || data.error || '伺服器發生錯誤');
                         }
 
-                        let finalReport = data.report;
-
-                        // 🌟 同步主畫面的混合式分析核心：從 AI 報告中抓出網址
-                        const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
-                        let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
-
-                        // 如果 AI 有成功抓到網址，且不是「無」
-                        if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
-                            try {
-                                // 1. 處理多網址情況：只取第一個
-                                let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
-
-                                // 2. 處理 Email 情況：如果字串包含 @，只取 @ 後面的網域
-                                if (firstTarget.includes('@')) {
-                                    firstTarget = firstTarget.split('@').pop().trim();
-                                }
-
-                                // 補上 http 以便解析
-                                let urlToParse = /^https?:\/\//i.test(firstTarget) ? firstTarget : 'https://' + firstTarget;
-                                const urlObj = new URL(urlToParse);
-                                const parsedHostname = urlObj.hostname.toLowerCase();
-
-                                // 👉 系統鐵腕查核：將網域丟入核心檢測系統
-                                const [scanData, brandDataRes] = await Promise.all([
-                                    simulateScan(parsedHostname, urlObj.href, externalWhitelist),
-                                    fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
-                                ]);
-
-                                // 判斷是否為官方白名單網域
-                                const isSafeWhitelisted = externalWhitelist.some(w => {
-                                    const lowerW = w.toLowerCase();
-                                    return parsedHostname === lowerW || parsedHostname.endsWith('.' + lowerW);
-                                });
-
-                                if (isSafeWhitelisted) {
-                                    // ✅ 系統權威：確認為白名單，強制推翻 AI 判定並洗白
-                                    finalReport = finalReport.replace(/⚠️.*/, '⚠️ 風險：低風險 (官方白名單網域)');
-                                    finalReport = finalReport.replace(/(🔍.*)/, `$1\n✅ 系統驗證：資料庫確認此為官方網址，請安心使用。`);
-                                } else {
-                                    // 🚨 系統權威：檢視惡意特徵與資料庫
-                                    const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
-                                    const isSuspiciousSuffix = highRiskSuffixes.some(s => parsedHostname.endsWith(s));
-
-                                    let systemRiskLevel = null;
-                                    let dbWarning = "";
-
-                                    if (isSuspiciousSuffix) {
-                                        systemRiskLevel = "高風險";
-                                        dbWarning = "🚨 系統警告：此網址使用高風險異常後綴，極高機率為詐騙！";
-                                    } else if (scanData.blocklistListed) {
-                                        systemRiskLevel = "高風險";
-                                        dbWarning = "🚨 系統警告：此網址已列入 165 詐騙黑名單！";
-                                    } else if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
-                                        systemRiskLevel = "高風險";
-                                        dbWarning = `🚨 系統警告：資料庫確認此為假冒網站 (${brandDataRes.detectedBrand || '高風險特徵'})！`;
-                                    } else if (scanData.isInvalid) {
-                                        systemRiskLevel = "高風險";
-                                        dbWarning = "🚨 系統警告：此網址目前已失效或被封鎖，這是詐騙免洗網站的常見特徵！";
-                                    } else if (scanData.riskScore >= 70) {
-                                        systemRiskLevel = "高風險";
-                                        dbWarning = "🚨 系統警告：此網址經系統掃描具備極高風險特徵！";
-                                    } else if (scanData.riskScore >= 30) {
-                                        systemRiskLevel = "中風險";
-                                        dbWarning = "⚠️ 系統注意：此網址存在部分可疑特徵，請小心留意！";
-                                    }
-
-                                    // 💥 強制竄改 AI 報告：完全依照系統的判定覆寫
-                                    if (systemRiskLevel === "高風險" || systemRiskLevel === "中風險") {
-                                        finalReport = finalReport.replace(/⚠️.*/, `⚠️ 風險：${systemRiskLevel}`);
-                                        if (!finalReport.includes('系統警告') && !finalReport.includes('系統注意')) {
-                                            finalReport = finalReport.replace(/(🔍.*)/, `$1\n${dbWarning}`);
-                                        }
-                                    }
-                                }
-                            } catch(e) {
-                                console.log("阿麥網址比對解析失敗", e);
-                                const suspiciousKeywords = ['.top', '.xyz', '.site', '.vip', '.shop'];
-                                if (suspiciousKeywords.some(kw => extractedUrl.toLowerCase().includes(kw))) {
-                                    finalReport = finalReport.replace(/⚠️.*/, '⚠️ 風險：高風險');
-                                }
-                            }
-                        }
-
-                        // 3. 把最終審核後的 AI 報告排版傳回聊天室
+                        // 3. 把後端已經完美審核的報告，直接印出來！就是這麼簡單！
                         setMessages(prev => [...prev, { 
                             role: 'assistant', 
-                            content: `【阿麥的截圖分析報告】\n\n${finalReport}` 
+                            content: `【阿麥的截圖分析報告】\n\n${data.report}` 
                         }]);
 
                         if (typeof gtag === 'function') {
