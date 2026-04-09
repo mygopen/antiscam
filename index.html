@@ -943,7 +943,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             };
 
 
-            // 👇 升級版的影像上傳處理：結合 AI 視覺與系統資料庫交叉比對
+            // 👇 升級版的影像上傳處理：完全交由後端審核，前端只負責展示
             const handleImageUpload = async (e) => {
                 const file = e.target.files?.[0]; // 支援從 fakeEvent 傳入
                 if (!file) return;
@@ -960,12 +960,12 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                 setError('');
                 setIsImageAnalyzing(true);
                 setLoadingMessage('AI 正在仔細辨識截圖內容...');
-                // 👇 新增這行：如果之前有舊的預覽圖，先釋放記憶體
+                
+                // 如果之前有舊的預覽圖，先釋放記憶體
                 if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
-                // 👇 新增這行：產生新圖片的預覽網址並存起來
+                // 產生新圖片的預覽網址並存起來
                 setUploadedImageUrl(URL.createObjectURL(file));
 
-                
                 const formData = new FormData();
                 formData.append('image', file);
 
@@ -981,32 +981,10 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                         throw new Error(data.details || data.error || '伺服器發生錯誤');
                     }
 
-                    let finalReport = data.report;
-
-                    // 🌟 混合式分析核心：從 AI 報告中抓出網址
-                    const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
-                    let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
-
-                    // 如果 AI 有成功抓到網址，且不是「無」
-                    if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
-                        setLoadingMessage('發現網址！正在調用防詐資料庫交叉比對...');
-                        
-try {
-                    const response = await fetch('/api/cf-vision', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok || data.error) {
-                        throw new Error(data.details || data.error || '伺服器發生錯誤');
-                    }
-
                     // 1. 拿到後端已經完美審核並竄改過的報告
                     let finalReport = data.report;
 
-                    // 2. 如果報告裡有網址，我們仍然需要在前端執行一次 simulateScan，這是為了在畫面下方畫出那張美麗的「圓餅圖與詳細技術分析卡片」
+                    // 2. 如果報告裡有網址，我們仍然需要在前端執行一次 simulateScan，這是為了在畫面下方畫出那張美麗的「詳細技術分析卡片」
                     const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
                     let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
 
@@ -1047,8 +1025,6 @@ try {
                     setIsImageAnalyzing(false);
                     setLoadingMessage('分析中...');
                 }
-
-                        
             };
 
 
