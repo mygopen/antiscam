@@ -25,7 +25,8 @@ export async function onRequest(context) {
         "tw-confirmation.com",
         "pini.tw",
         "soapants.com",
-        "qcgexchange.com"
+        "qcgexchange.com",
+        "opengraverecords.com"
     ];
 
     // 檢查邏輯：完全符合，或是其子網域
