@@ -257,10 +257,13 @@
                 let text = "";
                 let isBlank = false;
                 let hasIframe = false;
+                let hasApk = false; // 👈 新增 APK 偵測變數
                 let linkStats = { total: 0, internal: 0, external: 0 };
                 if (data.contents) {
                     text = data.contents;
                     hasIframe = /<iframe/i.test(text);
+                    // 👇 粗暴且有效的檢查：只要網頁原始碼裡包含 .apk 就發出警報
+                    hasApk = text.toLowerCase().includes('.apk');
                     if (text.length < 500) isBlank = true;
                     else {
                         try {
@@ -301,7 +304,7 @@
                     }
                 }
                 if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats };
-                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats };
+                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats, hasApk };
             } catch (e) {
                 try {
                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
@@ -641,9 +644,13 @@
 
             // --- [優化版] 精確風險權重判定 ---
             let riskScore = 0;
+            // 👇 如果網頁有 APK 且不在白名單內，視為極度危險
+            const isApkSite = siteStatusData.hasApk && !isWhitelisted; 
 
             if (blocklistListed) {
                 riskScore = 100;
+            } else if (isApkSite) {
+                riskScore = 100; // 👈 誘騙下載 APK 強制判死刑 (100分)
             } else {
                 // 1. 內容分析優化：區分「惡意阻擋」與「安全防護(WAF)」
                 if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
@@ -781,7 +788,12 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             let domainAnalysisStatus = 'safe';
             let domainAnalysisDetails = '網域命名結構無明顯異常';
 
-            if (isSocialMedia) {
+            // 👇 新增 APK 專屬的紅色警告卡片
+            if (isApkSite) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 偵測到網頁誘導下載不明 APK (Android App)，極可能是夾帶木馬的惡意軟體！';
+                siteContentMsg = '危險：包含惡意應用程式下載連結';
+            } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
                 siteContentMsg = '社群平台內容受隱私保護，無法自動掃描';
@@ -851,6 +863,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? 'warning' : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? '網域名稱隨機度過高，疑似機器生成' : '網域名稱結構正常' },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' }
+                    apkCheck: { status: isApkSite ? 'danger' : 'safe', label: '可疑檔案下載', details: isApkSite ? '偵測到不明 APK 檔下載，極高風險！' : '未偵測到可疑 Android 應用程式' }
                 }
             };
         };
@@ -1022,6 +1035,9 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                 if (isSuspiciousSuffix) {
                                     systemRiskLevel = "高風險";
                                     dbWarning = "🚨 系統警告：此網址使用高風險異常後綴，極高機率為詐騙！";
+                                } else if (scanData.details?.siteStatus?.hasApk) { // 👈 插入這三行
+                                    systemRiskLevel = "高風險";
+                                    dbWarning = "🚨 系統警告：此網站誘導下載不明 APK 檔案，極可能是夾帶木馬的惡意軟體！";
                                 } else if (scanData.blocklistListed) {
                                     systemRiskLevel = "高風險";
                                     dbWarning = "🚨 系統警告：此網址已列入 165 詐騙黑名單！";
