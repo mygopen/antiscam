@@ -22,13 +22,17 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 提示詞：要回完整的 4 行，並且用引導的方式讓它自然填空
+        // 👇 強化提示詞：加入強制檢查網址列與超連結警告的指令
         const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或前言。
+【特別指令】：
+1. 務必優先檢查圖片最上方的「瀏覽器網址列」或文字中的網址。若發現網址是拼湊字詞、異常後綴(如.site, .vip)或假冒知名品牌，請直接在「分析」中點出。
+2. 詐騙集團常使用假連結，請在「建議」中提醒民眾留意隱藏的超連結。
+
 請用台灣繁體中文，根據圖片內容直接回答，並將括號替換為你的判斷結果，只輸出以下4行：
-👀 畫面：這應該是【填寫圖片來源，例如：購物網頁、LINE對話、手機簡訊等】的截圖喔！
+👀 畫面：這應該是【填寫圖片來源，例如：購物網頁、通訊聊天對話、手機簡訊等】的截圖喔！
 ⚠️ 風險：判斷為【高、中 或 低】風險。
-🔍 分析：【一句話指出圖片最可疑的地方】
-🛡️ 建議：【一句話給予防護建議】`;
+🔍 分析：【一句話指出圖片最可疑的地方（若有假網址請務必寫出）】
+🛡️ 建議：【一句話給予防護建議，並提醒留意假網址或隱藏的超連結】`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
@@ -46,8 +50,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 給予 150 Tokens 的空間印出這 4 行，溫度 0.2 保持微幅彈性
-                    generationConfig: { maxOutputTokens: 150, temperature: 0.2 }
+                    // 稍微放寬 token 限制，讓它有足夠空間把網址和警告寫完整
+                    generationConfig: { maxOutputTokens: 180, temperature: 0.2 }
                 })
             });
 
@@ -61,7 +65,6 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 攔截器：動態抓取 4 行，並強制移除死板的 【 】 中括號
         const extractCleanReport = (rawText) => {
             const viewMatch = rawText.match(/👀.*?(?=\n|$)/);
             const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
@@ -78,9 +81,6 @@ export async function onRequestPost(context) {
 
         let cleanReport = '';
 
-        // ====================================================================
-        // 🌟 引擎一：Google Gemma 3 4B (主將 - 極限速度)
-        // ====================================================================
         try {
             const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
             cleanReport = extractCleanReport(rawReport);
@@ -88,9 +88,6 @@ export async function onRequestPost(context) {
         } catch (err4b) {
             console.log("⚠️ Gemma 3 4B 失敗，切換至 12B 備援...", err4b.message);
             
-            // ====================================================================
-            // 🌟 引擎二：Google Gemma 3 12B (副將)
-            // ====================================================================
             try {
                 const rawReport = await callGoogleGemmaAPI('gemma-3-12b-it');
                 cleanReport = extractCleanReport(rawReport);
