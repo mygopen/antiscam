@@ -19,11 +19,11 @@ export async function onRequestPost(context) {
             ...messages 
         ];
 
-        // 👇 換上極速文字大腦 Gemma 3 1B
-        const response = await env.AI.run('@cf/google/gemma-3-1b-it', {
+        // 👇 換回最穩定的純文字模型：Llama 3.2 3B
+        const response = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
             messages: conversation,
             max_tokens: 80,   
-            temperature: 0.6  // 稍微調高溫度，讓對話比較自然不死板
+            temperature: 0.6  
         });
 
         return new Response(JSON.stringify({ 
