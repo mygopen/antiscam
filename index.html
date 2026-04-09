@@ -3,7 +3,6 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-H2BBLS3D8L"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -137,6 +136,13 @@
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
+
+        // 👇 定義知名的社群/通訊平台網域，攔截這些網址
+        const SOCIAL_MEDIA_DOMAINS = [
+            'facebook.com', 'fb.com', 'fb.me', 'instagram.com', 'ig.me', 
+            'twitter.com', 'x.com', 'tiktok.com', 'youtube.com', 'youtu.be', 
+            'threads.net', 'line.me', 'dcard.tw', 'plurk.com', 'weibo.com', 'xiaohongshu.com'
+        ];
 
         // --- Icons ---
         const IconBase = ({ children, size = 20, className = "" }) => (
@@ -392,20 +398,16 @@
             } catch (e) { return null; }
         };
 
-// 👇 移除 customBlacklist 參數
         const checkCommunityBlocklists = async (domain) => {
             const lowerDomain = domain.toLowerCase();
-
-            // 🔒 1. 呼叫後端 API 檢查私有隱藏黑名單 (使用者看不到名單)
             try {
                 const res = await fetch(`/api/check-blacklist?domain=${encodeURIComponent(lowerDomain)}`);
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.isBlacklisted) return true; // 如果後端說是黑名單，直接判死刑
+                    if (data.isBlacklisted) return true;
                 }
             } catch (e) { console.error("黑名單 API 連線失敗", e); }
 
-            // 2. 檢查開源社群黑名單 (這些是公開來源，留前端無妨)
             try {
                 const sources = [
                     'https://cdn.jsdelivr.net/gh/houboyjacky/Ad-Malicious-Scams-Boring-Farm-Filter@master/ScamsSiteGetFromFB_TonyNey.txt',
@@ -418,7 +420,6 @@
                 const combinedText = contents.join('\n');
                 if (!combinedText) return false;
                 const lines = combinedText.split(/\r?\n/);
-                const lowerDomain = domain.toLowerCase();
                 return lines.some(line => {
                     let cleanLine = line.trim();
                     if (!cleanLine || cleanLine.startsWith('!') || cleanLine.startsWith('#')) return false;
@@ -510,6 +511,9 @@
                 return domain === lowerW || domain.endsWith('.' + lowerW);
             });
 
+            // 👇 判斷是否為社群平台
+            const isSocialMedia = SOCIAL_MEDIA_DOMAINS.some(s => domain === s || domain.endsWith('.' + s));
+
             const isTrustedTLD = domain.endsWith('.com.tw') ||
                 domain.endsWith('.org.tw') ||
                 domain.endsWith('.gov.tw') ||
@@ -522,7 +526,6 @@
             const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc', 'aka.ms', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com', 'l.messenger.com'];
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
-
 
             // 請替換原本的 Promise.all 區塊
             const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
@@ -756,20 +759,19 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     }
                 } // 👈 關閉 if (!isWhitelisted)
 
-                if (isWhitelisted && !isFakeGov && !isFinalFakeGov) riskScore = 0;
+                if (isWhitelisted && !isFakeGov && !isFinalFakeGov) {
+                    riskScore = 0;
+                }
 
-                // 4. 白名單強制歸零補丁
-                if (isWhitelisted && !isFakeGov) riskScore = 0;
+                // 👇 新增：社群媒體強制攔截，覆寫白名單的「安全」判定
+                if (isSocialMedia) {
+                    riskScore = 30; // 強制轉為黃色警告燈號
+                }
             } // 👈 關閉最外層的 if (!blocklistListed) else 區塊
 
 
-
-
-
-
             // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
-            if (isWhitelisted && !isFakeGov) riskScore = 0;
-
+            if (isWhitelisted && !isFakeGov && !isSocialMedia) riskScore = 0; // 修正白名單歸零邏輯
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
@@ -779,8 +781,13 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             let domainAnalysisStatus = 'safe';
             let domainAnalysisDetails = '網域命名結構無明顯異常';
 
+            if (isSocialMedia) {
+                domainAnalysisStatus = 'warning';
+                domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
+                siteContentMsg = '社群平台內容受隱私保護，無法自動掃描';
+            }
             // 改善點 2：新增寄生跳板的專屬警告文字 (放在最上面優先判斷)
-            if (isRedirected && isKnownShortener && !isFinalWhitelisted) {
+            else if (isRedirected && isKnownShortener && !isFinalWhitelisted) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到「寄生網域」詐騙：利用合法社群連結，秘密跳轉至危險網站！';
             }
@@ -815,10 +822,10 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed, isSocialMedia: isSocialMedia,
                 details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
                 checks: {
-                    siteContent: { status: (siteStatusData.status === 'ok') ? 'safe' : 'danger', label: '網站內容狀態', details: siteContentMsg },
+                    siteContent: { status: isSocialMedia ? 'warning' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger'), label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -1042,8 +1049,16 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                     role: 'assistant', 
                                     content: `【麥擱騙檢測報告】\n\n❌ 無法連結此網站\n\n阿麥查不到這個網址 (NXDOMAIN)，它可能已經失效或被封鎖了。但請注意，許多詐騙網址壽命都很短，請勿隨意點擊！` 
                                 }]);
-                            } else {
-                                // 👇 只有在網址活著的時候，才進行後續的 AI 品牌判定與分數計算
+                            } 
+                            // 👇 新增社群媒體專屬回覆
+                            else if (scanData.isSocialMedia) {
+                                setMessages(prev => [...prev, {
+                                    role: 'assistant',
+                                    content: `【麥擱騙檢測報告】\n風險評估：⚠️ 無法判斷內容\n\n這是社群平台，我們無法看到裡面的貼文，要多加小心留意！🦁`
+                                }]);
+                            }
+                            else {
+                                // 👇 只有在網址活著且非社群平台時，才進行後續的 AI 品牌判定與分數計算
                                 if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {   
                                     scanData.riskScore = 100;
                                 }
@@ -1330,12 +1345,16 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
                     if (document.activeElement) document.activeElement.blur();
 
+                    // 👇 判斷輸入網址是否為社群平台
+                    const isSocialInput = SOCIAL_MEDIA_DOMAINS.some(s => urlObj.hostname === s || urlObj.hostname.endsWith('.' + s));
+
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
                         simulateScan(urlObj.hostname, urlObj.href, externalWhitelist), 
-                        fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`)
-                            .then(res => res.json())
-                            .catch(() => null)
+                        // 👇 如果是社群網址，直接跳過後端 AI 品牌分析，省時又省錢
+                        isSocialInput 
+                            ? Promise.resolve(null) 
+                            : fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`).then(res => res.json()).catch(() => null)
                     ]);
 
                     // 👇 新增防呆：如果網域已經掛掉或不存在 (isInvalid)，就不需要把 AI 結果塞進去，避免程式崩潰
@@ -1377,8 +1396,8 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                 scanData.checks.siteContent.status = 'safe';
                                 scanData.checks.siteContent.details = 'AI 分析完畢，未發現冒用知名品牌之釣魚特徵';
                             }
-                        } else {
-                            // AI API 連線失敗時的備用文字
+                        } else if (!isSocialInput) {
+                            // AI API 連線失敗時的備用文字 (排除社群網站)
                             scanData.checks.siteContent.status = 'info';
                             scanData.checks.siteContent.details = '網頁內容已讀取 (AI 引擎暫時無回應)';
                         }
@@ -1411,26 +1430,40 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
             const handleCopyReport = () => {
                 if (!result) return;
-                const riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 低度風險');
+                
+                // 👇 複製報告時，也要考慮社群網站的特殊狀態
+                let riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 低度風險');
+                if (result.isSocialMedia) {
+                    riskLevel = '⚠️ 無法自動掃描 (社群平台)';
+                }
+
                 const warnings = [];
                 if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
+                
+                // 👇 社群專屬警告
+                if (result.isSocialMedia) {
+                    warnings.push('⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！');
+                }
+
                 if (result.checks.domainAnalysis.status === 'danger') {
                     if (result.domain.includes('-tw') || result.domain.includes('-com') || result.domain.includes('-online')) warnings.push('⚠️ 網域包含 "-tw", "-com" 或 "-online" 偽裝字樣，風險極高');
                     else if (result.domain.includes('gov') && !result.domain.endsWith('.gov') && !result.domain.endsWith('.gov.tw')) warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
                     else if ((result.domain.match(/-/g) || []).length >= 2) warnings.push('⚠️ 網域包含多個連字號 (-)，極高機率為詐騙');
-                } else if (result.checks.domainAnalysis.status === 'warning') warnings.push('⚠️ 使用免費架站平台，風險較高');
-                if (result.details.siteStatus.status === 'blank') warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
-                if (result.details.siteStatus.status === 'error') warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
-                if (result.details.siteStatus.status === 'unknown') warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
+                } else if (result.checks.domainAnalysis.status === 'warning' && !result.isSocialMedia) warnings.push('⚠️ 使用免費架站平台，風險較高');
+                
+                if (result.details.siteStatus.status === 'blank' && !result.isSocialMedia) warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
+                if (result.details.siteStatus.status === 'error' && !result.isSocialMedia) warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
+                if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
                 if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
                 if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
                 if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
-                if (result.checks.whoisPrivacy.status !== 'safe') warnings.push('⚠️ WHOIS 身份已隱藏');
+                if (result.checks.whoisPrivacy.status !== 'safe' && !result.isSocialMedia) warnings.push('⚠️ WHOIS 身份已隱藏');
                 if (result.checks.registrar.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${result.checks.registrar.details.split(' ')[1]})`);
                 if (result.checks.subdomain.status === 'danger') warnings.push('⚠️ 子網域層級過深 (≥ 5層)，極高風險');
                 else if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
                 if (result.checks.params.status === 'danger') warnings.push('⚠️ 包含敏感參數 (token/auth/session)');
+                
                 const report = `【幫你查好囉！網址檢測結果】\n----------------------\n🔍 幫你查了這個網址：${result.domain}\n🛡️ 目前的風險評估是：${riskLevel}\n----------------------\n${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).join('\n')}\n----------------------\n` : ''}請務必保持警覺，切勿隨意輸入個資🙏`;
                 const textArea = document.createElement("textarea");
                 textArea.value = report; textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
@@ -1568,17 +1601,21 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
 
                                 {/* ================= 核心結論區塊 (精簡版) ================= */}
                                 <div className={`mb-6 p-4 sm:p-5 md:p-8 rounded-2xl border-2 flex items-center gap-3 sm:gap-4 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
+                                    
                                     {/* 👇 根據風險等級，動態切換圖示與角色圖片 (手機版縮小為 w-10 h-10 節省空間) 👇 */}
-                                    {result.riskScore >= 70 ? (
+                                    {result.isSocialMedia ? (
+                                        <AlertTriangle size={40} className="text-yellow-600 flex-shrink-0 w-10 h-10 sm:w-10 sm:h-10 md:w-12 md:h-12" />
+                                    ) : result.riskScore >= 70 ? (
                                         <img src="https://ik.imagekit.io/mygopen/danger.png" alt="危險警告" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
                                     ) : result.riskScore >= 30 ? (
                                         <AlertTriangle size={40} className="text-yellow-600 flex-shrink-0 w-10 h-10 sm:w-10 sm:h-10 md:w-12 md:h-12" />
                                     ) : (
                                         <img src="https://ik.imagekit.io/mygopen/safe02.png" alt="安全無虞" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
                                     )}
+                                    
                                     {/* 👇 加入 whitespace-nowrap 強制不換行，並設定手機版字體為 [1.15rem] 搭配緊湊字距 👇 */}
                                     <h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide whitespace-nowrap ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
-                                        {result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險')}
+                                        {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : (result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險'))}
                                     </h3>
                                 </div>
 
