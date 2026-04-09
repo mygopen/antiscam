@@ -1680,10 +1680,39 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                         </div>
                                     )}
 
-                                    {/* 右側/下側：顯示 AI 的分析文字 */}
+{/* 右側/下側：顯示 AI 的分析文字 */}
                                     <div className="w-full md:w-2/3 flex flex-col justify-start">
-                                        <div className="bg-red-50 p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words break-all border border-red-100 shadow-sm font-medium h-full flex items-center">
-                                            {aiReport}
+                                        {/* 👇 動態背景：如果有「高」風險就變紅底，有「中」就變黃底，不然就是綠底 */}
+                                        <div className={`p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed break-words break-all border shadow-sm font-medium h-full flex flex-col justify-center gap-3 ${aiReport.includes('高') ? 'bg-red-50 border-red-200' : (aiReport.includes('中') ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')}`}>
+                                            
+                                            {aiReport.split('\n').map((line, i) => {
+                                                // 1. 如果是「風險」那一行：字體加大加粗，並根據高低風險換顏色
+                                                if (line.startsWith('⚠️ 風險：')) {
+                                                    const isHigh = line.includes('高');
+                                                    const isMedium = line.includes('中');
+                                                    const textColor = isHigh ? 'text-red-700' : (isMedium ? 'text-yellow-700' : 'text-green-700');
+                                                    return (
+                                                        <div key={i} className={`${textColor} text-xl md:text-2xl font-black mb-1 pb-3 border-b border-gray-200/50 tracking-wide`}>
+                                                            {line}
+                                                        </div>
+                                                    );
+                                                }
+                                                // 2. 如果是我們的系統強制竄改插入的「系統警告」：用紅底標籤凸顯
+                                                if (line.includes('🚨 系統警告：')) {
+                                                    return (
+                                                        <div key={i} className="text-red-700 font-bold bg-red-100/50 p-3 rounded-xl mt-1 text-sm md:text-base border border-red-200/50 shadow-inner">
+                                                            {line}
+                                                        </div>
+                                                    );
+                                                }
+                                                // 3. 其餘的分析、網址、建議：正常顯示
+                                                return (
+                                                    <div key={i} className="text-gray-700 leading-normal">
+                                                        {line}
+                                                    </div>
+                                                );
+                                            })}
+
                                         </div>
                                     </div>
                                 </div>
