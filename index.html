@@ -974,19 +974,24 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
                     let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
 
-                    // 👇 新增這段：如果 AI 抓到的是 Email，自動過濾只取 @ 後面的網域
-                    if (extractedUrl.includes('@')) {
-                        extractedUrl = extractedUrl.split('@')[1].trim();
-                    }
-                    
                     // 如果 AI 有成功抓到網址，且不是「無」
                     if (extractedUrl && extractedUrl !== "無" && extractedUrl !== "None") {
                         setLoadingMessage('發現網址！正在調用防詐資料庫交叉比對...');
                         
                         try {
+                            // 👇 修正：對付 AI 回傳多個網址 (例如用頓號、逗號或空白分隔)
+                            // 我們將字串切開，只取「第一個」項目作為主要掃描對象
+                            let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
+
+                            // 如果第一個項目是 Email，過濾只取 @ 後面的網域 (用 pop() 確保拿到最後一段)
+                            if (firstTarget.includes('@')) {
+                                firstTarget = firstTarget.split('@').pop().trim();
+                            }
+
                             // 補上 http 以便解析
-                            let urlToParse = /^https?:\/\//i.test(extractedUrl) ? extractedUrl : 'https://' + extractedUrl;
+                            let urlToParse = /^https?:\/\//i.test(firstTarget) ? firstTarget : 'https://' + firstTarget;
                             const urlObj = new URL(urlToParse);
+                            const parsedHostname = urlObj.hostname.toLowerCase();
 
                             // 👉 將網址丟入我們寫好的核心檢測系統
                             const [scanData, brandDataRes] = await Promise.all([
