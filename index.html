@@ -975,15 +975,14 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
 
                     // 如果 AI 有成功抓到網址，且不是「無」
-                    if (extractedUrl && extractedUrl !== "無" && extractedUrl !== "None") {
+                    if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
                         setLoadingMessage('發現網址！正在調用防詐資料庫交叉比對...');
                         
                         try {
-                            // 👇 修正：對付 AI 回傳多個網址 (例如用頓號、逗號或空白分隔)
-                            // 我們將字串切開，只取「第一個」項目作為主要掃描對象
+                            // 1. 處理多網址情況：只取第一個
                             let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
 
-                            // 如果第一個項目是 Email，過濾只取 @ 後面的網域 (用 pop() 確保拿到最後一段)
+                            // 2. 處理 Email 情況：如果字串包含 @，只取 @ 後面的網域
                             if (firstTarget.includes('@')) {
                                 firstTarget = firstTarget.split('@').pop().trim();
                             }
@@ -993,39 +992,69 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                             const urlObj = new URL(urlToParse);
                             const parsedHostname = urlObj.hostname.toLowerCase();
 
-                            // 👉 將網址丟入我們寫好的核心檢測系統
+                            // 👉 系統鐵腕查核：將網域丟入核心檢測系統
                             const [scanData, brandDataRes] = await Promise.all([
-                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
+                                simulateScan(parsedHostname, urlObj.href, externalWhitelist),
                                 fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
                             ]);
 
-                            let isHighlyDangerous = false;
-                            let dbWarning = "";
+                            // 💡 最高指導原則：系統查核結果永遠大於 AI 判斷！
+                            
+                            // 判斷是否為官方白名單網域
+                            const isSafeWhitelisted = externalWhitelist.some(w => {
+                                const lowerW = w.toLowerCase();
+                                return parsedHostname === lowerW || parsedHostname.endsWith('.' + lowerW);
+                            });
 
-                            // 🚨 系統資料庫判定邏輯
-                            if (scanData.blocklistListed) {
-                                isHighlyDangerous = true;
-                                dbWarning = "🚨 系統警告：此網址已列入 165 詐騙黑名單！";
-                            } else if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
-                                isHighlyDangerous = true;
-                                dbWarning = `🚨 系統警告：資料庫確認此為假冒網站 (${brandDataRes.detectedBrand || '高風險特徵'})！`;
-                            } else if (scanData.riskScore >= 70) {
-                                isHighlyDangerous = true;
-                                dbWarning = "🚨 系統警告：此網址經系統掃描具備極高風險特徵！";
-                            }
+                            if (isSafeWhitelisted) {
+                                // ✅ 系統權威：確認為白名單，強制推翻 AI 判定並洗白
+                                finalReport = finalReport.replace(/⚠️.*/, '⚠️ 風險：低風險 (官方白名單網域)');
+                                finalReport = finalReport.replace(/(🔍.*)/, `$1\n✅ 系統驗證：資料庫確認此為官方網址，請安心使用。`);
+                            } else {
+                                // 🚨 系統權威：檢視惡意特徵與資料庫
+                                const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
+                                const isSuspiciousSuffix = highRiskSuffixes.some(s => parsedHostname.endsWith(s));
 
-                            // 💥 竄改 AI 報告：如果資料庫說是詐騙，強制改寫 AI 的風險等級！
-                            if (isHighlyDangerous) {
-                                // 1. 強制修改風險標籤為高風險
-                                finalReport = finalReport.replace(/⚠️ 風險：.*?風險/, '⚠️ 風險：高風險');
-                                // 2. 在分析結果的下一行，插入紅色的系統警告
-                                finalReport = finalReport.replace(/(🔍 分析：.*)/, `$1\n${dbWarning}`);
+                                let systemRiskLevel = null;
+                                let dbWarning = "";
+
+                                // 階層式給定系統分數與警告詞
+                                if (isSuspiciousSuffix) {
+                                    systemRiskLevel = "高風險";
+                                    dbWarning = "🚨 系統警告：此網址使用高風險異常後綴，極高機率為詐騙！";
+                                } else if (scanData.blocklistListed) {
+                                    systemRiskLevel = "高風險";
+                                    dbWarning = "🚨 系統警告：此網址已列入 165 詐騙黑名單！";
+                                } else if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
+                                    systemRiskLevel = "高風險";
+                                    dbWarning = `🚨 系統警告：資料庫確認此為假冒網站 (${brandDataRes.detectedBrand || '高風險特徵'})！`;
+                                } else if (scanData.isInvalid) {
+                                    systemRiskLevel = "高風險";
+                                    dbWarning = "🚨 系統警告：此網址目前已失效或被封鎖，這是詐騙免洗網站的常見特徵！";
+                                } else if (scanData.riskScore >= 70) {
+                                    systemRiskLevel = "高風險";
+                                    dbWarning = "🚨 系統警告：此網址經系統掃描具備極高風險特徵！";
+                                } else if (scanData.riskScore >= 30) {
+                                    systemRiskLevel = "中風險";
+                                    dbWarning = "⚠️ 系統注意：此網址存在部分可疑特徵，請小心留意！";
+                                }
+
+                                // 💥 強制竄改 AI 報告：完全依照系統的判定覆寫
+                                if (systemRiskLevel === "高風險" || systemRiskLevel === "中風險") {
+                                    finalReport = finalReport.replace(/⚠️.*/, `⚠️ 風險：${systemRiskLevel}`);
+                                    
+                                    // 插入對應的系統警告標籤
+                                    if (!finalReport.includes('系統警告') && !finalReport.includes('系統注意')) {
+                                        finalReport = finalReport.replace(/(🔍.*)/, `$1\n${dbWarning}`);
+                                    }
+                                }
                             }
                         } catch(e) {
                             console.log("網址比對解析失敗", e);
+                            // 極端情況：網址亂碼導致系統無法解析，退回簡單的後綴檢查防呆
                             const suspiciousKeywords = ['.top', '.xyz', '.site', '.vip', '.shop'];
                             if (suspiciousKeywords.some(kw => extractedUrl.toLowerCase().includes(kw))) {
-                                finalReport = finalReport.replace(/⚠️ 風險：.*/, '⚠️ 風險：高風險');
+                                finalReport = finalReport.replace(/⚠️.*/, '⚠️ 風險：高風險');
                             }
                         }
                     }
@@ -1711,7 +1740,9 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                                         </div>
                                                     );
                                                 }
-                                                // 2. 如果是我們的系統強制竄改插入的「系統警告」：用紅底標籤凸顯
+
+
+// 2. 如果是我們的系統強制竄改插入的「系統警告」：用紅底標籤凸顯
                                                 if (line.includes('🚨 系統警告：')) {
                                                     return (
                                                         <div key={i} className="text-red-700 font-bold bg-red-100/50 p-3 rounded-xl mt-1 text-sm md:text-base border border-red-200/50 shadow-inner">
@@ -1719,7 +1750,17 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                                         </div>
                                                     );
                                                 }
-                                                // 3. 其餘的分析、網址、建議：正常顯示
+                                                // 👇 新增這段：如果是系統強制標記的中風險：用黃底標籤凸顯 👇
+                                                if (line.includes('⚠️ 系統注意：')) {
+                                                    return (
+                                                        <div key={i} className="text-yellow-700 font-bold bg-yellow-100/50 p-3 rounded-xl mt-1 text-sm md:text-base border border-yellow-200/50 shadow-inner">
+                                                            {line}
+                                                        </div>
+                                                    );
+                                                }
+                                                // 3. 針對洗白的系統驗證給予綠色標籤
+
+    
                                                 return (
                                                     <div key={i} className="text-gray-700 leading-normal">
                                                         {line}
