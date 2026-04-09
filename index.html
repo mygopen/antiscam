@@ -1080,9 +1080,17 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                 body: JSON.stringify({ messages: newMessages.slice(-3) })
                             });
                             const data = await res.json();
-                            setMessages(prev => [...prev, { role: 'assistant', content: data.reply || '如果有可疑網址，直接貼上來讓我檢查最快喔！' }]);
+                            
+                            // 👇 新增錯誤捕捉：如果 API 壞掉，就拋出錯誤，不要被備用文字蓋掉
+                            if (!res.ok || data.error) {
+                                throw new Error(data.error || 'API 錯誤');
+                            }
+                            
+                            // 正常情況下，只印出 AI 的回覆
+                            setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
                         } catch (err) {
-                            setMessages(prev => [...prev, { role: 'assistant', content: '阿麥覺得網路有點不穩，請直接貼上網址讓我幫你檢測！' }]);
+                            // 萬一真的連不上 API，給予明確的系統錯誤提示
+                            setMessages(prev => [...prev, { role: 'assistant', content: '阿麥的文字大腦暫時連線上線，請直接貼網址或截圖給我吧！🦁' }]);
                         } finally {
                             setIsTyping(false);
                         }
