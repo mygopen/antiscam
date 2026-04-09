@@ -862,7 +862,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? 'warning' : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? '網域名稱隨機度過高，疑似機器生成' : '網域名稱結構正常' },
-                    iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' }
+                    iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
                     apkCheck: { status: isApkSite ? 'danger' : 'safe', label: '可疑檔案下載', details: isApkSite ? '偵測到不明 APK 檔下載，極高風險！' : '未偵測到可疑 Android 應用程式' }
                 }
             };
@@ -1849,7 +1849,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                                         </div>
                                                     );
                                                 }
-                                                // 👇 新增這段：如果是系統強制標記的中風險：用黃底標籤凸顯 👇
+                                               // 👇 新增這段：如果是系統強制標記的中風險：用黃底標籤凸顯 👇
                                                 if (line.includes('⚠️ 系統注意：')) {
                                                     return (
                                                         <div key={i} className="text-yellow-700 font-bold bg-yellow-100/50 p-3 rounded-xl mt-1 text-sm md:text-base border border-yellow-200/50 shadow-inner">
@@ -1858,8 +1858,22 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                                     );
                                                 }
                                                 // 3. 針對洗白的系統驗證給予綠色標籤
-
-    
+                                                if (line.includes('✅ 系統驗證：')) {
+                                                    return (
+                                                        <div key={i} className="text-green-700 font-bold bg-green-100/50 p-3 rounded-xl mt-1 text-sm md:text-base border border-green-200/50 shadow-inner">
+                                                            {line}
+                                                        </div>
+                                                    );
+                                                }
+                                                // 4. 針對 Email 寄件者的溫馨提醒，給予「藍色」的顯眼標籤
+                                                if (line.includes('💡 溫馨提醒：')) {
+                                                    return (
+                                                        <div key={i} className="text-blue-700 font-bold bg-blue-100/50 p-3 rounded-xl mt-1 text-sm md:text-base border border-blue-200/50 shadow-inner">
+                                                            {line}
+                                                        </div>
+                                                    );
+                                                }
+                                                
                                                 return (
                                                     <div key={i} className="text-gray-700 leading-normal">
                                                         {line}
