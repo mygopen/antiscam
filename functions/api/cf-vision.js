@@ -22,16 +22,13 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 終極防呆提示詞：明確要求「替換括號內容」，防止 AI 照抄模板
-        const promptText = `請分析這張圖片是否有詐騙風險。嚴禁廢話與解釋。
-        
-🚨【最高優先指令 1】：請仔細掃描圖片頂部是否有「瀏覽器網址列」。若有網址，優先判斷該網域是否可疑（如假冒品牌、亂碼、.top/.xyz等異常後綴），並列為第一點疑慮！
-🚨【最高優先指令 2】：若為「Email、簡訊、LINE 對話」截圖，務必在建議中強制加入：「注意！詐騙常將惡意網址隱藏在文字底層，請長按複製真實網址檢測，勿直接點擊！」
-
-請嚴格依照以下格式輸出（務必極度精簡，總字數 80 字內）：
-⚠️ 風險：【高/中/低】 - 【10字內總結】
-🔍 疑慮：【列出最重要的1個可疑點】
-🛡️ 建議：【10字內防護建議 或 直接套用指令2】`;
+        // 👇 提示詞升級：擴充為 4 行，並強制第一行用指定句型開頭
+        const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或「Input:」前言。
+請用台灣繁體中文，根據圖片內容直接回答並「替換括號中的提示」，輸出以下 4 行：
+👀 畫面：這看起來像是【填寫：網頁/簡訊/LINE/Email/社群貼文 等】截圖
+⚠️ 風險：【只回答 高、中 或 低】
+🔍 分析：【一句話指出圖片最可疑的地方】
+🛡️ 建議：【一句話給予防護建議】`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
@@ -49,8 +46,8 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 👇 將溫度微調至 0.2，給它一點點思考空間，避免它因為太死板而照抄模板
-                    generationConfig: { maxOutputTokens: 120, temperature: 0.2 }
+                    // 👇 因為多了一行字，將 tokens 放寬至 150 以免被中途切斷，溫度維持 0.2
+                    generationConfig: { maxOutputTokens: 150, temperature: 0.2 }
                 })
             });
 
@@ -64,18 +61,21 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 金鐘罩攔截器 (Regex)：精準抽出帶有這三個符號的句子，無視廢話
+        // 👇 金鐘罩攔截器 (Regex)：新增對 👀 符號的抓取
         const extractCleanReport = (rawText) => {
+            const viewMatch = rawText.match(/👀.*?(?=\n|$)/);
             const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
             const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
             const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
 
             // 移除 AI 可能加上的 Markdown 粗體星號
+            const view = viewMatch ? viewMatch[0].replace(/[*#_`~]/g, '').trim() : "👀 畫面：這看起來像是一張截圖";
             const risk = riskMatch ? riskMatch[0].replace(/[*#_`~]/g, '').trim() : "⚠️ 風險：待確認";
             const analysis = analysisMatch ? analysisMatch[0].replace(/[*#_`~]/g, '').trim() : "🔍 分析：細節待查證";
             const advice = adviceMatch ? adviceMatch[0].replace(/[*#_`~]/g, '').trim() : "🛡️ 建議：請勿隨意點擊連結或提供個資";
 
-            return `${risk}\n${analysis}\n${advice}`;
+            // 組合出 4 行的最終報告
+            return `${view}\n${risk}\n${analysis}\n${advice}`;
         };
 
         let cleanReport = '';
