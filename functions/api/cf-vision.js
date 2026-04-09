@@ -22,11 +22,11 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-        // 👇 提示詞升級：擴充為 4 行，並強制第一行用指定句型開頭
-        const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或「Input:」前言。
-請用台灣繁體中文，根據圖片內容直接回答並「替換括號中的提示」，輸出以下 4 行：
-👀 畫面：這應該是【網頁/簡訊/LINE/Email/社群貼文】的截圖喔！
-⚠️ 風險：判斷為【高、中、低】風險。
+        // 👇 提示詞：要回完整的 4 行，並且用引導的方式讓它自然填空
+        const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或前言。
+請用台灣繁體中文，根據圖片內容直接回答，並將括號替換為你的判斷結果，只輸出以下4行：
+👀 畫面：這應該是【填寫圖片來源，例如：購物網頁、LINE對話、手機簡訊等】的截圖喔！
+⚠️ 風險：判斷為【高、中 或 低】風險。
 🔍 分析：【一句話指出圖片最可疑的地方】
 🛡️ 建議：【一句話給予防護建議】`;
 
@@ -46,7 +46,7 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 👇 因為多了一行字，將 tokens 放寬至 150 以免被中途切斷，溫度維持 0.2
+                    // 給予 150 Tokens 的空間印出這 4 行，溫度 0.2 保持微幅彈性
                     generationConfig: { maxOutputTokens: 150, temperature: 0.2 }
                 })
             });
@@ -61,27 +61,25 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 金鐘罩攔截器 (Regex)：新增對 👀 符號的抓取
+        // 👇 攔截器：動態抓取 4 行，並強制移除死板的 【 】 中括號
         const extractCleanReport = (rawText) => {
             const viewMatch = rawText.match(/👀.*?(?=\n|$)/);
             const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
             const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
             const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
 
-            // 移除 AI 可能加上的 Markdown 粗體星號
-            const view = viewMatch ? viewMatch[0].replace(/[*#_`~]/g, '').trim() : "👀 畫面：這看起來像是一張截圖";
-            const risk = riskMatch ? riskMatch[0].replace(/[*#_`~]/g, '').trim() : "⚠️ 風險：待確認";
-            const analysis = analysisMatch ? analysisMatch[0].replace(/[*#_`~]/g, '').trim() : "🔍 分析：細節待查證";
-            const advice = adviceMatch ? adviceMatch[0].replace(/[*#_`~]/g, '').trim() : "🛡️ 建議：請勿隨意點擊連結或提供個資";
+            const view = viewMatch ? viewMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "👀 畫面：這看起來像是一張截圖";
+            const risk = riskMatch ? riskMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "⚠️ 風險：待確認";
+            const analysis = analysisMatch ? analysisMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🔍 分析：細節待查證";
+            const advice = adviceMatch ? adviceMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
 
-            // 組合出 4 行的最終報告
             return `${view}\n${risk}\n${analysis}\n${advice}`;
         };
 
         let cleanReport = '';
 
         // ====================================================================
-        // 🌟 引擎一：Google Gemma 3 4B (主將 - 極限速度，14.4K 額度)
+        // 🌟 引擎一：Google Gemma 3 4B (主將 - 極限速度)
         // ====================================================================
         try {
             const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
@@ -91,7 +89,7 @@ export async function onRequestPost(context) {
             console.log("⚠️ Gemma 3 4B 失敗，切換至 12B 備援...", err4b.message);
             
             // ====================================================================
-            // 🌟 引擎二：Google Gemma 3 12B (副將 - 速度與智力的完美平衡)
+            // 🌟 引擎二：Google Gemma 3 12B (副將)
             // ====================================================================
             try {
                 const rawReport = await callGoogleGemmaAPI('gemma-3-12b-it');
