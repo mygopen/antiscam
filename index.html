@@ -1613,10 +1613,10 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                                         <img src="https://ik.imagekit.io/mygopen/safe02.png" alt="安全無虞" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
                                     )}
                                     
-                                    {/* 👇 加入 whitespace-nowrap 強制不換行，並設定手機版字體為 [1.15rem] 搭配緊湊字距 👇 */}
-                                    <h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide whitespace-nowrap ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
-                                        {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : (result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險'))}
-                                    </h3>
+{/* 👇 移除 whitespace-nowrap，加入 leading-snug 讓長句子可以自然換行且行距美觀 👇 */}
+<h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide leading-snug ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
+    {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : (result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險'))}
+</h3>
                                 </div>
 
                                 <a href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} target="_blank" rel="noopener noreferrer" className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-md bg-[#4285F4] hover:bg-[#3367D6] text-white">
