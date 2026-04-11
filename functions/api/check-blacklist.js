@@ -27,7 +27,8 @@ export async function onRequest(context) {
         "soapants.com",
         "qcgexchange.com",
         "opengraverecords.com",
-        "tulingwangluo.com"
+        "tulingwangluo.com",
+        "telenet.be"
     ];
 
     // 檢查邏輯：完全符合，或是其子網域
