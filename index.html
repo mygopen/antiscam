@@ -993,35 +993,7 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     // 1. 拿到後端已經完美審核並竄改過的報告
                     let finalReport = data.report;
 
-                    // 2. 如果報告裡有網址，我們仍然需要在前端執行一次 simulateScan，這是為了在畫面下方畫出那張美麗的「詳細技術分析卡片」
-                    const urlMatch = finalReport.match(/🔗 網址：(.*?)(?=\n|$)/);
-                    let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
-
-                    if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
-                        setLoadingMessage('正在產生詳細技術分析卡片...');
-                        try {
-                            let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
-                            if (firstTarget.includes('@')) {
-                                firstTarget = firstTarget.split('@').pop().trim();
-                            }
-                            let urlToParse = /^https?:\/\//i.test(firstTarget) ? firstTarget : 'https://' + firstTarget;
-                            const urlObj = new URL(urlToParse);
-                            const parsedHostname = urlObj.hostname.toLowerCase();
-
-                            const [scanData, brandDataRes] = await Promise.all([
-                                simulateScan(parsedHostname, urlObj.href, externalWhitelist),
-                                fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
-                            ]);
-
-                            // 設定 Result，讓畫面下方的圓餅圖與技術卡片顯現出來
-                            setBrandAnalysis(brandDataRes);
-                            setResult(scanData);
-                        } catch(e) {
-                            console.log("前端視覺卡片產生失敗", e);
-                        }
-                    }
-
-                    // 3. 輸出報告給 UI
+                    // 2. 直接輸出報告給 UI (不再呼叫 simulateScan 畫技術卡片)
                     setAiReport(finalReport);
                     
                     if (typeof gtag === 'function') {
