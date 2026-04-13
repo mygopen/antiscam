@@ -102,13 +102,16 @@ let cleanReport = '';
         const urlMatch = cleanReport.match(/🔗 網址：(.*?)(?=\n|$)/);
         let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
 
-        if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
+       if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
             try {
+                let isEmail = false; // 👈 標記這是不是一個 Email
+
                 // 1. 處理多網址情況：只取第一個
                 let firstTarget = extractedUrl.split(/[、, \t]+/)[0].trim();
                 // 2. 處理 Email 情況：如果字串包含 @，只取 @ 後面的網域
                 if (firstTarget.includes('@')) {
                     firstTarget = firstTarget.split('@').pop().trim();
+                    isEmail = true; // 確認為 Email
                 }
 
                 let urlToParse = /^https?:\/\//i.test(firstTarget) ? firstTarget : 'https://' + firstTarget;
@@ -118,7 +121,7 @@ let cleanReport = '';
                 // 抓取當前網站的 Origin (例如 https://mygopen.com)，以便在後端呼叫自己的 API
                 const origin = new URL(request.url).origin;
 
-                // 平行呼叫後端自家的 API 進行鐵腕查核 (模擬前端的 simulateScan 行為)
+                // 平行呼叫後端自家的 API 進行鐵腕查核
                 const [wlRes, blRes, brandRes, dnsRes] = await Promise.allSettled([
                     fetch(new URL('/whitelist.json', origin)).then(r => r.json()),
                     fetch(new URL(`/api/check-blacklist?domain=${encodeURIComponent(parsedHostname)}`, origin)).then(r => r.json()),
@@ -126,17 +129,25 @@ let cleanReport = '';
                     fetch(`https://dns.google/resolve?name=${parsedHostname}&type=A`).then(r => r.json())
                 ]);
 
-                // 安全地解開 Promise 結果
                 const whitelist = (wlRes.status === 'fulfilled' && wlRes.value.domains) ? wlRes.value.domains : [];
                 const isBlacklisted = (blRes.status === 'fulfilled' && blRes.value.isBlacklisted) ? true : false;
                 const brandData = (brandRes.status === 'fulfilled') ? brandRes.value : null;
                 const isInvalid = (dnsRes.status === 'fulfilled' && dnsRes.value.Status === 3) ? true : false;
 
                 // 判斷是否為官方白名單網域
-                const isSafeWhitelisted = whitelist.some(w => {
+                let isSafeWhitelisted = whitelist.some(w => {
                     const lowerW = w.toLowerCase();
                     return parsedHostname === lowerW || parsedHostname.endsWith('.' + lowerW);
                 });
+
+                // 👇 系統漏洞修補 1：免費信箱防護
+                // 如果 AI 抓到的是 Email，且網域是 Gmail、Yahoo 等免費信箱，絕對不能當作「官方白名單」來洗白！
+                if (isEmail && isSafeWhitelisted) {
+                    const freeEmailProviders = ['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.com.tw', 'hotmail.com', 'outlook.com', 'live.com', 'icloud.com', 'mail.com', 'msn.com', 'hinet.net'];
+                    if (freeEmailProviders.some(p => parsedHostname === p || parsedHostname.endsWith('.' + p))) {
+                        isSafeWhitelisted = false; // 撤銷免死金牌
+                    }
+                }
 
                 if (isSafeWhitelisted) {
                     // ✅ 後端權威洗白
@@ -165,9 +176,13 @@ let cleanReport = '';
                     } else if (isInvalid) {
                         systemRiskLevel = "高風險";
                         dbWarning = "🚨 系統警告：此網址目前已失效或被封鎖，這是詐騙免洗網站的常見特徵！";
+                    } 
+                    // 👇 系統漏洞修補 2：語氣矛盾校正防線
+                    // 如果 AI 內文已經判斷出異常，系統予以尊重，直接升級為高風險！
+                    else if (/(異常|可疑|偽造|不符|冒用|假冒|拼湊|釣魚|詐騙)/.test(cleanReport)) {
+                        systemRiskLevel = "高風險";
+                        dbWarning = "🚨 系統警告：AI 判定此畫面具有明顯的釣魚與冒用特徵！";
                     }
-                    // 備註：在純後端模式下，我們略過了耗時的 traceData 與 html 爬蟲以換取反應速度，
-                    // 所以這裡沒有算 riskScore，但已涵蓋了 90% 的致命特徵。
 
                     // 💥 後端權威竄改：強制改寫 AI 報告
                     if (systemRiskLevel === "高風險") {
