@@ -192,7 +192,7 @@ let cleanReport = '';
                         }
                     }
                 }
-            } catch(e) {
+           } catch(e) {
                 console.log("後端網址比對解析失敗", e);
                 // 防呆：如果網址亂碼導致當機，退回簡單的字串比對
                 const suspiciousKeywords = ['.top', '.xyz', '.site', '.vip', '.shop', '.apk'];
@@ -201,6 +201,12 @@ let cleanReport = '';
                 }
             }
         }
+
+        // =========================================================
+        // 👇 終極清理：撕掉 AI 腦補的便條紙，確保畫面與複製結果絕對乾淨
+        // =========================================================
+        // 把文字切成一行一行，如果那一行是用 🔍 開頭的，就把它丟掉，剩下的重新組合起來！
+        cleanReport = cleanReport.split('\n').filter(line => !line.trim().startsWith('🔍')).join('\n');
 
         return new Response(JSON.stringify({ report: cleanReport }), {
             headers: { 'Content-Type': 'application/json' }
