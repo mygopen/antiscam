@@ -555,7 +555,7 @@
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
             const traceChain = traceData ? traceData.chain : [];
-            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh'];
+            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh', 'cloudfront.net', 'workers.dev', 'web.app', 'azureedge.net', 'ondigitalocean.app'];
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
 
             // 修正：只有在白名單內或高流量且不是免費空間時才視為高流量網站
@@ -581,8 +581,10 @@
                 trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
             }
 
-            const entropy = calculateEntropy(domain.split('.')[0]);
-            const isHighEntropy = entropy > 4.2;
+            const subdomainPart = domain.split('.')[0];
+            const entropy = calculateEntropy(subdomainPart);
+            // 修正：降低數學亂度門檻，並加入 Regex 暴力檢查 (如果子網域是 12~30 碼的純英數隨機組合，直接判定為亂碼)
+            const isHighEntropy = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
             const hyphenCount = (domain.match(/-/g) || []).length;
             const hasMultipleHyphens = hyphenCount >= 2;
 
