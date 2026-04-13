@@ -555,7 +555,7 @@
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
             const traceChain = traceData ? traceData.chain : [];
-            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh', 'cloudfront.net', 'workers.dev', 'web.app', 'azureedge.net', 'ondigitalocean.app'];
+            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh', 'cloudfront.net', 'workers.dev', 'web.app', 'azureedge.net', 'ondigitalocean.app', 'eu.cc'];
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
 
             // 修正：只有在白名單內或高流量且不是免費空間時才視為高流量網站
@@ -760,8 +760,18 @@ if (isFakeGov || isFinalFakeGov) riskScore += 90;
         // 👇 新增：嚴懲「用連字號假冒知名網域」的行為
         // 詐騙集團喜歡用 com-tw, 7-11-com 等字眼來騙人
         // 👇 擴大攔截網，只要包含 myship, 711-tw, familytw 等字眼就一律重罰 80 分
-        const hasFakeDomainKeywords = domain.includes('com-tw') || domain.includes('7-11-com') || domain.includes('myship-711') || domain.includes('711-tw') || domain.includes('myship') || domain.includes('familytw') || domain.includes('famiport');
-        if (hasFakeDomainKeywords) riskScore += 80;
+// 👇 金融與品牌偽裝強力攔截器
+const scamKeywords = [
+    'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov', // 銀行類
+    '7-11-com', 'myship-711', '711-tw', 'familytw', 'famiport', 'myship', // 電商類
+    'com-tw', '-online', '-verify', '-login' // 動作類
+];
+
+// 如果網域包含以上關鍵字，且該網域「不在」官方白名單內，直接重罰 90 分！
+const containsScamKeyword = scamKeywords.some(kw => domain.includes(kw));
+if (containsScamKeyword && !isWhitelisted) {
+    riskScore += 90;
+}
 
         // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分 (如果已經因為上面的假冒網域扣分了，這裡就當作疊加懲罰)
         if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
