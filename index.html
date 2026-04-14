@@ -932,6 +932,7 @@ if (containsScamKeyword && !isWhitelisted) {
             const [deferredPrompt, setDeferredPrompt] = useState(null);
             const [showPrompt, setShowPrompt] = useState(false);
             const [isIOS, setIsIOS] = useState(false);
+            const [isChromeIOS, setIsChromeIOS] = useState(false); // 👈 新增：判斷是否為 iOS Chrome
 
             useEffect(() => {
                 // 1. 檢查是否已經按過「下次再說」或已經安裝
@@ -941,11 +942,17 @@ if (containsScamKeyword && !isWhitelisted) {
                 if (isStandalone) return; // 已經是 App 模式就不干擾
 
                 // 2. 判斷是否為 iOS 設備
-                const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                const userAgent = window.navigator.userAgent;
+                const isDeviceIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+                
                 if (isDeviceIOS) {
                     setIsIOS(true);
+                    // 偵測 iOS 版的 Chrome (User Agent 會包含 CriOS)
+                    if (/CriOS/i.test(userAgent)) {
+                        setIsChromeIOS(true);
+                    }
+
                     if (!hasSeen) {
-                        // iOS 不會觸發安裝事件，所以我們自己延遲 3 秒後跳出提示
                         setTimeout(() => setShowPrompt(true), 3000);
                     }
                 }
@@ -965,7 +972,13 @@ if (containsScamKeyword && !isWhitelisted) {
 
             const handleInstall = async () => {
                 if (isIOS) {
-                    alert('🍎 Apple 手機請點擊瀏覽器下方的「分享」圖示 ⬆️，然後滑動選單找到「加到主畫面」就可以囉！🦁');
+                    // 👇 根據不同瀏覽器，給予精準的安裝教學
+                    if (isChromeIOS) {
+                        alert('🍎 在 Chrome 安裝：\n請點擊網址列右上角的「分享」圖示 ⬆️\n(或點擊「...」選單)，\n然後滑動找到「加到主畫面」就可以囉！🦁');
+                    } else {
+                        alert('🍎 在 Safari 安裝：\n請點擊瀏覽器正下方的「分享」圖示 ⬆️\n，然後滑動選單找到「加到主畫面」就可以囉！🦁');
+                    }
+                    
                     setShowPrompt(false);
                     localStorage.setItem('hasSeenInstallPrompt', 'true');
                     return;
