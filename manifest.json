@@ -1,0 +1,30 @@
+{
+  "name": "麥擱騙｜詐騙網址幫你查",
+  "short_name": "麥擱騙",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#d93025",
+  "icons": [
+    {
+      "src": "https://ik.imagekit.io/mygopen/check_ico.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://ik.imagekit.io/mygopen/check_ico.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
