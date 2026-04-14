@@ -592,8 +592,19 @@
 
             const subdomainPart = domain.split('.')[0];
             const entropy = calculateEntropy(subdomainPart);
-            // 修正：降低數學亂度門檻，並加入 Regex 暴力檢查 (如果子網域是 12~30 碼的純英數隨機組合，直接判定為亂碼)
-            const isHighEntropy = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
+            
+            // 1. 長亂碼檢查 (既有邏輯：高數學亂度 或 12碼以上的英數組合)
+            const isLongGibberish = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
+            
+            // 👇 2. 新增：短亂碼 (DGA 演算法) 暴力檢查法
+            // 特徵 A：5個字母以上，卻完全沒有母音 a, e, i, o, u (例如 yqhgw, xsddk)
+            const lacksVowels = subdomainPart.length >= 5 && !/[aeiou]/i.test(subdomainPart);
+            // 特徵 B：連續出現 4 個以上的子音字母，極度不符合正常英文拼字邏輯
+            const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxz]{4,}/i.test(subdomainPart);
+            
+            // 只要符合任一項特徵，且不是常見的 www 等，就判定為高風險亂碼
+            const isHighEntropy = (isLongGibberish || lacksVowels || hasConsecutiveConsonants) && subdomainPart !== 'www';
+            
             const hyphenCount = (domain.match(/-/g) || []).length;
             const hasMultipleHyphens = hyphenCount >= 2;
 
