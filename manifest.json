@@ -3,7 +3,7 @@
   "short_name": "麥擱騙",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
+  "background_color": "#ffffff",
   "theme_color": "#d93025",
   "icons": [
     {
