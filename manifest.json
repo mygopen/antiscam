@@ -12,9 +12,10 @@
       "type": "image/png"
     },
     {
-      "src": "https://ik.imagekit.io/mygopen/check_ico.png",
+      "src": "https://ik.imagekit.io/mygopen/mycheck.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "share_target": {
