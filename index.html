@@ -990,7 +990,8 @@ if (containsScamKeyword && !isWhitelisted) {
             if (!showPrompt) return null;
 
             return (
-                <div className="fixed bottom-6 left-4 right-4 md:left-auto md:right-8 md:w-96 z-50 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 flex flex-col gap-3 animate-slide-up">
+                // 👇 將 bottom-6 改為 bottom-36 md:bottom-6，讓手機版往上浮起，避開右下角的獅子
+                <div className="fixed bottom-36 md:bottom-6 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[60] bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 flex flex-col gap-3 animate-slide-up">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 flex-shrink-0 bg-gray-50 rounded-full p-1 border border-gray-100 shadow-sm">
                             <img src="https://ik.imagekit.io/mygopen/mycheck.png" alt="阿麥" className="w-full h-full object-contain" />
