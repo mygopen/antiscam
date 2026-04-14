@@ -24,6 +24,7 @@
     <meta property="og:image:height" content="630">
     
     <link rel="icon" href="https://ik.imagekit.io/mygopen/check_ico.png">
+    <link rel="manifest" href="/manifest.json">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -1030,8 +1031,28 @@ if (containsScamKeyword && !isWhitelisted) {
             const [externalWhitelist, setExternalWhitelist] = useState([]);
             const resultRef = useRef(null);
 
+            // 👇 新增這段：攔截從手機 OS 分享過來的網址，並自動啟動掃描
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const sharedUrl = params.get('url');
+                const sharedText = params.get('text');
+                const incomingData = (sharedUrl || '') + ' ' + (sharedText || '');
 
-
+                // 用正規表達式抓出分享內容裡的網址
+                const urlMatch = incomingData.match(/https?:\/\/[^\s]+/i) || incomingData.match(/[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/i);
+                
+                if (urlMatch) {
+                    const extracted = urlMatch[0];
+                    setUrl(extracted); // 填入輸入框
+                    
+                    // 清除網址列參數，保持乾淨
+                    window.history.replaceState({}, document.title, "/");
+                    
+                    // 直接啟動核心掃描！
+                    handleScan(null, extracted);
+                }
+            }, []);
+            // 👆 新增結束 👆
 
 // 👇 新增這整個 useEffect 區塊：全域監聽貼上事件 (Ctrl+V / Cmd+V)
             useEffect(() => {
@@ -1387,9 +1408,9 @@ if (containsScamKeyword && !isWhitelisted) {
 
 
 
-            const handleScan = async (e) => {
-                e.preventDefault();
-                const inputUrl = url.trim();
+                const handleScan = async (e, directUrl = null) => {
+                if (e) e.preventDefault(); // 讓 e 變成選填
+                const inputUrl = directUrl || url.trim(); // 優先使用傳入的網址
                 if (!inputUrl) { setError('請輸入網址'); return; }
                 let urlToParse = /^https?:\/\//i.test(inputUrl) ? inputUrl : 'https://' + inputUrl;
 
