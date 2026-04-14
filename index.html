@@ -25,6 +25,13 @@
     
     <link rel="icon" href="https://ik.imagekit.io/mygopen/check_ico.png">
     <link rel="manifest" href="/manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -918,6 +925,92 @@ if (containsScamKeyword && !isWhitelisted) {
             );
         };
 
+
+// 👇 新增這段：App 安裝推薦卡片元件 👇
+        const InstallPrompt = () => {
+            const [deferredPrompt, setDeferredPrompt] = useState(null);
+            const [showPrompt, setShowPrompt] = useState(false);
+            const [isIOS, setIsIOS] = useState(false);
+
+            useEffect(() => {
+                // 1. 檢查是否已經按過「下次再說」或已經安裝
+                const hasSeen = localStorage.getItem('hasSeenInstallPrompt');
+                const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+                
+                if (isStandalone) return; // 已經是 App 模式就不干擾
+
+                // 2. 判斷是否為 iOS 設備
+                const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                if (isDeviceIOS) {
+                    setIsIOS(true);
+                    if (!hasSeen) {
+                        // iOS 不會觸發安裝事件，所以我們自己延遲 3 秒後跳出提示
+                        setTimeout(() => setShowPrompt(true), 3000);
+                    }
+                }
+
+                // 3. 監聽 Android 的原生安裝事件
+                const handleBeforeInstallPrompt = (e) => {
+                    e.preventDefault(); // 攔截系統預設的醜醜橫幅
+                    setDeferredPrompt(e);
+                    if (!hasSeen) {
+                        setTimeout(() => setShowPrompt(true), 3000);
+                    }
+                };
+
+                window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+                return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+            }, []);
+
+            const handleInstall = async () => {
+                if (isIOS) {
+                    alert('🍎 Apple 手機請點擊瀏覽器下方的「分享」圖示 ⬆️，然後滑動選單找到「加到主畫面」就可以囉！🦁');
+                    setShowPrompt(false);
+                    localStorage.setItem('hasSeenInstallPrompt', 'true');
+                    return;
+                }
+
+                if (deferredPrompt) {
+                    deferredPrompt.prompt(); // 呼叫 Android 原生安裝視窗
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    }
+                    setDeferredPrompt(null);
+                }
+                setShowPrompt(false);
+                localStorage.setItem('hasSeenInstallPrompt', 'true');
+            };
+
+            const handleDismiss = () => {
+                setShowPrompt(false);
+                localStorage.setItem('hasSeenInstallPrompt', 'true'); // 記住使用者拒絕過，不再煩他
+            };
+
+            if (!showPrompt) return null;
+
+            return (
+                <div className="fixed bottom-6 left-4 right-4 md:left-auto md:right-8 md:w-96 z-50 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 flex flex-col gap-3 animate-slide-up">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 flex-shrink-0 bg-gray-50 rounded-full p-1 border border-gray-100 shadow-sm">
+                            <img src="https://ik.imagekit.io/mygopen/mycheck.png" alt="阿麥" className="w-full h-full object-contain" />
+                        </div>
+                        <div className="flex-grow">
+                            <h4 className="font-bold text-gray-800 text-sm">把阿麥放到手機桌面！</h4>
+                            <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">下次遇到可疑網址，一秒打開直接查 🛡️</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={handleDismiss} className="flex-1 px-4 py-2 rounded-xl text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">下次再說</button>
+                        <button onClick={handleInstall} className="flex-[2] px-4 py-2 rounded-xl text-xs font-bold text-white bg-brand-red hover:bg-brand-darkRed shadow-md transition-colors">
+                            {isIOS ? '查看安裝教學' : '立即免費安裝'}
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        
         const App = () => {
 
 
@@ -1911,6 +2004,10 @@ if (containsScamKeyword && !isWhitelisted) {
                     </div></main>
                     <footer className="py-6 text-center text-gray-400 text-sm border-t border-gray-100 bg-white"><p>&copy; {new Date().getFullYear()} MyGoPen 麥擱騙. All rights reserved.</p></footer>
 
+
+                    {/* 👇 呼叫我們剛剛寫好的安裝推播卡片 👇 */}
+                    <InstallPrompt />
+                    
                     {/* 👇 呼叫帶有完整對話邏輯的防詐小幫手元件 👇 */}
                     <BotAssistant />
 
