@@ -151,7 +151,7 @@ let cleanReport = '';
 
                 if (isSafeWhitelisted) {
                     // ✅ 後端權威洗白
-                    cleanReport = cleanReport.replace(/⚠️.*/, '⚠️ 風險：低風險 (官方白名單網域)');
+                    cleanReport = cleanReport.replace(/⚠️.*/, '⚠️ 風險：未偵測到明顯風險的網址或特徵 (官方白名單網域)');
                     cleanReport = cleanReport.replace(/(🔍.*)/, `$1\n✅ 系統驗證：資料庫確認此為官方網址，請安心使用。`);
                 } else {
                     const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
@@ -205,7 +205,10 @@ let cleanReport = '';
         // =========================================================
         // 👇 終極清理：撕掉 AI 腦補的便條紙，確保畫面與複製結果絕對乾淨
         // =========================================================
-        // 把文字切成一行一行，如果那一行是用 🔍 開頭的，就把它丟掉，剩下的重新組合起來！
+        // 1. 軟化 AI 原生的「低風險」斬釘截鐵語氣
+        cleanReport = cleanReport.replace(/⚠️ 風險：低(?:風險)?(.*)/, '⚠️ 風險：未偵測到明顯風險的網址或特徵$1');
+
+        // 2. 把文字切成一行一行，如果那一行是用 🔍 開頭的，就把它丟掉，剩下的重新組合起來！
         cleanReport = cleanReport.split('\n').filter(line => !line.trim().startsWith('🔍')).join('\n');
 
         return new Response(JSON.stringify({ report: cleanReport }), {
