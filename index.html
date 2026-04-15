@@ -1150,6 +1150,45 @@ if (containsScamKeyword && !isWhitelisted) {
             const [externalWhitelist, setExternalWhitelist] = useState([]);
             const resultRef = useRef(null);
 
+            // 👇 新增：管理檢舉狀態與已檢舉的網址清單 (存入 localStorage 永久記憶)
+            const [isReporting, setIsReporting] = useState(false);
+            const [reportedUrls, setReportedUrls] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('reportedUrls')) || []; }
+                catch { return []; }
+            });
+
+            // 👇 新增這段：處理送出檢舉的邏輯
+            const handleReport = async () => {
+                if (!result || isReporting) return;
+                setIsReporting(true);
+                try {
+                    const res = await fetch('/api/report', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            url: result.scannedUrl,
+                            riskScore: result.riskScore,
+                            // 傳送 AI 分析的理由給審核員參考
+                            aiAnalysis: result.checks.domainAnalysis.details 
+                        })
+                    });
+                    
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        // 成功後將網址存入 localStorage，未來就不會重複檢舉
+                        const newReported = [...reportedUrls, result.scannedUrl];
+                        setReportedUrls(newReported);
+                        localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                    } else {
+                        alert('通報失敗：' + (data.error?.message || '系統異常'));
+                    }
+                } catch (err) {
+                    alert('通報發生錯誤，請稍後再試。');
+                } finally {
+                    setIsReporting(false);
+                }
+            };
+
             // 👇 新增這段：攔截從手機 OS 分享過來的網址，並自動啟動掃描
             useEffect(() => {
                 const params = new URLSearchParams(window.location.search);
@@ -1917,6 +1956,44 @@ if (containsScamKeyword && !isWhitelisted) {
 </h3>
                                 </div>
 
+                                </h3>
+                                </div>
+
+                                {/* ================= 新增：高風險專屬的檢舉通報區塊 ================= */}
+                                {result.riskScore >= 70 && !result.isSocialMedia && (
+                                    <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
+                                        <div className="flex items-center gap-3">
+                                            <ShieldZap size={28} className="text-red-600 flex-shrink-0" />
+                                            <div>
+                                                <h4 className="font-bold text-red-800 text-[15px] sm:text-base">協助打擊詐騙</h4>
+                                                <p className="text-xs sm:text-sm text-red-700 mt-0.5">要請 MyGoPen 幫你檢舉這個網址嗎？</p>
+                                            </div>
+                                        </div>
+                                        
+                                        {reportedUrls.includes(result.scannedUrl) ? (
+                                            <div className="px-4 py-2.5 bg-gray-200 text-gray-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto">
+                                                <CheckCircle size={18} /> 這個網址已檢舉通報中
+                                            </div>
+                                        ) : (
+                                            <button 
+                                                onClick={handleReport}
+                                                disabled={isReporting}
+                                                className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-white shadow-sm flex items-center justify-center gap-2 whitespace-nowrap transition-all ${isReporting ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
+                                            >
+                                                {isReporting ? (
+                                                    <><RefreshCw size={18} className="animate-spin" /> 通報中...</>
+                                                ) : (
+                                                    <><Flag size={18} /> 立即協助檢舉</>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                {/* ================= 新增結束 ================= */}
+
+                                <a href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} target="_blank" rel="noopener noreferrer" className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-md bg-[#4285F4] hover:bg-[#3367D6] text-white">
+
+                                
                                 <a href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} target="_blank" rel="noopener noreferrer" className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-md bg-[#4285F4] hover:bg-[#3367D6] text-white">
                                     <div className="bg-white p-1 rounded-full flex items-center justify-center"><GoogleIcon size={18} /></div>用 Google AI 再檢查看看
                                 </a>
