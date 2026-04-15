@@ -1198,6 +1198,46 @@ if (containsScamKeyword && !isWhitelisted) {
                 } finally {
                     setIsReporting(false);
                 }
+                
+                
+            };
+
+            // 👇 新增這段：處理「截圖分析」送出檢舉的邏輯
+            const handleImageReport = async (targetUrl) => {
+                if (!targetUrl || isReporting) return;
+                setIsReporting(true);
+                try {
+                    const res = await fetch('/api/report', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            url: targetUrl,
+                            riskScore: 100, // 截圖判定高風險，直接給 100 分
+                            aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址"
+                        })
+                    });
+                    
+                    const data = await res.json();
+                    
+                    if (data.success) {
+                        const newReported = [...reportedUrls, targetUrl];
+                        setReportedUrls(newReported);
+                        localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        
+                        if (data.isDuplicate) {
+                            alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
+                        }
+                    } else {
+                        let errMsg = '系統異常';
+                        if (typeof data.error === 'string') errMsg = data.error;
+                        else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
+                        alert(`通報失敗 (狀態碼: ${data.status || '未知'})：\n${errMsg}`);
+                    }
+                } catch (err) {
+                    alert('通報發生網路錯誤，請稍後再試。\n' + err.message);
+                } finally {
+                    setIsReporting(false);
+                }
             };
 
             // 👇 新增這段：攔截從手機 OS 分享過來的網址，並自動啟動掃描
@@ -1919,6 +1959,48 @@ if (containsScamKeyword && !isWhitelisted) {
                                     </div>
                                 </div>
 
+                                {/* ================= 新增：截圖高風險專屬的檢舉通報區塊 ================= */}
+                                {aiReport.includes('高風險') && (() => {
+                                    // 利用正則表達式，把 AI 報告裡的網址精準抓出來
+                                    const urlMatch = aiReport.match(/🔗 網址：(.*?)(?=\n|$)/);
+                                    const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
+                                    const hasValidUrl = extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None');
+                                    
+                                    // 如果沒有抓到實體網址，就不顯示檢舉按鈕
+                                    if (!hasValidUrl) return null;
+
+                                    return (
+                                        <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <ShieldZap size={28} className="text-red-600 flex-shrink-0" />
+                                                <div className="min-w-0">
+                                                    <h4 className="font-bold text-red-800 text-[15px] sm:text-base">協助打擊詐騙</h4>
+                                                    <p className="text-xs sm:text-sm text-red-700 mt-0.5 truncate">要請 MyGoPen 幫你檢舉這個網址嗎？</p>
+                                                    <p className="text-xs text-red-600 font-mono mt-1 font-bold truncate">{extractedUrl}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            {reportedUrls.includes(extractedUrl) ? (
+                                                <div className="px-4 py-2.5 bg-gray-200 text-gray-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto flex-shrink-0">
+                                                    <CheckCircle size={18} /> 這個網址已檢舉通報中
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => handleImageReport(extractedUrl)}
+                                                    disabled={isReporting}
+                                                    className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-white shadow-sm flex items-center justify-center gap-2 whitespace-nowrap flex-shrink-0 transition-all ${isReporting ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
+                                                >
+                                                    {isReporting ? (
+                                                        <><RefreshCw size={18} className="animate-spin" /> 通報中...</>
+                                                    ) : (
+                                                        <><Flag size={18} /> 立即協助檢舉</>
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                                {/* ================= 截圖檢舉區塊結束 ================= */}
 
                                 {/* 👇 新增的綠色複製按鈕 */}
                                 <button
