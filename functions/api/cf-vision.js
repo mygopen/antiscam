@@ -151,8 +151,8 @@ let cleanReport = '';
 
                 if (isSafeWhitelisted) {
                     // ✅ 後端權威洗白
-                    cleanReport = cleanReport.replace(/⚠️.*/, '⚠️ 風險：未偵測到明顯風險的網址或特徵 (官方白名單網域)');
-                    cleanReport = cleanReport.replace(/(🔍.*)/, `$1\n✅ 系統驗證：資料庫確認此為官方網址，請安心使用。`);
+                    cleanReport = cleanReport.replace(/⚠️.*/, '⚠️ 風險：未偵測到明顯風險的網址或特徵');
+                    cleanReport = cleanReport.replace(/(🔍.*)/, `$1\n✅ 系統驗證：資料庫確認此為官方網址。`);
                 } else {
                     const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
                     const isSuspiciousSuffix = highRiskSuffixes.some(s => parsedHostname.endsWith(s));
