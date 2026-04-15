@@ -16,7 +16,7 @@ export async function onRequestPost(context) {
 
         const payload = {
             feature_string: url,
-            content: `麥擱騙系統偵測高風險(${riskScore}分)\n${aiAnalysis || ''}`.substring(0, 490),
+            content: `高風險(${riskScore}分)\n${aiAnalysis || ''}`.substring(0, 490),
             type: "OTHER",
             platform: "web",
             charge_type: "42",
