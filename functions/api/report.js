@@ -26,7 +26,7 @@ export async function onRequestPost(context) {
             }
         };
 
-        const response = await fetch('https://netsafer.tw/api/external/v2', {
+        const response = await fetch('https://netsafer.tw/api/external/v2/', {
             method: 'POST',
             headers: {
                 'Authorization': `Token ${NETSAFER_TOKEN}`,
