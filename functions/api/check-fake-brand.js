@@ -2,12 +2,13 @@
 
 async function getOfficialDomain(brand) {
 // 1. 本地白名單：改為「陣列」格式，支援一個品牌擁有多個合法網域
-    const localBrandMap = {
+const localBrandMap = {
         "台灣電力公司": ["taipower.com.tw"], "台電": ["taipower.com.tw"],
         "台灣自來水公司": ["water.gov.tw"], "遠通電收": ["fetc.net.tw"],
         "中華郵政": ["post.gov.tw"], 
         "中國信託": ["ctbcbank.com"], "ctbc bank": ["ctbcbank.com"], "ctbc": ["ctbcbank.com"],
-        "國泰世華": ["cathaybk.com.tw"], "國泰世華": ["cathaybk.com.tw", "cathayins.tw"],
+        // 👇 把重複的刪掉，只留這一行即可：
+        "國泰世華": ["cathaybk.com.tw", "cathayins.tw"],
         "國泰產險": ["cathay-ins.com.tw", "cathayins.tw"],
         "玉山銀行": ["esunbank.com.tw"],
         "台新銀行": ["taishinbank.com.tw"], "富邦銀行": ["fubon.com"],
