@@ -1157,7 +1157,7 @@ if (containsScamKeyword && !isWhitelisted) {
                 catch { return []; }
             });
 
-            // 👇 新增這段：處理送出檢舉的邏輯
+            // 👇 修改後的版本：增加重複通報判定與清楚的錯誤訊息
             const handleReport = async () => {
                 if (!result || isReporting) return;
                 setIsReporting(true);
@@ -1168,22 +1168,33 @@ if (containsScamKeyword && !isWhitelisted) {
                         body: JSON.stringify({ 
                             url: result.scannedUrl,
                             riskScore: result.riskScore,
-                            // 傳送 AI 分析的理由給審核員參考
                             aiAnalysis: result.checks.domainAnalysis.details 
                         })
                     });
                     
                     const data = await res.json();
-                    if (res.ok && data.success) {
-                        // 成功後將網址存入 localStorage，未來就不會重複檢舉
+                    
+                    // 只要後端判定 success 就是成功 (包含我們處理過的重複通報)
+                    if (data.success) {
                         const newReported = [...reportedUrls, result.scannedUrl];
                         setReportedUrls(newReported);
                         localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        
+                        if (data.isDuplicate) {
+                            alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
+                        }
                     } else {
-                        alert('通報失敗：' + (data.error?.message || '系統異常'));
+                        // 解析並顯示來自後端的真實錯誤訊息，避免只顯示系統異常
+                        let errMsg = '系統異常';
+                        if (typeof data.error === 'string') {
+                            errMsg = data.error;
+                        } else if (data.error && typeof data.error === 'object') {
+                            errMsg = data.error.message || JSON.stringify(data.error);
+                        }
+                        alert(`通報失敗 (狀態碼: ${data.status || '未知'})：\n${errMsg}`);
                     }
                 } catch (err) {
-                    alert('通報發生錯誤，請稍後再試。');
+                    alert('通報發生網路錯誤，請稍後再試。\n' + err.message);
                 } finally {
                     setIsReporting(false);
                 }
