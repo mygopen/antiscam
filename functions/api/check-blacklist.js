@@ -30,7 +30,8 @@ export async function onRequest(context) {
         "tulingwangluo.com",
         "telenet.be",
         "xsddk.com",
-        "yaewsn.com"
+        "yaewsn.com",
+        "jimanman888.com"
     ];
 
     // 檢查邏輯：完全符合，或是其子網域
