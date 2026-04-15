@@ -20,7 +20,7 @@ export async function onRequestPost(context) {
             type: "OTHER",
             platform: "web",
             charge_type: "42",
-            note: "使用者透過麥擱騙防詐系統自主通報",
+            note: "網域或轉址目標為高風險網址",
             data: {
                 web_42_note: "從網站自動通報"
             }
