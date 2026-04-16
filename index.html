@@ -1328,6 +1328,55 @@ if (containsScamKeyword && !isWhitelisted) {
                 // 自動捲動到最新訊息
                 useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+
+                // 👇 新增：聊天室專屬的檢舉狀態與功能
+                const [isReportingBot, setIsReportingBot] = useState(false);
+
+                const handleBotReportAction = async (targetUrl) => {
+                    if (isReportingBot) return;
+                    setIsReportingBot(true);
+                    
+                    // 畫面上顯示使用者按下了檢舉
+                    setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
+                    setIsTyping(true);
+                    
+                    try {
+                        const res = await fetch('/api/report', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                url: targetUrl,
+                                riskScore: 100,
+                                aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
+                            })
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            // 記錄到全域的 reportedUrls，避免重複檢舉
+                            const newReported = [...reportedUrls, targetUrl];
+                            setReportedUrls(newReported);
+                            localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                            
+                            let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
+                            if (data.isDuplicate) {
+                                replyMsg = '🛡️ 感謝熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態。';
+                            }
+                            setMessages(prev => [...prev, { role: 'assistant', content: replyMsg }]);
+                        } else {
+                            let errMsg = '系統異常';
+                            if (typeof data.error === 'string') errMsg = data.error;
+                            else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
+                            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 通報失敗了：${errMsg}` }]);
+                        }
+                    } catch (err) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 網路好像有點問題，通報送不出去。' }]);
+                    } finally {
+                        setIsReportingBot(false);
+                        setIsTyping(false);
+                    }
+                };
+
                 const handleSend = async (e) => {
                     e.preventDefault();
                     const text = input.trim();
@@ -1385,13 +1434,19 @@ if (containsScamKeyword && !isWhitelisted) {
                                     if (brandDataRes?.isFakeBrand) replyText += `- 企圖假冒知名品牌。\n`;
                                     if (scanData.blocklistListed) replyText += `- 已被列入警示黑名單。\n`;
                                     replyText += `\n絕對不要點擊或輸入任何資料喔！`;
-                                } else if (scanData.riskScore >= 30) {
-                                    replyText += `⚠️ 注意：這個網站有點可疑，請保持警覺，不要隨意給出個資。`;
+                                    
+                                    // 👇 高風險時，夾帶檢舉 Action
+                                    setMessages(prev => [...prev, { 
+                                        role: 'assistant', 
+                                        content: replyText,
+                                        action: { type: 'report', url: urlObj.href }
+                                    }]);
                                 } else {
-                                    replyText += `就網址來說，目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
+                                    if (scanData.riskScore >= 30) replyText += `⚠️ 注意：這個網站有點可疑，請保持警覺，不要隨意給出個資。`;
+                                    else replyText += `就網址來說，目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
+                                    
+                                    setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
                                 }
-    
-                                setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
                             }
                         } catch (err) {
                             setMessages(prev => [...prev, { role: 'assistant', content: '❌ 抱歉，這個網址的格式怪怪的，阿麥看不懂，請重新貼一次。' }]);
@@ -1460,10 +1515,20 @@ if (containsScamKeyword && !isWhitelisted) {
                             throw new Error(data.details || data.error || '伺服器發生錯誤');
                         }
 
-                        // 3. 把後端已經完美審核的報告，直接印出來！就是這麼簡單！
+// 3. 判斷是否有高風險與網址，並把報告印出來！
+                        let actionObj = null;
+                        if (data.report.includes('高風險')) {
+                            const urlMatch = data.report.match(/🔗 網址：(.*?)(?=\n|$)/);
+                            const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
+                            if (extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None')) {
+                                actionObj = { type: 'report', url: extractedUrl };
+                            }
+                        }
+
                         setMessages(prev => [...prev, { 
                             role: 'assistant', 
-                            content: `【阿麥的截圖分析報告】\n\n${data.report}` 
+                            content: `【阿麥的截圖分析報告】\n\n${data.report}`,
+                            ...(actionObj && { action: actionObj }) // 如果有按鈕資料，就掛載上去
                         }]);
 
                         if (typeof gtag === 'function') {
@@ -1542,10 +1607,33 @@ if (containsScamKeyword && !isWhitelisted) {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ) : (
-                                                /* 阿麥的泡泡邏輯維持原樣 (不需要 relative) */
-                                                <div className={`max-w-[75%] rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
-                                                    {msg.content}
+) : (
+                                                /* 阿麥的泡泡邏輯 (加入檢舉卡片渲染) */
+                                                <div className={`max-w-[75%] flex flex-col gap-2`}>
+                                                    <div className={`rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
+                                                        {msg.content}
+                                                    </div>
+                                                    
+                                                    {/* 👇 新增：判斷是否要顯示檢舉按鈕卡片 */}
+                                                    {msg.action && msg.action.type === 'report' && (
+                                                        <div className="bg-red-50 border border-red-100 rounded-xl p-3 shadow-sm w-full animate-fade-in">
+                                                            <div className="flex items-center gap-1.5 mb-2">
+                                                                <ShieldZap size={16} className="text-red-600" />
+                                                                <span className="text-red-800 font-bold text-xs">要阿麥幫你檢舉這個網址嗎？</span>
+                                                            </div>
+                                                            {reportedUrls.includes(msg.action.url) ? (
+                                                                <div className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1 bg-gray-200 py-1.5 rounded-lg"><CheckCircle size={14}/> 這個網址已檢舉通報中</div>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleBotReportAction(msg.action.url)}
+                                                                    disabled={isReportingBot}
+                                                                    className={`w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm flex items-center justify-center gap-1 ${isReportingBot ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
+                                                                >
+                                                                    {isReportingBot ? <><RefreshCw size={14} className="animate-spin" /> 通報中...</> : <><Flag size={14} /> 立即協助檢舉</>}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
