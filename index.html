@@ -2064,7 +2064,11 @@ if (containsScamKeyword && !isWhitelisted) {
                     <InstallPrompt />
                     
                     {/* 👇 呼叫帶有完整對話邏輯的防詐小幫手元件 👇 */}
-                    <BotAssistant />
+                    <BotAssistant 
+                        reportedUrls={reportedUrls} 
+                        setReportedUrls={setReportedUrls} 
+                        externalWhitelist={externalWhitelist} 
+                    />
 
                 </div>
             );
@@ -2074,5 +2078,4 @@ if (containsScamKeyword && !isWhitelisted) {
         root.render(<App />);
     </script>
 </body>
-
 </html>
