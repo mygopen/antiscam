@@ -1036,6 +1036,71 @@ if (containsScamKeyword && !isWhitelisted) {
             );
         };
 
+
+// 👇 將定義搬到 App 外面，避免每次 App 更新時都被重新安裝
+        const BotAssistant = ({ reportedUrls, setReportedUrls }) => {
+            const [view, setView] = useState('closed');
+                const [messages, setMessages] = useState([
+                    { role: 'assistant', content: '哈囉！我是防詐大獅：阿麥 🦁\n\n有遇到可疑的網址嗎？直接貼上來，我幫你看！' }
+                ]);
+                const [input, setInput] = useState('');
+                const [isTyping, setIsTyping] = useState(false);
+                const messagesEndRef = useRef(null);
+
+                // 自動捲動到最新訊息
+                useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+
+                // 👇 新增：聊天室專屬的檢舉狀態與功能
+                const [isReportingBot, setIsReportingBot] = useState(false);
+
+// 修正檢舉邏輯中更新狀態的部分
+            const handleBotReportAction = async (targetUrl) => {
+                    if (isReportingBot) return;
+                    setIsReportingBot(true);
+                    
+                    // 畫面上顯示使用者按下了檢舉
+                    setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
+                    setIsTyping(true);
+                    
+                    try {
+                        const res = await fetch('/api/report', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                url: targetUrl,
+                                riskScore: 100,
+                                aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
+                            })
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            // 記錄到全域的 reportedUrls，避免重複檢舉
+                            const newReported = [...reportedUrls, targetUrl];
+                            // 👇 使用 props 傳入的函式來更新狀態
+
+                            setReportedUrls(newReported);
+                            localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                            
+                            let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
+                            if (data.isDuplicate) {
+                                replyMsg = '🛡️ 感謝熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態。';
+                            }
+                            setMessages(prev => [...prev, { role: 'assistant', content: replyMsg }]);
+                        } else {
+                            let errMsg = '系統異常';
+                            if (typeof data.error === 'string') errMsg = data.error;
+                            else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
+                            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 通報失敗了：${errMsg}` }]);
+                        }
+                    } catch (err) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 網路好像有點問題，通報送不出去。' }]);
+                    } finally {
+                        setIsReportingBot(false);
+                        setIsTyping(false);
+                    }
+                };
         
         const App = () => {
 
@@ -1315,67 +1380,7 @@ if (containsScamKeyword && !isWhitelisted) {
             }, []);
 
 
-            const BotAssistant = () => {
-                // 控制視窗狀態：'closed' (只顯示小獅子), 'welcome' (歡迎畫面), 'chat' (聊天室)
-                const [view, setView] = useState('closed');
-                const [messages, setMessages] = useState([
-                    { role: 'assistant', content: '哈囉！我是防詐大獅：阿麥 🦁\n\n有遇到可疑的網址嗎？直接貼上來，我幫你看！' }
-                ]);
-                const [input, setInput] = useState('');
-                const [isTyping, setIsTyping] = useState(false);
-                const messagesEndRef = useRef(null);
-
-                // 自動捲動到最新訊息
-                useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
-
-                // 👇 新增：聊天室專屬的檢舉狀態與功能
-                const [isReportingBot, setIsReportingBot] = useState(false);
-
-                const handleBotReportAction = async (targetUrl) => {
-                    if (isReportingBot) return;
-                    setIsReportingBot(true);
-                    
-                    // 畫面上顯示使用者按下了檢舉
-                    setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
-                    setIsTyping(true);
-                    
-                    try {
-                        const res = await fetch('/api/report', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                url: targetUrl,
-                                riskScore: 100,
-                                aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
-                            })
-                        });
-                        const data = await res.json();
-                        
-                        if (data.success) {
-                            // 記錄到全域的 reportedUrls，避免重複檢舉
-                            const newReported = [...reportedUrls, targetUrl];
-                            setReportedUrls(newReported);
-                            localStorage.setItem('reportedUrls', JSON.stringify(newReported));
-                            
-                            let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
-                            if (data.isDuplicate) {
-                                replyMsg = '🛡️ 感謝熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態。';
-                            }
-                            setMessages(prev => [...prev, { role: 'assistant', content: replyMsg }]);
-                        } else {
-                            let errMsg = '系統異常';
-                            if (typeof data.error === 'string') errMsg = data.error;
-                            else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
-                            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 通報失敗了：${errMsg}` }]);
-                        }
-                    } catch (err) {
-                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 網路好像有點問題，通報送不出去。' }]);
-                    } finally {
-                        setIsReportingBot(false);
-                        setIsTyping(false);
-                    }
-                };
+            
 
                 const handleSend = async (e) => {
                     e.preventDefault();
