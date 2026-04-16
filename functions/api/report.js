@@ -14,15 +14,16 @@ export async function onRequestPost(context) {
         // 依據 PDF 文件提供的 API Token
         const NETSAFER_TOKEN = env.NETSAFER_API_TOKEN || "0b755ce0b5f70a4eadc60cd74720a0bdecffc6e3";
 
+        // 👇 依照最新需求調整欄位對應
         const payload = {
             feature_string: url,
-            content: `高風險(${riskScore}分)\n${aiAnalysis || ''}`.substring(0, 490),
+            content: "使用者透過麥擱騙防詐系統自主通報", // 對外的詐騙內容描述
             type: "OTHER",
             platform: "web",
             charge_type: "42",
-            note: "網域或轉址目標為高風險網址",
+            note: `高風險(${riskScore}分) ${aiAnalysis || ''}`.substring(0, 490), // 對內的審核備註 (帶入動態分數與AI分析)
             data: {
-                web_42_note: "從網站自動通報"
+                web_42_note: "" // 不放東西，維持空白
             }
         };
 
@@ -35,7 +36,7 @@ export async function onRequestPost(context) {
             body: JSON.stringify(payload)
         });
 
-        // 💡 增強型錯誤捕捉：先讀取為純文字，避免對方回傳 HTML 錯誤頁面導致程式崩潰
+        // 增強型錯誤捕捉：先讀取為純文字，避免對方回傳 HTML 錯誤頁面導致程式崩潰
         const text = await response.text();
         let responseData;
         try {
@@ -44,7 +45,7 @@ export async function onRequestPost(context) {
             responseData = text; // 儲存原始字串
         }
 
-        // 💡 特殊處理：如果 API 回傳 400 且錯誤訊息包含 feature_string，代表「此網址已被通報過」
+        // 特殊處理：如果 API 回傳 400 且錯誤訊息包含 feature_string，代表「此網址已被通報過」
         // 對使用者來說，這算是通報「成功」(因為網址已經在黑名單了)
         const isDuplicate = response.status === 400 && 
                             typeof responseData === 'object' && 
