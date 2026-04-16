@@ -1037,140 +1037,172 @@ if (containsScamKeyword && !isWhitelisted) {
         };
 
 
-// 👇 將定義搬到 App 外面，避免每次 App 更新時都被重新安裝
-        const BotAssistant = ({ reportedUrls, setReportedUrls }) => {
+// =========================================================================
+        // 🦁 完整的 BotAssistant 元件 (獨立運作，避免閃爍)
+        // =========================================================================
+        const BotAssistant = ({ reportedUrls, setReportedUrls, externalWhitelist }) => {
             const [view, setView] = useState('closed');
-                const [messages, setMessages] = useState([
-                    { role: 'assistant', content: '哈囉！我是防詐大獅：阿麥 🦁\n\n有遇到可疑的網址嗎？直接貼上來，我幫你看！' }
-                ]);
-                const [input, setInput] = useState('');
-                const [isTyping, setIsTyping] = useState(false);
-                const messagesEndRef = useRef(null);
+            const [messages, setMessages] = useState([
+                { role: 'assistant', content: '哈囉！我是防詐大獅：阿麥 🦁\n\n有遇到可疑的網址嗎？直接貼上來，我幫你看！' }
+            ]);
+            const [input, setInput] = useState('');
+            const [isTyping, setIsTyping] = useState(false);
+            const messagesEndRef = useRef(null);
 
-                // 自動捲動到最新訊息
-                useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+            // 自動捲動到最新訊息
+            useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+            // 👇 新增：聊天室專屬的檢舉狀態與功能
+            const [isReportingBot, setIsReportingBot] = useState(false);
 
-                // 👇 新增：聊天室專屬的檢舉狀態與功能
-                const [isReportingBot, setIsReportingBot] = useState(false);
-
-// 修正檢舉邏輯中更新狀態的部分
+            // 修正檢舉邏輯中更新狀態的部分
             const handleBotReportAction = async (targetUrl) => {
-                    if (isReportingBot) return;
-                    setIsReportingBot(true);
+                if (isReportingBot) return;
+                setIsReportingBot(true);
+                
+                // 畫面上顯示使用者按下了檢舉
+                setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
+                setIsTyping(true);
+                
+                try {
+                    const res = await fetch('/api/report', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            url: targetUrl,
+                            riskScore: 100,
+                            aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
+                        })
+                    });
+                    const data = await res.json();
                     
-                    // 畫面上顯示使用者按下了檢舉
-                    setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
-                    setIsTyping(true);
-                    
+                    if (data.success) {
+                        // 記錄到全域的 reportedUrls，避免重複檢舉
+                        const newReported = [...reportedUrls, targetUrl];
+                        // 👇 使用 props 傳入的函式來更新狀態
+                        setReportedUrls(newReported);
+                        localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        
+                        let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
+                        if (data.isDuplicate) {
+                            replyMsg = '🛡️ 感謝熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態。';
+                        }
+                        setMessages(prev => [...prev, { role: 'assistant', content: replyMsg }]);
+                    } else {
+                        let errMsg = '系統異常';
+                        if (typeof data.error === 'string') errMsg = data.error;
+                        else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
+                        setMessages(prev => [...prev, { role: 'assistant', content: `❌ 通報失敗了：${errMsg}` }]);
+                    }
+                } catch (err) {
+                    setMessages(prev => [...prev, { role: 'assistant', content: '❌ 網路好像有點問題，通報送不出去。' }]);
+                } finally {
+                    setIsReportingBot(false);
+                    setIsTyping(false);
+                }
+            };
+
+            const handleSend = async (e) => {
+                e.preventDefault();
+                const text = input.trim();
+                if (!text) return;
+
+                const newMessages = [...messages, { role: 'user', content: text }];
+                setMessages(newMessages);
+                setInput('');
+                setIsTyping(true);
+
+                const urlMatch = text.match(/https?:\/\/[^\s]+/i) || text.match(/[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/i);
+
+                if (urlMatch) {
+                    const targetUrl = urlMatch[0];
+                    setMessages(prev => [...prev, { role: 'assistant', content: `收到網址！阿麥正在幫你連線檢查：\n${targetUrl} ...` }]);
+
                     try {
-                        const res = await fetch('/api/report', {
+                        const urlObj = new URL(/^https?:\/\//i.test(targetUrl) ? targetUrl : 'https://' + targetUrl);
+
+                        const [scanData, brandDataRes] = await Promise.all([
+                            simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
+                            fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
+                        ]);
+
+                        if (scanData.isInvalid) {
+                            setMessages(prev => [...prev, { 
+                                role: 'assistant', 
+                                content: `【麥擱騙檢測報告】\n\n❌ 無法連結此網站\n\n阿麥查不到這個網址 (NXDOMAIN)，它可能已經失效或被封鎖了。但請注意，許多詐騙網址壽命都很短，請勿隨意點擊！` 
+                            }]);
+                        } else if (scanData.isSocialMedia) {
+                            setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: `【麥擱騙檢測報告】\n風險評估：⚠️ 無法判斷內容\n\n這是社群平台，我們無法看到裡面的貼文，要多加小心留意！🦁`
+                            }]);
+                        } else {
+                            if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {   
+                                scanData.riskScore = 100;
+                            }
+
+                            let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 安全');
+                            let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
+
+                            if (scanData.riskScore >= 70) {
+                                replyText += `🚨 警告：這極高機率是詐騙！\n`;
+                                if (brandDataRes?.isFakeBrand) replyText += `- 企圖假冒知名品牌。\n`;
+                                if (scanData.blocklistListed) replyText += `- 已被列入警示黑名單。\n`;
+                                replyText += `\n絕對不要點擊或輸入任何資料喔！`;
+                                
+                                setMessages(prev => [...prev, { 
+                                    role: 'assistant', 
+                                    content: replyText,
+                                    action: { type: 'report', url: urlObj.href }
+                                }]);
+                            } else {
+                                if (scanData.riskScore >= 30) replyText += `⚠️ 注意：這個網站有點可疑，請保持警覺，不要隨意給出個資。`;
+                                else replyText += `就網址來說，目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
+                                
+                                setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
+                            }
+                        }
+                    } catch (err) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 抱歉，這個網址的格式怪怪的，阿麥看不懂，請重新貼一次。' }]);
+                    } finally {
+                        setIsTyping(false);
+                    }
+
+                } else {
+                    try {
+                        const res = await fetch('/api/chat', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                url: targetUrl,
-                                riskScore: 100,
-                                aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
-                            })
+                            body: JSON.stringify({ messages: newMessages.slice(-3) })
                         });
                         const data = await res.json();
                         
-                        if (data.success) {
-                            // 記錄到全域的 reportedUrls，避免重複檢舉
-                            const newReported = [...reportedUrls, targetUrl];
-                            // 👇 使用 props 傳入的函式來更新狀態
-
-                            setReportedUrls(newReported);
-                            localStorage.setItem('reportedUrls', JSON.stringify(newReported));
-                            
-                            let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
-                            if (data.isDuplicate) {
-                                replyMsg = '🛡️ 感謝熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態。';
-                            }
-                            setMessages(prev => [...prev, { role: 'assistant', content: replyMsg }]);
-                        } else {
-                            let errMsg = '系統異常';
-                            if (typeof data.error === 'string') errMsg = data.error;
-                            else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
-                            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 通報失敗了：${errMsg}` }]);
+                        if (!res.ok || data.error) {
+                            throw new Error(data.details || data.error || 'API 錯誤');
                         }
+                        
+                        setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
                     } catch (err) {
-                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 網路好像有點問題，通報送不出去。' }]);
+                        setMessages(prev => [...prev, { role: 'assistant', content: `[系統除錯訊息] ${err.message}` }]);
                     } finally {
-                        setIsReportingBot(false);
                         setIsTyping(false);
                     }
-                };
-        
-        const App = () => {
-
-
-            const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
-            const [aiReport, setAiReport] = useState(null);
-            const [uploadedImageUrl, setUploadedImageUrl] = useState(null);
-            const [brandAnalysis, setBrandAnalysis] = useState(null);
-            const [isBrandAnalyzing, setIsBrandAnalyzing] = useState(false);
-            const [loadingMessage, setLoadingMessage] = useState('分析中...');
-
-
-            // 👇 新增這行：管理 AI 報告專屬的複製狀態
-            const [aiCopyStatus, setAiCopyStatus] = useState('idle');
-
-            // 👇 新增這行：用於控制「詳細技術分析報告」是否展開的變數
-            const [showDetails, setShowDetails] = useState(false);
-
-            // 👇 新增這段函式：處理 AI 圖片分析報告的複製邏輯
-            const handleCopyAiReport = () => {
-                if (!aiReport) return;
-
-                // 組合要複製的文字內容
-                const report = `【截圖防詐 AI 分析報告】\n----------------------\n${aiReport}\n----------------------\n※ 分析結果由 AI 提供，請保持警覺，切勿隨意提供個資或匯款。`;
-
-                const textArea = document.createElement("textarea");
-                textArea.value = report;
-                textArea.style.position = "fixed";
-                textArea.style.left = "-9999px";
-                textArea.style.top = "0";
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-
-                try {
-                    if (document.execCommand('copy')) {
-                        setAiCopyStatus('copied');
-                        setTimeout(() => setAiCopyStatus('idle'), 3000);
-                    } else {
-                        alert('複製失敗，請手動複製');
-                    }
-                } catch (err) {
-                    alert('複製失敗，請手動複製');
                 }
-                document.body.removeChild(textArea);
             };
 
-
-            // 👇 升級版的影像上傳處理：完全交由後端審核，前端只負責展示
-            const handleImageUpload = async (e) => {
-                const file = e.target.files?.[0]; // 支援從 fakeEvent 傳入
+            const handleBotImageUpload = async (e) => {
+                const file = e.target.files[0];
                 if (!file) return;
+                e.target.value = '';
 
-                const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
+                const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) {
-                    setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。');
-                    if(e.target.value !== undefined) e.target.value = '';
+                    setMessages(prev => [...prev, { role: 'assistant', content: '❌ 圖片檔案過大 (超過3MB)，請裁切或壓縮後再傳給我喔！' }]);
                     return;
                 }
 
-                setResult(null);
-                setAiReport(null);
-                setError('');
-                setIsImageAnalyzing(true);
-                setLoadingMessage('AI 正在仔細辨識截圖內容...');
-                
-                // 如果之前有舊的預覽圖，先釋放記憶體
-                if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
-                // 產生新圖片的預覽網址並存起來
-                setUploadedImageUrl(URL.createObjectURL(file));
+                setMessages(prev => [...prev, { role: 'user', content: '[傳送了一張圖片 📷]' }]);
+                setIsTyping(true);
 
                 const formData = new FormData();
                 formData.append('image', file);
@@ -1187,25 +1219,182 @@ if (containsScamKeyword && !isWhitelisted) {
                         throw new Error(data.details || data.error || '伺服器發生錯誤');
                     }
 
-                    // 1. 拿到後端已經完美審核並竄改過的報告
-                    let finalReport = data.report;
-
-                    // 2. 直接輸出報告給 UI (不再呼叫 simulateScan 畫技術卡片)
-                    setAiReport(finalReport);
-                    
-                    if (typeof gtag === 'function') {
-                        gtag('event', 'image_analyze', { 'status': 'success', 'file_size': file.size });
+                    let actionObj = null;
+                    if (data.report.includes('高風險')) {
+                        const urlMatch = data.report.match(/🔗 網址：(.*?)(?=\n|$)/);
+                        const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
+                        if (extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None')) {
+                            actionObj = { type: 'report', url: extractedUrl };
+                        }
                     }
 
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: `【阿麥的截圖分析報告】\n\n${data.report}`,
+                        ...(actionObj && { action: actionObj })
+                    }]);
+
                 } catch (err) {
-                    setError('圖片分析失敗：' + err.message);
+                    setMessages(prev => [...prev, { role: 'assistant', content: `❌ 阿麥看不太清楚這張圖，分析失敗了：${err.message}` }]);
                 } finally {
-                    setIsImageAnalyzing(false);
-                    setLoadingMessage('分析中...');
+                    setIsTyping(false);
                 }
             };
+                
+            return (
+                <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end font-sans">
+                    {view === 'welcome' && (
+                        <div className="bg-white w-80 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-slide-up mb-4">
+                            <div className="bg-brand-red text-white p-4 flex justify-between items-center">
+                                <div className="font-bold flex items-center gap-2"><Shield size={18} /> 防詐大獅：阿麥</div>
+                                <button onClick={() => setView('closed')} className="hover:bg-white/20 p-1 rounded-full"><XCircle size={18} /></button>
+                            </div>
+                            <div className="p-6 bg-brand-red text-white text-sm text-center">
+                                把可疑的網址貼給我，<br />阿麥馬上幫你查出風險！
+                            </div>
+                            <div className="p-6 flex flex-col items-center">
+                                <img src="https://ik.imagekit.io/mygopen/Mycheck.png" alt="Lion" className="w-24 h-24 mb-4 object-contain" />
+                                <button onClick={() => setView('chat')} className="w-full bg-brand-red text-white font-bold py-3 rounded-xl hover:bg-brand-darkRed transition shadow-md">開始對話</button>
+                            </div>
+                        </div>
+                    )}
 
+                    {view === 'chat' && (
+                        <div className="bg-white w-[90vw] sm:w-96 h-[500px] max-h-[75vh] rounded-2xl shadow-2xl border border-gray-100 flex flex-col animate-slide-up mb-4">
+                            <div className="bg-brand-red text-white p-3 flex justify-between items-center shadow-sm rounded-t-2xl">
+                                <div className="font-bold flex items-center gap-2"><Shield size={18} /> 防詐大獅：阿麥</div>
+                                <button onClick={() => setView('closed')} className="hover:bg-white/20 p-1 rounded-full"><XCircle size={20} /></button>
+                            </div>
+                            <div className="flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4">
+                                {messages.map((msg, idx) => (
+                                    <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        {msg.role === 'assistant' && (
+                                            <div className="w-8 h-8 rounded-full flex-shrink-0 border border-gray-200 shadow-sm overflow-hidden bg-white">
+                                                <img src="https://ik.imagekit.io/mygopen/myhead.png" alt="阿麥" className="w-full h-full object-cover" />
+                                            </div>
+                                        )}
+                                        {msg.role === 'user' ? (
+                                            <div className="relative group max-w-[85%] mb-4 flex-shrink-0">
+                                                <div className={`rounded-2xl px-4 py-2 pr-10 pb-5 whitespace-pre-wrap break-words text-sm shadow-lg bg-brand-red text-white rounded-br-none`}>
+                                                    {msg.content}
+                                                </div>
+                                                <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full flex-shrink-0 bg-white p-1 shadow-2xl border border-gray-100 opacity-90 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+                                                        <User size={20} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className={`max-w-[75%] flex flex-col gap-2`}>
+                                                <div className={`rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
+                                                    {msg.content}
+                                                </div>
+                                                {msg.action && msg.action.type === 'report' && (
+                                                    <div className="bg-red-50 border border-red-100 rounded-xl p-3 shadow-sm w-full animate-fade-in">
+                                                        <div className="flex items-center gap-1.5 mb-2">
+                                                            <ShieldZap size={16} className="text-red-600" />
+                                                            <span className="text-red-800 font-bold text-xs">要阿麥幫你檢舉這個網址嗎？</span>
+                                                        </div>
+                                                        {reportedUrls.includes(msg.action.url) ? (
+                                                            <div className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1 bg-gray-200 py-1.5 rounded-lg"><CheckCircle size={14}/> 這個網址已檢舉通報中</div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleBotReportAction(msg.action.url)}
+                                                                disabled={isReportingBot}
+                                                                className={`w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm flex items-center justify-center gap-1 ${isReportingBot ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
+                                                            >
+                                                                {isReportingBot ? <><RefreshCw size={14} className="animate-spin" /> 通報中...</> : <><Flag size={14} /> 立即協助檢舉</>}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {isTyping && (
+                                    <div className="flex gap-2 justify-start items-center">
+                                        <div className="w-8 h-8 rounded-full flex-shrink-0 border border-gray-200 shadow-sm overflow-hidden bg-white">
+                                            <img src="https://ik.imagekit.io/mygopen/myhead.png" alt="阿麥" className="w-full h-full object-cover" />
+                                        </div>
+                                        <div className="text-gray-400 text-xs px-2 animate-pulse bg-white border border-gray-200 rounded-2xl rounded-tl-none py-2 shadow-sm">
+                                            阿麥思考中...
+                                        </div>
+                                    </div>
+                                )}
+                                <div ref={messagesEndRef} />
+                            </div>
+                            <div className="bg-white border-t border-gray-100 rounded-b-2xl flex flex-col">
+                                <form onSubmit={handleSend} className="p-3 flex gap-2 items-center">
+                                    <div className="relative flex-shrink-0">
+                                        <input type="file" accept="image/*" className="hidden" id="bot-image-upload" onChange={handleBotImageUpload} disabled={isTyping} />
+                                        <label htmlFor="bot-image-upload" className={`p-2 bg-gray-100 text-gray-500 hover:text-brand-red rounded-full cursor-pointer transition-all flex items-center justify-center border border-transparent hover:border-brand-red/30 ${isTyping ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-light'}`} title="上傳可疑截圖"><Camera size={20} /></label>
+                                    </div>
+                                    <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="貼網址、傳截圖或問問題..." className="flex-grow bg-gray-100 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-red/30 text-sm" disabled={isTyping} />
+                                    <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition flex-shrink-0 shadow-sm"><ArrowRight size={18} /></button>
+                                </form>
+                                <div className="pb-3 px-4 text-center text-[10px] text-gray-400 select-none">
+                                    免責聲明：阿麥的回答由 AI 生成，僅供防詐參考，務必自行查證且勿隨意提供個資。
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
+                    {view === 'closed' && (
+                        <div className="relative group flex flex-col items-center">
+                            <div className="relative bg-white text-gray-800 px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap font-bold mb-4 opacity-95 group-hover:opacity-100 transition-opacity animate-bubble-bounce">
+                                問我問我
+                                <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
+                            </div>
+                            <button onClick={() => setView('welcome')} className="w-16 h-16 md:w-24 md:h-24 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white p-1 bg-white focus:outline-none z-50">
+                                <img src="https://ik.imagekit.io/mygopen/callme.png" alt="MyGoPen Cute Lion" className="w-full h-full rounded-full object-contain" />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // =========================================================================
+        // 🛡️ 主程式 App 元件
+        // =========================================================================
+        const App = () => {
+            const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
+            const [aiReport, setAiReport] = useState(null);
+            const [uploadedImageUrl, setUploadedImageUrl] = useState(null);
+            const [brandAnalysis, setBrandAnalysis] = useState(null);
+            const [isBrandAnalyzing, setIsBrandAnalyzing] = useState(false);
+            const [loadingMessage, setLoadingMessage] = useState('分析中...');
+            const [aiCopyStatus, setAiCopyStatus] = useState('idle');
+            const [showDetails, setShowDetails] = useState(false);
+
+            const handleCopyAiReport = () => {
+                if (!aiReport) return;
+                const report = `【截圖防詐 AI 分析報告】\n----------------------\n${aiReport}\n----------------------\n※ 分析結果由 AI 提供，請保持警覺，切勿隨意提供個資或匯款。`;
+                const textArea = document.createElement("textarea");
+                textArea.value = report; textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
+                document.body.appendChild(textArea); textArea.focus(); textArea.select();
+                try { if (document.execCommand('copy')) { setAiCopyStatus('copied'); setTimeout(() => setAiCopyStatus('idle'), 3000); } else alert('複製失敗'); }
+                catch (err) { alert('複製失敗'); } document.body.removeChild(textArea);
+            };
+
+            const handleImageUpload = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const MAX_FILE_SIZE = 3 * 1024 * 1024;
+                if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
+                setResult(null); setAiReport(null); setError(''); setIsImageAnalyzing(true); setLoadingMessage('AI 正在仔細辨識截圖內容...');
+                if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
+                setUploadedImageUrl(URL.createObjectURL(file));
+                const formData = new FormData(); formData.append('image', file);
+                try {
+                    const response = await fetch('/api/cf-vision', { method: 'POST', body: formData });
+                    const data = await response.json();
+                    if (!response.ok || data.error) throw new Error(data.details || data.error || '伺服器發生錯誤');
+                    setAiReport(data.report);
+                    if (typeof gtag === 'function') gtag('event', 'image_analyze', { 'status': 'success', 'file_size': file.size });
+                } catch (err) { setError('圖片分析失敗：' + err.message); } finally { setIsImageAnalyzing(false); setLoadingMessage('分析中...'); }
+            };
 
             const [url, setUrl] = useState('');
             const [loading, setLoading] = useState(false);
@@ -1215,162 +1404,70 @@ if (containsScamKeyword && !isWhitelisted) {
             const [externalWhitelist, setExternalWhitelist] = useState([]);
             const resultRef = useRef(null);
 
-            // 👇 新增：管理檢舉狀態與已檢舉的網址清單 (存入 localStorage 永久記憶)
             const [isReporting, setIsReporting] = useState(false);
             const [reportedUrls, setReportedUrls] = useState(() => {
-                try { return JSON.parse(localStorage.getItem('reportedUrls')) || []; }
-                catch { return []; }
+                try { return JSON.parse(localStorage.getItem('reportedUrls')) || []; } catch { return []; }
             });
 
-            // 👇 修改後的版本：增加重複通報判定與清楚的錯誤訊息
             const handleReport = async () => {
                 if (!result || isReporting) return;
                 setIsReporting(true);
                 try {
-                    const res = await fetch('/api/report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            url: result.scannedUrl,
-                            riskScore: result.riskScore,
-                            aiAnalysis: result.checks.domainAnalysis.details 
-                        })
-                    });
-                    
+                    const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: result.scannedUrl, riskScore: result.riskScore, aiAnalysis: result.checks.domainAnalysis.details }) });
                     const data = await res.json();
-                    
-                    // 只要後端判定 success 就是成功 (包含我們處理過的重複通報)
                     if (data.success) {
-                        const newReported = [...reportedUrls, result.scannedUrl];
-                        setReportedUrls(newReported);
-                        localStorage.setItem('reportedUrls', JSON.stringify(newReported));
-                        
-                        if (data.isDuplicate) {
-                            alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
-                        }
+                        const newReported = [...reportedUrls, result.scannedUrl]; setReportedUrls(newReported); localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
                     } else {
-                        // 解析並顯示來自後端的真實錯誤訊息，避免只顯示系統異常
-                        let errMsg = '系統異常';
-                        if (typeof data.error === 'string') {
-                            errMsg = data.error;
-                        } else if (data.error && typeof data.error === 'object') {
-                            errMsg = data.error.message || JSON.stringify(data.error);
-                        }
+                        let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
                         alert(`通報失敗 (狀態碼: ${data.status || '未知'})：\n${errMsg}`);
                     }
-                } catch (err) {
-                    alert('通報發生網路錯誤，請稍後再試。\n' + err.message);
-                } finally {
-                    setIsReporting(false);
-                }
-                
-                
+                } catch (err) { alert('通報發生網路錯誤，請稍後再試。\n' + err.message); } finally { setIsReporting(false); }
             };
 
-            // 👇 新增這段：處理「截圖分析」送出檢舉的邏輯
             const handleImageReport = async (targetUrl) => {
                 if (!targetUrl || isReporting) return;
                 setIsReporting(true);
                 try {
-                    const res = await fetch('/api/report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            url: targetUrl,
-                            riskScore: 100, // 截圖判定高風險，直接給 100 分
-                            aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址"
-                        })
-                    });
-                    
+                    const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: targetUrl, riskScore: 100, aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址" }) });
                     const data = await res.json();
-                    
                     if (data.success) {
-                        const newReported = [...reportedUrls, targetUrl];
-                        setReportedUrls(newReported);
-                        localStorage.setItem('reportedUrls', JSON.stringify(newReported));
-                        
-                        if (data.isDuplicate) {
-                            alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
-                        }
+                        const newReported = [...reportedUrls, targetUrl]; setReportedUrls(newReported); localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
                     } else {
-                        let errMsg = '系統異常';
-                        if (typeof data.error === 'string') errMsg = data.error;
-                        else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
+                        let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
                         alert(`通報失敗 (狀態碼: ${data.status || '未知'})：\n${errMsg}`);
                     }
-                } catch (err) {
-                    alert('通報發生網路錯誤，請稍後再試。\n' + err.message);
-                } finally {
-                    setIsReporting(false);
-                }
+                } catch (err) { alert('通報發生網路錯誤，請稍後再試。\n' + err.message); } finally { setIsReporting(false); }
             };
 
-            // 👇 新增這段：攔截從手機 OS 分享過來的網址，並自動啟動掃描
             useEffect(() => {
                 const params = new URLSearchParams(window.location.search);
-                const sharedUrl = params.get('url');
-                const sharedText = params.get('text');
+                const sharedUrl = params.get('url'); const sharedText = params.get('text');
                 const incomingData = (sharedUrl || '') + ' ' + (sharedText || '');
-
-                // 用正規表達式抓出分享內容裡的網址
                 const urlMatch = incomingData.match(/https?:\/\/[^\s]+/i) || incomingData.match(/[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/i);
-                
                 if (urlMatch) {
-                    const extracted = urlMatch[0];
-                    setUrl(extracted); // 填入輸入框
-                    
-                    // 清除網址列參數，保持乾淨
-                    window.history.replaceState({}, document.title, "/");
-                    
-                    // 直接啟動核心掃描！
-                    handleScan(null, extracted);
+                    const extracted = urlMatch[0]; setUrl(extracted); window.history.replaceState({}, document.title, "/"); handleScan(null, extracted);
                 }
             }, []);
-            // 👆 新增結束 👆
 
-// 👇 新增這整個 useEffect 區塊：全域監聽貼上事件 (Ctrl+V / Cmd+V)
             useEffect(() => {
                 const handlePaste = (e) => {
-                    // 如果正在分析中，不要理會新的貼上動作
                     if (isImageAnalyzing || loading) return;
-
                     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
                     let imageFile = null;
-
-                    // 尋找剪貼簿中是否有圖片檔案
                     for (let index in items) {
                         const item = items[index];
-                        if (item.kind === 'file' && item.type.startsWith('image/')) {
-                            imageFile = item.getAsFile();
-                            break; // 找到第一張圖就跳出
-                        }
+                        if (item.kind === 'file' && item.type.startsWith('image/')) { imageFile = item.getAsFile(); break; }
                     }
-
                     if (imageFile) {
-                        // 建立一個假的 event 物件，丟給現有的 handleImageUpload 處理
-                        const fakeEvent = {
-                            target: {
-                                files: [imageFile],
-                                value: '' // 清除 value，行為與點擊上傳一致
-                            }
-                        };
+                        const fakeEvent = { target: { files: [imageFile], value: '' } };
                         handleImageUpload(fakeEvent);
                     }
                 };
-
-                // 綁定事件到全域 document
                 document.addEventListener('paste', handlePaste);
-
-                // 元件卸載時清除監聽器，避免記憶體洩漏
-                return () => {
-                    document.removeEventListener('paste', handlePaste);
-                };
-            }, [isImageAnalyzing, loading]); // 依賴這兩個狀態，確保分析中不會重複觸發
-
-
-            
-
-            
+                return () => { document.removeEventListener('paste', handlePaste); };
+            }, [isImageAnalyzing, loading]);
 
             useEffect(() => {
                 fetch('./whitelist.json')
@@ -1378,335 +1475,6 @@ if (containsScamKeyword && !isWhitelisted) {
                     .then(data => setExternalWhitelist(data.domains || []))
                     .catch(() => setExternalWhitelist([]));
             }, []);
-
-
-            
-
-                const handleSend = async (e) => {
-                    e.preventDefault();
-                    const text = input.trim();
-                    if (!text) return;
-
-                    // 1. 顯示使用者的訊息
-                    const newMessages = [...messages, { role: 'user', content: text }];
-                    setMessages(newMessages);
-                    setInput('');
-                    setIsTyping(true);
-
-                    // 2. 正則攔截：檢查是否包含網址
-                    const urlMatch = text.match(/https?:\/\/[^\s]+/i) || text.match(/[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/i);
-
-                    if (urlMatch) {
-                        // 🌟 省 Token 絕招：發現網址！直接走本地檢測邏輯，不呼叫 LLM 聊天 API
-                        const targetUrl = urlMatch[0];
-                        setMessages(prev => [...prev, { role: 'assistant', content: `收到網址！阿麥正在幫你連線檢查：\n${targetUrl} ...` }]);
-
-                        try {
-                            const urlObj = new URL(/^https?:\/\//i.test(targetUrl) ? targetUrl : 'https://' + targetUrl);
-
-                            // 呼叫原本的檢測核心 (這裡共用了外部的 state，請確保變數名稱一致)
-                            const [scanData, brandDataRes] = await Promise.all([
-                                simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
-                                fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
-                            ]);
-
-                            // 👇 修正：如果網域已經掛掉或不存在，聊天室也應該直接回報無法檢測
-                            if (scanData.isInvalid) {
-                                setMessages(prev => [...prev, { 
-                                    role: 'assistant', 
-                                    content: `【麥擱騙檢測報告】\n\n❌ 無法連結此網站\n\n阿麥查不到這個網址 (NXDOMAIN)，它可能已經失效或被封鎖了。但請注意，許多詐騙網址壽命都很短，請勿隨意點擊！` 
-                                }]);
-                            } 
-                            // 👇 新增社群媒體專屬回覆
-                            else if (scanData.isSocialMedia) {
-                                setMessages(prev => [...prev, {
-                                    role: 'assistant',
-                                    content: `【麥擱騙檢測報告】\n風險評估：⚠️ 無法判斷內容\n\n這是社群平台，我們無法看到裡面的貼文，要多加小心留意！🦁`
-                                }]);
-                            }
-                            else {
-                                // 👇 只有在網址活著且非社群平台時，才進行後續的 AI 品牌判定與分數計算
-                                if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {   
-                                    scanData.riskScore = 100;
-                                }
-    
-                                // 3. 組合聊天室風格的檢測報告
-                                let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 安全');
-                                let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
-    
-                                if (scanData.riskScore >= 70) {
-                                    replyText += `🚨 警告：這極高機率是詐騙！\n`;
-                                    if (brandDataRes?.isFakeBrand) replyText += `- 企圖假冒知名品牌。\n`;
-                                    if (scanData.blocklistListed) replyText += `- 已被列入警示黑名單。\n`;
-                                    replyText += `\n絕對不要點擊或輸入任何資料喔！`;
-                                    
-                                    // 👇 高風險時，夾帶檢舉 Action
-                                    setMessages(prev => [...prev, { 
-                                        role: 'assistant', 
-                                        content: replyText,
-                                        action: { type: 'report', url: urlObj.href }
-                                    }]);
-                                } else {
-                                    if (scanData.riskScore >= 30) replyText += `⚠️ 注意：這個網站有點可疑，請保持警覺，不要隨意給出個資。`;
-                                    else replyText += `就網址來說，目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
-                                    
-                                    setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
-                                }
-                            }
-                        } catch (err) {
-                            setMessages(prev => [...prev, { role: 'assistant', content: '❌ 抱歉，這個網址的格式怪怪的，阿麥看不懂，請重新貼一次。' }]);
-                        } finally {
-                            setIsTyping(false);
-                        }
-
-                    } else {
-                        // 🌟 如果沒有網址，呼叫後端 LLM 聊天 API
-                        try {
-                            const res = await fetch('/api/chat', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ messages: newMessages.slice(-3) })
-                            });
-                            const data = await res.json();
-                            
-                            // 👇 新增錯誤捕捉：把真實的 data.details 印出來
-                            if (!res.ok || data.error) {
-                                throw new Error(data.details || data.error || 'API 錯誤');
-                            }
-                            
-                            setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
-                        } catch (err) {
-                            // 👇 把錯誤訊息印在對話框裡，這樣你就知道發生什麼事了
-                            setMessages(prev => [...prev, { role: 'assistant', content: `[系統除錯訊息] ${err.message}` }]);
-                        } finally {
-                            setIsTyping(false);
-                        }
-                    }
-                };
-
-
-                // 👇 新增：處理阿麥聊天室內的圖片上傳邏輯
-                const handleBotImageUpload = async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-
-                    // 每次選完清空，允許重複上傳同一張
-                    e.target.value = '';
-
-                    // 檢查檔案大小
-                    const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
-                    if (file.size > MAX_FILE_SIZE) {
-                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 圖片檔案過大 (超過3MB)，請裁切或壓縮後再傳給我喔！' }]);
-                        return;
-                    }
-
-                    // 1. 顯示使用者上傳了圖片
-                    setMessages(prev => [...prev, { role: 'user', content: '[傳送了一張圖片 📷]' }]);
-                    setIsTyping(true);
-
-                    const formData = new FormData();
-                    formData.append('image', file);
-
-// 2. 呼叫後端 AI 視覺 API (內含混合式防詐分析)
-                    try {
-                        const response = await fetch('/api/cf-vision', {
-                            method: 'POST',
-                            body: formData
-                        });
-
-                        const data = await response.json();
-
-                        if (!response.ok || data.error) {
-                            throw new Error(data.details || data.error || '伺服器發生錯誤');
-                        }
-
-// 3. 判斷是否有高風險與網址，並把報告印出來！
-                        let actionObj = null;
-                        if (data.report.includes('高風險')) {
-                            const urlMatch = data.report.match(/🔗 網址：(.*?)(?=\n|$)/);
-                            const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
-                            if (extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None')) {
-                                actionObj = { type: 'report', url: extractedUrl };
-                            }
-                        }
-
-                        setMessages(prev => [...prev, { 
-                            role: 'assistant', 
-                            content: `【阿麥的截圖分析報告】\n\n${data.report}`,
-                            ...(actionObj && { action: actionObj }) // 如果有按鈕資料，就掛載上去
-                        }]);
-
-                        if (typeof gtag === 'function') {
-                            gtag('event', 'bot_image_analyze', { 'status': 'success' });
-                        }
-
-                    } catch (err) {
-                        setMessages(prev => [...prev, { role: 'assistant', content: `❌ 阿麥看不太清楚這張圖，分析失敗了：${err.message}` }]);
-                    } finally {
-                        setIsTyping(false);
-                    }
-                };
-                    
-
-                // --- UI 渲染區 ---
-                return (
-                    <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end font-sans">
-
-                        {/* 狀態 1：歡迎畫面 (仿 165 風格) */}
-                        {view === 'welcome' && (
-                            <div className="bg-white w-80 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-slide-up mb-4">
-                                <div className="bg-brand-red text-white p-4 flex justify-between items-center">
-                                    <div className="font-bold flex items-center gap-2"><Shield size={18} /> 防詐大獅：阿麥</div>
-                                    <button onClick={() => setView('closed')} className="hover:bg-white/20 p-1 rounded-full"><XCircle size={18} /></button>
-                                </div>
-                                <div className="p-6 bg-brand-red text-white text-sm text-center">
-                                    把可疑的網址貼給我，<br />阿麥馬上幫你查出風險！
-                                </div>
-                                <div className="p-6 flex flex-col items-center">
-                                    <img src="https://ik.imagekit.io/mygopen/Mycheck.png" alt="Lion" className="w-24 h-24 mb-4 object-contain" />
-                                    <button onClick={() => setView('chat')} className="w-full bg-brand-red text-white font-bold py-3 rounded-xl hover:bg-brand-darkRed transition shadow-md">開始對話</button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 狀態 2：聊天視窗 */}
-                        {view === 'chat' && (
-                            <div className="bg-white w-[90vw] sm:w-96 h-[500px] max-h-[75vh] rounded-2xl shadow-2xl border border-gray-100 flex flex-col animate-slide-up mb-4">
-                                <div className="bg-brand-red text-white p-3 flex justify-between items-center shadow-sm rounded-t-2xl">
-                                    <div className="font-bold flex items-center gap-2"><Shield size={18} /> 防詐大獅：阿麥</div>
-                                    <button onClick={() => setView('closed')} className="hover:bg-white/20 p-1 rounded-full"><XCircle size={20} /></button>
-                                </div>
-
-{/* 對話顯示區 */}
-                                <div className="flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4">
-                                    {messages.map((msg, idx) => (
-                                        <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            
-                                            {/* 阿麥的頭像 (在左側) */}
-                                            {msg.role === 'assistant' && (
-                                                <div className="w-8 h-8 rounded-full flex-shrink-0 border border-gray-200 shadow-sm overflow-hidden bg-white">
-                                                    <img src="https://ik.imagekit.io/mygopen/myhead.png" alt="阿麥" className="w-full h-full object-cover" />
-                                                </div>
-                                            )}
-
-                                            {/*👇 修改使用者訊息結構👇 */}
-                                            {msg.role === 'user' ? (
-                                                /* 外層容器加上 relative group，並稍微增加底間距 (mb-4) 以容納重疊頭像 */
-                                                <div className="relative group max-w-[85%] mb-4 flex-shrink-0">
-                                                    {/* 對話泡泡本體 */}
-                                                    {/* 修正：
-                                                       1. 增加內距：pr-10 (右) 與 pb-5 (下)，為頭像騰出空間，避免文字被遮擋。
-                                                       2. rounded-br-none 維持原本設定，但將頭像對齊此角落。 */}
-                                                    <div className={`rounded-2xl px-4 py-2 pr-10 pb-5 whitespace-pre-wrap break-words text-sm shadow-lg bg-brand-red text-white rounded-br-none`}>
-                                                        {msg.content}
-                                                    </div>
-
-                                                    {/* 使用者的頭像 (移動到右下角，並重疊一部分) */}
-                                                    {/* 修正：
-                                                       1. 使用絕對定位：absolute -bottom-2 -right-2 (往外推 2px) 進行重疊，更顯著也更具發話感。
-                                                       2. 稍微變大 w-10 h-10，加入白底 p-1 與陰影 shadow-xl，使其脫離泡泡背景，看起來像是獨立附著的發話 cue。
-                                                       3. 使用剛剛定義的乾淨 User Icon。 */}
-                                                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full flex-shrink-0 bg-white p-1 shadow-2xl border border-gray-100 opacity-90 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                        <div className="w-full h-full bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
-                                                            <User size={20} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-) : (
-                                                /* 阿麥的泡泡邏輯 (加入檢舉卡片渲染) */
-                                                <div className={`max-w-[75%] flex flex-col gap-2`}>
-                                                    <div className={`rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
-                                                        {msg.content}
-                                                    </div>
-                                                    
-                                                    {/* 👇 新增：判斷是否要顯示檢舉按鈕卡片 */}
-                                                    {msg.action && msg.action.type === 'report' && (
-                                                        <div className="bg-red-50 border border-red-100 rounded-xl p-3 shadow-sm w-full animate-fade-in">
-                                                            <div className="flex items-center gap-1.5 mb-2">
-                                                                <ShieldZap size={16} className="text-red-600" />
-                                                                <span className="text-red-800 font-bold text-xs">要阿麥幫你檢舉這個網址嗎？</span>
-                                                            </div>
-                                                            {reportedUrls.includes(msg.action.url) ? (
-                                                                <div className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1 bg-gray-200 py-1.5 rounded-lg"><CheckCircle size={14}/> 這個網址已檢舉通報中</div>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => handleBotReportAction(msg.action.url)}
-                                                                    disabled={isReportingBot}
-                                                                    className={`w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm flex items-center justify-center gap-1 ${isReportingBot ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
-                                                                >
-                                                                    {isReportingBot ? <><RefreshCw size={14} className="animate-spin" /> 通報中...</> : <><Flag size={14} /> 立即協助檢舉</>}
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                    
-                                    {/* 打字中狀態也加上頭像 */}
-                                    {isTyping && (
-                                        <div className="flex gap-2 justify-start items-center">
-                                            <div className="w-8 h-8 rounded-full flex-shrink-0 border border-gray-200 shadow-sm overflow-hidden bg-white">
-                                                <img src="https://ik.imagekit.io/mygopen/myhead.png" alt="阿麥" className="w-full h-full object-cover" />
-                                            </div>
-                                            <div className="text-gray-400 text-xs px-2 animate-pulse bg-white border border-gray-200 rounded-2xl rounded-tl-none py-2 shadow-sm">
-                                                阿麥思考中...
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div ref={messagesEndRef} />
-                                </div>
-
-                               {/* 輸入與免責聲明區 */}
-                                <div className="bg-white border-t border-gray-100 rounded-b-2xl flex flex-col">
-                                    <form onSubmit={handleSend} className="p-3 flex gap-2 items-center">
-                                        
-                                        {/* 👇 新增：聊天室專屬的上傳相機按鈕 👇 */}
-                                        <div className="relative flex-shrink-0">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                className="hidden"
-                                                id="bot-image-upload"
-                                                onChange={handleBotImageUpload}
-                                                disabled={isTyping}
-                                            />
-                                            <label htmlFor="bot-image-upload" className={`p-2 bg-gray-100 text-gray-500 hover:text-brand-red rounded-full cursor-pointer transition-all flex items-center justify-center border border-transparent hover:border-brand-red/30 ${isTyping ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-light'}`} title="上傳可疑截圖">
-                                                <Camera size={20} />
-                                            </label>
-                                        </div>
-
-                                        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="貼網址、傳截圖或問問題..." className="flex-grow bg-gray-100 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-red/30 text-sm" disabled={isTyping} />
-                                        <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition flex-shrink-0 shadow-sm"><ArrowRight size={18} /></button>
-                                    </form>
-                                    
-                                    {/* 👇 新增的免責聲明小字 👇 */}
-                                    <div className="pb-3 px-4 text-center text-[10px] text-gray-400 select-none">
-                                        免責聲明：阿麥的回答由 AI 生成，僅供防詐參考，務必自行查證且勿隨意提供個資。
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 狀態 3：右下角小獅子 Logo */}
-                        {view === 'closed' && (
-                            <div className="relative group flex flex-col items-center">
-                                <div className="relative bg-white text-gray-800 px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap font-bold mb-4 opacity-95 group-hover:opacity-100 transition-opacity animate-bubble-bounce">
-                                    問我問我
-                                    <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
-                                </div>
-                                <button
-                                    onClick={() => setView('welcome')}
-                                    className="w-24 h-24 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white p-1 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300"
-                                >
-                                    <img src="https://ik.imagekit.io/mygopen/callme.png" alt="MyGoPen Cute Lion" className="w-full h-full rounded-full object-contain" />
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                );
-            };
 
 
 
