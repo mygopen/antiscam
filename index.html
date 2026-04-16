@@ -1038,7 +1038,7 @@ if (containsScamKeyword && !isWhitelisted) {
 
 
 // =========================================================================
-        // 🦁 完整的 BotAssistant 元件 (獨立運作，避免閃爍)
+        // 🦁 完整的 BotAssistant 元件 (獨立運作，包含貼圖與檢舉功能)
         // =========================================================================
         const BotAssistant = ({ reportedUrls, setReportedUrls, externalWhitelist }) => {
             const [view, setView] = useState('closed');
@@ -1052,15 +1052,13 @@ if (containsScamKeyword && !isWhitelisted) {
             // 自動捲動到最新訊息
             useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-            // 👇 新增：聊天室專屬的檢舉狀態與功能
+            // 聊天室專屬的檢舉狀態與功能
             const [isReportingBot, setIsReportingBot] = useState(false);
 
-            // 修正檢舉邏輯中更新狀態的部分
             const handleBotReportAction = async (targetUrl) => {
                 if (isReportingBot) return;
                 setIsReportingBot(true);
                 
-                // 畫面上顯示使用者按下了檢舉
                 setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
                 setIsTyping(true);
                 
@@ -1077,9 +1075,7 @@ if (containsScamKeyword && !isWhitelisted) {
                     const data = await res.json();
                     
                     if (data.success) {
-                        // 記錄到全域的 reportedUrls，避免重複檢舉
                         const newReported = [...reportedUrls, targetUrl];
-                        // 👇 使用 props 傳入的函式來更新狀態
                         setReportedUrls(newReported);
                         localStorage.setItem('reportedUrls', JSON.stringify(newReported));
                         
@@ -1119,7 +1115,7 @@ if (containsScamKeyword && !isWhitelisted) {
                     setMessages(prev => [...prev, { 
                         role: 'assistant', 
                         content: `收到網址！阿麥正在幫你連線檢查：\n${targetUrl} ...`,
-                        sticker: 'https://ik.imagekit.io/mygopen/sticks/33.png' // 👈 加入放大鏡貼圖
+                        sticker: 'https://ik.imagekit.io/mygopen/sticks/33.png' // 👈 輸入網址時的放大鏡貼圖
                     }]);
 
                     try {
@@ -1149,18 +1145,17 @@ if (containsScamKeyword && !isWhitelisted) {
                             let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
 
                             if (scanData.riskScore >= 70) {
-                                    replyText += `🚨 警告：這極高機率是詐騙！\n`;
-                                    if (brandDataRes?.isFakeBrand) replyText += `- 企圖假冒知名品牌。\n`;
-                                    if (scanData.blocklistListed) replyText += `- 已被列入警示黑名單。\n`;
-                                    replyText += `\n絕對不要點擊或輸入任何資料喔！`;
-                                    
-                                    // 👇 高風險時，夾帶檢舉 Action 與警告貼圖
-                                    setMessages(prev => [...prev, { 
-                                        role: 'assistant', 
-                                        content: replyText,
-                                        action: { type: 'report', url: urlObj.href },
-                                        sticker: 'https://ik.imagekit.io/mygopen/sticks/17.png' // 👈 加入驚嚇警告貼圖
-                                    }]);
+                                replyText += `🚨 警告：這極高機率是詐騙！\n`;
+                                if (brandDataRes?.isFakeBrand) replyText += `- 企圖假冒知名品牌。\n`;
+                                if (scanData.blocklistListed) replyText += `- 已被列入警示黑名單。\n`;
+                                replyText += `\n絕對不要點擊或輸入任何資料喔！`;
+                                
+                                setMessages(prev => [...prev, { 
+                                    role: 'assistant', 
+                                    content: replyText,
+                                    action: { type: 'report', url: urlObj.href },
+                                    sticker: 'https://ik.imagekit.io/mygopen/sticks/17.png' // 👈 高風險時的警告貼圖
+                                }]);
                             } else {
                                 if (scanData.riskScore >= 30) replyText += `⚠️ 注意：這個網站有點可疑，請保持警覺，不要隨意給出個資。`;
                                 else replyText += `就網址來說，目前看起來沒有明顯的詐騙特徵，但還是要小心喔！`;
@@ -1208,6 +1203,13 @@ if (containsScamKeyword && !isWhitelisted) {
                 }
 
                 setMessages(prev => [...prev, { role: 'user', content: '[傳送了一張圖片 📷]' }]);
+                
+                // 👇 新增：截圖上傳時，也會顯示連線檢查中的貼圖
+                setMessages(prev => [...prev, { 
+                    role: 'assistant', 
+                    content: '收到圖片！阿麥正在用 AI 幫你分析這張截圖 🔍...',
+                    sticker: 'https://ik.imagekit.io/mygopen/sticks/33.png'
+                }]);
                 setIsTyping(true);
 
                 const formData = new FormData();
@@ -1226,10 +1228,13 @@ if (containsScamKeyword && !isWhitelisted) {
                     }
 
                     let actionObj = null;
+                    let stickerObj = null; // 👇 新增截圖專用貼圖變數
+
                     if (data.report.includes('高風險')) {
+                        stickerObj = 'https://ik.imagekit.io/mygopen/sticks/17.png'; // 👈 高風險時顯示驚嚇貼圖
+                        
                         const urlMatch = data.report.match(/🔗 網址：(.*?)(?=\n|$)/);
                         const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
-                        // 👇 新增：如果包含 @ 符號，代表它是 Email，就不產生檢舉按鈕
                         if (extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None') && !extractedUrl.includes('@')) {
                             actionObj = { type: 'report', url: extractedUrl };
                         }
@@ -1238,7 +1243,8 @@ if (containsScamKeyword && !isWhitelisted) {
                     setMessages(prev => [...prev, { 
                         role: 'assistant', 
                         content: `【阿麥的截圖分析報告】\n\n${data.report}`,
-                        ...(actionObj && { action: actionObj })
+                        ...(actionObj && { action: actionObj }),
+                        ...(stickerObj && { sticker: stickerObj })
                     }]);
 
                 } catch (err) {
@@ -1291,19 +1297,21 @@ if (containsScamKeyword && !isWhitelisted) {
                                                     </div>
                                                 </div>
                                             </div>
-                                       ) : (
+                                        ) : (
                                             <div className={`max-w-[75%] flex flex-col gap-2`}>
                                                 <div className={`rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
                                                     {msg.content}
                                                 </div>
                                                 
-                                                {/* 👇 新增：如果這則訊息有夾帶貼圖，就顯示出來 */}
+                                                {/* 👇 新增：如果這則訊息有夾帶貼圖，就會渲染在這裡 👇 */}
                                                 {msg.sticker && (
-                                                    <img 
-                                                        src={msg.sticker} 
-                                                        alt="阿麥貼圖" 
-                                                        className="w-28 h-28 object-contain self-start drop-shadow-sm animate-fade-in" 
-                                                    />
+                                                    <div className="mt-1 animate-fade-in">
+                                                        <img 
+                                                            src={msg.sticker} 
+                                                            alt="阿麥貼圖" 
+                                                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-md" 
+                                                        />
+                                                    </div>
                                                 )}
 
                                                 {msg.action && msg.action.type === 'report' && (
