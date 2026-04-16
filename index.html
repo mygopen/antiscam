@@ -1229,7 +1229,8 @@ if (containsScamKeyword && !isWhitelisted) {
                     if (data.report.includes('高風險')) {
                         const urlMatch = data.report.match(/🔗 網址：(.*?)(?=\n|$)/);
                         const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
-                        if (extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None')) {
+                        // 👇 新增：如果包含 @ 符號，代表它是 Email，就不產生檢舉按鈕
+                        if (extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None') && !extractedUrl.includes('@')) {
                             actionObj = { type: 'report', url: extractedUrl };
                         }
                     }
@@ -1836,12 +1837,14 @@ if (containsScamKeyword && !isWhitelisted) {
                                     </div>
                                 </div>
 
-                                {/* ================= 新增：截圖高風險專屬的檢舉通報區塊 ================= */}
+                            {/* ================= 新增：截圖高風險專屬的檢舉通報區塊 ================= */}
                                 {aiReport.includes('高風險') && (() => {
                                     // 利用正則表達式，把 AI 報告裡的網址精準抓出來
                                     const urlMatch = aiReport.match(/🔗 網址：(.*?)(?=\n|$)/);
                                     const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
-                                    const hasValidUrl = extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None');
+                                    
+                                    // 👇 新增：如果包含 @ 符號，代表它是 Email，就將 hasValidUrl 設為 false 隱藏按鈕
+                                    const hasValidUrl = extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None') && !extractedUrl.includes('@');
                                     
                                     // 如果沒有抓到實體網址，就不顯示檢舉按鈕
                                     if (!hasValidUrl) return null;
