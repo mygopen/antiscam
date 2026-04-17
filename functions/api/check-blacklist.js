@@ -29,6 +29,7 @@ export async function onRequest(context) {
         "opengraverecords.com",
         "tulingwangluo.com",
         "telenet.be",
+        "kw.ac.kr",
         "xsddk.com",
         "yaewsn.com",
         "jimanman888.com"
