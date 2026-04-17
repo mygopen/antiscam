@@ -140,6 +140,11 @@ let cleanReport = '';
                     return parsedHostname === lowerW || parsedHostname.endsWith('.' + lowerW);
                 });
 
+                // 👇 新增防護：台灣的政府、教育、財團法人網域需實體審核，詐騙集團無法註冊，直接視為最高信賴白名單！
+                if (parsedHostname.endsWith('.gov.tw') || parsedHostname.endsWith('.edu.tw') || parsedHostname.endsWith('.org.tw') || parsedHostname.endsWith('.mil.tw')) {
+                    isSafeWhitelisted = true;
+                }
+
                 // 👇 系統漏洞修補 1：免費信箱防護
                 // 如果 AI 抓到的是 Email，且網域是 Gmail、Yahoo 等免費信箱，絕對不能當作「官方白名單」來洗白！
                 if (isEmail && isSafeWhitelisted) {
