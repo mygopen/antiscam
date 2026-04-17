@@ -1940,7 +1940,7 @@ if (containsScamKeyword && !isWhitelisted) {
                                 </div>
 
                                 {/* ================= 新增：高風險專屬的檢舉通報區塊 ================= */}
-                                {result.riskScore >= 70 && !result.isSocialMedia && (
+                                {result.riskScore >= 70 && !result.isSocialMedia && !url.includes('@') && (
                                     <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
                                         <div className="flex items-center gap-3">
                                             <ShieldZap size={28} className="text-red-600 flex-shrink-0" />
