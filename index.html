@@ -801,12 +801,26 @@ if (containsScamKeyword && !isWhitelisted) {
                     if (hasSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
 
-                    // 👇 新增：單頁式詐騙 (一頁式網頁) 強力防線 👇
-                    // 正規網站通常有選單、頁尾等大量超連結。如果抓到的網頁只有 0~1 個連結，且非知名高流量網站，極高機率是免洗一頁式詐騙或規避掃描的空白頁！
+                    // 👇 修改：精準打擊單頁式詐騙，降低正常老網站的誤殺率 👇
+                    // 很多現代網站 (SPA) 或是 API 抓取失敗時會呈現 0 連結。
+                    // 因此我們將「0 連結」結合「網域註冊不到一年」或「其他高風險特徵」，才給予致命重擊。
                     if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && !isHighTraffic) {
-                        riskScore += 45;
+                        let isNewDomain = false;
+                        if (rdapData.date) {
+                            const regDate = new Date(rdapData.date);
+                            const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
+                            if (diffDays < 365) isNewDomain = true; // 註冊未滿一年的新網域
+                        } else {
+                            isNewDomain = true; // 查無 WHOIS 日期也視為免洗特徵
+                        }
+
+                        if (isVeryHighRiskTLD || hasSuspiciousTempDomain || isFreeHosting || isNewDomain || isRedirected) {
+                            riskScore += 45; // 綜合可疑特徵，確認為免洗一頁式詐騙！
+                        } else {
+                            riskScore += 10; // 是有歷史的老網站，只是剛好抓不到連結，僅輕微扣分不影響安全評級
+                        }
                     }
-                    // 👆 新增結束 👆
+                    // 👆 修改結束 👆
 
                     
                     if (isFreeHosting) {
