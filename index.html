@@ -1462,7 +1462,32 @@ if (containsScamKeyword && !isWhitelisted) {
                 if (!result || isReporting) return;
                 setIsReporting(true);
                 try {
-                    const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: result.scannedUrl, riskScore: result.riskScore, aiAnalysis: result.checks.domainAnalysis.details }) });
+                    // 👇 彙整所有風險指標，產生更詳細的報告原因
+                    const warnings = [];
+                    if (result.blocklistListed) warnings.push('此網址已列入詐騙黑名單');
+                    
+                    // 遍歷所有檢查項目，將非 safe 且非 info 的警告加入
+                    Object.values(result.checks).forEach(check => {
+                        if (check.status === 'danger' || check.status === 'warning') {
+                            // 只取第一行，避免過長的 AI 分析文字破壞排版
+                            warnings.push(check.details.split('\n')[0]);
+                        }
+                    });
+
+                    // 去除重複項目並組合
+                    const uniqueWarnings = [...new Set(warnings)];
+                    const detailedAnalysis = `\n原因：\n${uniqueWarnings.map(w => '- ' + w).join('\n')}`;
+
+                    const res = await fetch('/api/report', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ 
+                            url: result.scannedUrl, 
+                            riskScore: result.riskScore, 
+                            aiAnalysis: detailedAnalysis 
+                        }) 
+                    });
+                    
                     const data = await res.json();
                     if (data.success) {
                         const newReported = [...reportedUrls, result.scannedUrl]; setReportedUrls(newReported); localStorage.setItem('reportedUrls', JSON.stringify(newReported));
