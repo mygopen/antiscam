@@ -14,14 +14,17 @@ export async function onRequestPost(context) {
         // 依據 PDF 文件提供的 API Token
         const NETSAFER_TOKEN = env.NETSAFER_API_TOKEN || "0b755ce0b5f70a4eadc60cd74720a0bdecffc6e3";
 
-        // 👇 依照最新需求調整欄位對應
+// 👇 依照最新需求調整欄位對應
+        let riskLevelText = riskScore >= 70 ? '高風險' : (riskScore >= 30 ? '中度風險' : '低風險');
+
         const payload = {
             feature_string: url,
             content: "使用者透過麥擱騙防詐系統自主通報", // 對外的詐騙內容描述
             type: "OTHER",
             platform: "web",
             charge_type: "42",
-            note: `高風險(${riskScore}分) ${aiAnalysis || ''}`.substring(0, 490), // 對內的審核備註 (帶入動態分數與AI分析)
+            // 👇 修改 note 格式，符合完整的風險列表顯示
+            note: `風險等級：${riskLevelText}（分數 ${riskScore}）\n${aiAnalysis || ''}`.substring(0, 490),
             data: {
                 web_42_note: "" // 不放東西，維持空白
             }
