@@ -19,7 +19,7 @@ export async function onRequestPost(context) {
 
         const payload = {
             feature_string: url,
-            content: "使用者透過麥擱騙防詐系統自主通報", // 對外的詐騙內容描述
+            content: "系統即時檢測回報", // 👈 將對外文字改為自動檢測中立字眼
             type: "OTHER",
             platform: "web",
             charge_type: "42",
