@@ -684,23 +684,26 @@
                 riskScore = 100; // 👈 誘騙下載 APK 強制判死刑 (100分)
             } else {
                 // 1. 內容分析優化：區分「惡意阻擋」與「安全防護(WAF)」
+                const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev', '.io', '.ai', '.co', '.app'];
+                const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
+
                 if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
                     if (isHighTraffic || isTrustedTLD) {
-                        riskScore += 10; // 知名網站或政府網域，僅輕微加分
+                        riskScore += 0; // 知名網站，容忍 SPA 空白
+                    } else if (isCommonInternational && siteStatusData.status === 'blank') {
+                        // 👇 常見網域的空白頁多半是 React/Vue 等 SPA，或是 Cloudflare 防護，降至 10 分輕微懷疑
+                        riskScore += 10;
                     } else {
                         riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
                     }
                 } else if (siteStatusData.status === 'unknown') {
-                    const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev', '.io', '.ai', '.co'];
-                    const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
-
                     if (isHighTraffic || isTrustedTLD) {
                         riskScore += 0;
                     } else if (isCommonInternational) {
-                        // 👇 修改：常見國際網域(如 .com) 若抓不到內容，可能只是阻擋爬蟲，僅給予極微量扣分
-                        riskScore += 5; 
+                        // 👇 常見網域被阻擋抓取，通常是 WAF 防護，不予扣分
+                        riskScore += 0; 
                     } else {
-                        riskScore += 75; 
+                        riskScore += 75; // 偏僻網域且抓不到內容，維持高風險
                     }
                 }
 
@@ -721,107 +724,98 @@
                     if (!isHighTraffic && isVeryHighRiskTLD) {
                         riskScore += 40;
                     } else if (!isHighTraffic) {
-                        // 👇 將原本的 riskScore += 45 改為 15
-                        riskScore += 15; // 降低因為 API 逾時查無日期的懲罰，避免誤判
+                        // 👇 降至 10 分，避免因 RDAP API 不穩誤殺合法的老舊或受保護網站
+                        riskScore += 10; 
                     }
                 }
 
                 // 3. 其他特徵分析 (僅在非白名單時計算)
-                if (!isWhitelisted) {  // 👈 就是這行不小心被刪掉了！
-                    // 🚨 修改：只要來源「或」最終網域使用了 .top, .xyz 等高風險後綴，直接重罰
+                if (!isWhitelisted) {
+                    // 🚨 來源或最終網域使用了 .top, .xyz 等高風險後綴，直接重罰
                     if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
 
                     if (isRedirected) {
-                        // 重新宣告乾淨的網域變數
                         const currentCleanDomain = domain.replace(/^www\./, '');
                         const currentCleanFinalDomain = finalDomain.replace(/^www\./, '');
                         const isSameRoot = currentCleanFinalDomain.endsWith(currentCleanDomain) || currentCleanDomain.endsWith(currentCleanFinalDomain);
 
-                        // 👇 實作「判斷 final 轉址即可」邏輯
                         if (isSameRoot || isFinalSafePlatform || isFinalWhitelisted) {
-                            // 終點是內部網域、合法開店平台、或白名單，視為正常商業行為，+0分
                             riskScore += 0;
                         } else {
-                            // 終點不在白名單的跨網域轉址 (包含所有短網址)，一視同仁只給予基本的跨網域嫌疑 (+15分)。
-                            // 真正的生殺大權，交給最終網域的「AI視覺」、「黑名單」與「註冊年齡」來綜合判定！
                             riskScore += 15;
                         }
 
-                        // 🚨 終點若有明顯詐騙特徵 (假冒政府、高危險後綴等)，依然給予致命重罰
+                        // 🚨 終點若有明顯詐騙特徵 (假冒政府、高危險後綴等)，給予致命重罰
                         if (isFinalFakeGov || hasFinalSuspiciousTemp || isFinalVeryHighRiskTLD) {
                             riskScore += 80;
                         }
                     }
 
-                    // 👇👇 隱匿型跳板防禦維持不變：刻意阻擋追蹤的超長跳板，直接秒殺
-                    // 將長度從 12 提高到 20，避免一般正常的短網址(如 reurl) 被誤殺
+                    // 隱匿型跳板防禦維持不變
                     else if (isInputShortener && fullUrl.length > targetDomain.length + 20) {
                         riskScore = 100;
                     }
 
                     if (traceData && traceData.isHighRisk) {
-                        // 再次判斷是否為同網域或合法平台
                         const currentFinalDomain = finalDomain || domain;
                         const isSameRoot = currentFinalDomain.replace(/^www\./, '').endsWith(domain.replace(/^www\./, '')) || domain.replace(/^www\./, '').endsWith(currentFinalDomain.replace(/^www\./, ''));
 
                         if (isFinalSafePlatform) {
                             riskScore += 0;
                         } else if (isSameRoot) {
-                            // 👇 修正：同網域內部的追蹤異常(如 JS Loop) 雖不是跨域，但極常被一頁式詐騙用來阻擋爬蟲，因此給予 40 分的懲罰！
-                            riskScore += 40; 
+                            // 👇 修正：同網域內部的追蹤異常(如 JS Loop) 有極大可能是 Cloudflare 人機驗證，給予 15 分的輕微扣分即可，有其他特徵才會變為中風險
+                            riskScore += 15; 
                         } else {
                             riskScore += 80;
                         }
                     }
 
-if (isFakeGov || isFinalFakeGov) riskScore += 90;
-        // 新增：如果包含公共事業關鍵字卻非白名單，視為極高風險
-        if (isFakeService) riskScore += 90;
-        
-        // 👇 新增：嚴懲「用連字號假冒知名網域」的行為
-        // 詐騙集團喜歡用 com-tw, 7-11-com 等字眼來騙人
-        // 👇 擴大攔截網，只要包含 myship, 711-tw, familytw 等字眼就一律重罰 80 分
-// 👇 金融與品牌偽裝強力攔截器
-const scamKeywords = [
-    'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov', // 銀行類
-    '7-11-com', 'myship-711', '711-tw', 'familytw', 'famiport', 'myship', // 電商類
-    'com-tw', '-online', '-verify', '-login' // 動作類
-];
+                    if (isFakeGov || isFinalFakeGov) riskScore += 90;
+                    if (isFakeService) riskScore += 90;
 
-// 如果網域包含以上關鍵字，且該網域「不在」官方白名單內，直接重罰 90 分！
-const containsScamKeyword = scamKeywords.some(kw => domain.includes(kw));
-if (containsScamKeyword && !isWhitelisted) {
-    riskScore += 90;
-}
+                    // 金融與品牌偽裝強力攔截器
+                    const scamKeywords = [
+                        'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov', 
+                        '7-11-com', 'myship-711', '711-tw', 'familytw', 'famiport', 'myship', 
+                        'com-tw', '-online', '-verify', '-login' 
+                    ];
+                    const containsScamKeyword = scamKeywords.some(kw => domain.includes(kw));
+                    if (containsScamKeyword && !isWhitelisted) {
+                        riskScore += 90;
+                    }
 
-        // 修正：放寬連字號的容忍度，大於等於 3 個才輕微扣分 (如果已經因為上面的假冒網域扣分了，這裡就當作疊加懲罰)
-        if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
+                    if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
                     if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
                     if (hasSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
 
                     // 👇 修改：精準打擊單頁式詐騙，降低正常老網站的誤殺率 👇
-                    // 很多現代網站 (SPA) 或是 API 抓取失敗時會呈現 0 連結。
-                    // 因此我們將「0 連結」結合「網域註冊不到一年」或「其他高風險特徵」，才給予致命重擊。
                     if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && !isHighTraffic) {
                         let isNewDomain = false;
                         if (rdapData.date) {
                             const regDate = new Date(rdapData.date);
                             const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
-                            if (diffDays < 365) isNewDomain = true; // 註冊未滿一年的新網域
-                        } else {
-                            isNewDomain = true; // 查無 WHOIS 日期也視為免洗特徵
+                            if (diffDays < 365) isNewDomain = true; 
+                        } // 查無 WHOIS 則不預設為新網域，交給其他特徵判斷
+                        
+                        // 判斷是否為外部轉址
+                        let isExternalRedirect = false;
+                        if (isRedirected && finalDomain) {
+                            const cleanD = domain.replace(/^www\./, '');
+                            const cleanFD = finalDomain.replace(/^www\./, '');
+                            isExternalRedirect = !(cleanFD.endsWith(cleanD) || cleanD.endsWith(cleanFD));
                         }
 
-                        if (isVeryHighRiskTLD || hasSuspiciousTempDomain || isFreeHosting || isNewDomain || isRedirected) {
-                            riskScore += 45; // 綜合可疑特徵，確認為免洗一頁式詐騙！
+                        // 如果具備任何一個免洗特徵，加上 0 連結，重罰！
+                        if (isVeryHighRiskTLD || hasSuspiciousTempDomain || isFreeHosting || isNewDomain || isExternalRedirect) {
+                            riskScore += 45; 
                         } else {
-                            riskScore += 10; // 是有歷史的老網站，只是剛好抓不到連結，僅輕微扣分不影響安全評級
+                            // 正常網域 (.com) 但抓不到連結，極可能是 React/Vue 等 SPA，不予懲罰
+                            riskScore += 0; 
                         }
                     }
                     // 👆 修改結束 👆
 
-                    
                     if (isFreeHosting) {
                         riskScore += 30;
                         if (isHighEntropy) riskScore += 50;
