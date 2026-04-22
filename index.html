@@ -1061,6 +1061,49 @@ if (containsScamKeyword && !isWhitelisted) {
         };
 
 
+        // =========================================================================
+        // 📡 自動通報 Helper：將每次查詢的正常/異常指標全部組合並送往後台
+        // =========================================================================
+        const sendAutoReport = async (url, scanData, brandDataRes, source, reportedUrls, setReportedUrls) => {
+            try {
+                const indicators = [];
+                
+                // 黑名單與假冒品牌屬於絕對危險特徵
+                if (scanData.blocklistListed) indicators.push('🚨 已列入165詐騙黑名單');
+                if (brandDataRes && brandDataRes.isFakeBrand) indicators.push(`🚨 假冒品牌：偽裝成「${brandDataRes.detectedBrand}」`);
+                
+                // 依序條列各項檢查的指標與理由 (包含安全、警告、危險)
+                Object.values(scanData.checks).forEach(check => {
+                    if (check.status === 'danger') indicators.push(`❌ ${check.label}: ${check.details.split('\n')[0]}`);
+                    else if (check.status === 'warning') indicators.push(`⚠️ ${check.label}: ${check.details.split('\n')[0]}`);
+                    else if (check.status === 'safe') indicators.push(`✅ ${check.label}: ${check.details.split('\n')[0]}`);
+                });
+                
+                const aiAnalysisContent = `[系統自動檢測 - ${source}]\n判斷為正常或詐騙之指標：\n${indicators.join('\n')}`;
+
+                const res = await fetch('/api/report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: url,
+                        riskScore: scanData.riskScore,
+                        aiAnalysis: aiAnalysisContent // 送出我們整理好的全指標清單
+                    })
+                });
+
+                const data = await res.json();
+                
+                // 若通報成功，自動將此網址加入前端的「已通報清單」，UI 按鈕會自動變灰
+                if (data.success && !reportedUrls.includes(url)) {
+                    const newReported = [...reportedUrls, url];
+                    setReportedUrls(newReported);
+                    localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                }
+            } catch (e) {
+                console.log('背景自動通報失敗，不影響主流程', e);
+            }
+        };
+
 // =========================================================================
         // 🦁 完整的 BotAssistant 元件 (獨立運作，包含貼圖與檢舉功能)
         // =========================================================================
@@ -1164,6 +1207,9 @@ if (containsScamKeyword && !isWhitelisted) {
                             if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {   
                                 scanData.riskScore = 100;
                             }
+
+                            // 👇 新增：背景自動發送檢測指標與理由
+                            sendAutoReport(urlObj.href, scanData, brandDataRes, '阿麥聊天室', reportedUrls, setReportedUrls);
 
                             let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 安全');
                             let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
@@ -1653,6 +1699,11 @@ if (containsScamKeyword && !isWhitelisted) {
 
                     setBrandAnalysis(brandDataRes);
                     setResult(scanData);
+
+                    // 👇 新增：每次查詢完畢，自動背景通報正常與詐騙的判斷指標
+                    if (!scanData.isInvalid && !scanData.isSocialMedia) {
+                        sendAutoReport(urlObj.href, scanData, brandDataRes, '首頁檢測', reportedUrls, setReportedUrls);
+                    }
 
                     // 👇 新增：GA4 網址檢測行為追蹤
                     if (typeof gtag === 'function') {
