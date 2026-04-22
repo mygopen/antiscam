@@ -691,17 +691,16 @@
                         riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
                     }
                 } else if (siteStatusData.status === 'unknown') {
-                    // 加入 .dev, .io, .ai, .co 等合法且常見的科技業網域
                     const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev', '.io', '.ai', '.co'];
                     const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
 
                     if (isHighTraffic || isTrustedTLD) {
                         riskScore += 0;
                     } else if (isCommonInternational) {
-                        // 如果是常見國際網域或台灣網域但抓不到內容，給予中度懷疑而非直接判定危險
-                        riskScore += 25;
+                        // 👇 修改：常見國際網域(如 .com) 若抓不到內容，可能只是阻擋爬蟲，僅給予極微量扣分
+                        riskScore += 5; 
                     } else {
-                        riskScore += 75; // 偏僻網域且抓不到內容，維持高風險
+                        riskScore += 75; 
                     }
                 }
 
