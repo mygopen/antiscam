@@ -540,7 +540,7 @@
                 domain.endsWith('.gov.tw') ||
                 domain.endsWith('.edu.tw');
 
-            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn', '.gal'];
+            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn','.cv', '.gal'];
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
 
