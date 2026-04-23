@@ -548,16 +548,16 @@
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
 
-            // 請替換原本的 Promise.all 區塊
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData] = await Promise.all([
+            // 將 Google Safe Browsing 加入平行掃描陣列中
+            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData, safeBrowsingData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
-
                 Promise.resolve({ status: 'ok', msg: '網頁原始碼讀取成功', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
-
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, null),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }),
-                withTimeout(fetchTraceData(fullUrl), 8000, null)
+                withTimeout(fetchTraceData(fullUrl), 8000, null),
+                // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
+                withTimeout(fetch(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`).then(r => r.ok ? r.json() : { isUnsafe: false }).catch(() => ({ isUnsafe: false })), 4000, { isUnsafe: false })
             ]);
 
             const rdapDate = rdapData.date;
@@ -675,6 +675,11 @@
 
             // --- [優化版] 精確風險權重判定 ---
             let riskScore = 0;
+            
+            // 👇 新增：如果 Google 官方標記危險，直接給 100 分滿分死刑
+            const isGoogleFlagged = safeBrowsingData && safeBrowsingData.isUnsafe;
+
+            
             // 👇 如果網頁有 APK 且不在白名單內，視為極度危險
             const isApkSite = siteStatusData.hasApk && !isWhitelisted; 
 
@@ -682,6 +687,10 @@
                 riskScore = 100;
             } else if (isApkSite) {
                 riskScore = 100; // 👈 誘騙下載 APK 強制判死刑 (100分)
+
+            } else if (isGoogleFlagged && !isWhitelisted) {
+                // 👇 加入 Google 的防護邏輯 (如果是白名單被 Google 誤判，則尊重白名單)
+                riskScore = 100;
             } else {
                 // 1. 內容分析優化：區分「惡意阻擋」與「安全防護(WAF)」
                 const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev', '.io', '.ai', '.co', '.app'];
@@ -895,6 +904,12 @@
                 domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed, isSocialMedia: isSocialMedia,
                 details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
                 checks: {
+                    // 👇 新增這行：Google 官方的標記卡片
+                    googleSafeBrowsing: { 
+                        status: isGoogleFlagged ? 'danger' : 'safe', 
+                        label: 'Google 官方安全庫', 
+                        details: isGoogleFlagged ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : 'Google Safe Browsing 未發現威脅' 
+                    },
                     siteContent: { status: isSocialMedia ? 'warning' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger'), label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
