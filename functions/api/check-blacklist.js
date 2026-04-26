@@ -32,7 +32,8 @@ export async function onRequest(context) {
         "kw.ac.kr",
         "xsddk.com",
         "yaewsn.com",
-        "jimanman888.com"
+        "jimanman888.com",
+        "dearxi.com"
     ];
 
     // 檢查邏輯：完全符合，或是其子網域
