@@ -540,7 +540,7 @@
                 domain.endsWith('.gov.tw') ||
                 domain.endsWith('.edu.tw');
 
-            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn','.cv', '.gal'];
+            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn','.cv', '.gal', '.pro', '.vip', '.cc', '.pw', '.ws'];
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
 
@@ -595,7 +595,8 @@
             
             // 1. 長亂碼檢查 (既有邏輯：高數學亂度 或 12碼以上的英數組合)
             const isLongGibberish = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
-            
+            // 👇 新增：極端亂碼檢查 (15碼以上的隨機英數，極高機率為釣魚專屬追蹤碼)
+            const isExtremeGibberish = /^[a-z0-9]{15,50}$/.test(subdomainPart);
             // 👇 2. 新增：短亂碼 (DGA 演算法) 暴力檢查法
             // 特徵 A：5個字母以上，卻完全沒有母音 a, e, i, o, u (例如 yqhgw, xsddk)
             const lacksVowels = subdomainPart.length >= 5 && !/[aeiou]/i.test(subdomainPart);
@@ -829,7 +830,12 @@
                         riskScore += 30;
                         if (isHighEntropy) riskScore += 50;
                     } else if (isHighEntropy && !isHighTraffic) {
-                        riskScore += 30;
+                        // 👇 修改：如果亂碼長度極端誇張 (>=15)，給予 70 分重罰 (釣魚專屬碼特徵)
+                        if (isExtremeGibberish) {
+                            riskScore += 70;
+                        } else {
+                            riskScore += 30;
+                        }
                     }
                 } // 👈 關閉 if (!isWhitelisted)
 
@@ -934,7 +940,7 @@
                     network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
-                    entropy: { status: isHighEntropy ? 'warning' : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? '網域名稱隨機度過高，疑似機器生成' : '網域名稱結構正常' },
+                    entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
                     apkCheck: { status: isApkSite ? 'danger' : 'safe', label: '可疑檔案下載', details: isApkSite ? '偵測到不明 APK 檔下載，極高風險！' : '未偵測到可疑 Android 應用程式' }
                 }
