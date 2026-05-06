@@ -123,7 +123,7 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({ isFakeBrand: false, message: "未設定 API Key" }));
         }
 
-        // 👇 將品牌偵測大腦也搬到 Google Gemma 3 4B
+        // 👇 將純文字的品牌偵測，交給擁有 14,400 次免費額度的 Gemma 3 4B
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${env.GEMINI_API_KEY}`;
         const aiRes = await fetch(apiUrl, {
             method: 'POST',
