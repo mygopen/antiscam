@@ -83,16 +83,18 @@ export async function onRequestPost(context) {
 let cleanReport = '';
 
         try {
-            const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
+            // 👇 圖片分析必須使用支援多模態的 Gemini，動用每天 20 次的珍貴額度
+            const rawReport = await callGoogleGemmaAPI('gemini-2.5-flash');
             cleanReport = extractCleanReport(rawReport);
             
-        } catch (err4b) {
-            console.log("⚠️ Gemma 3 4B 失敗，切換至 12B 備援...", err4b.message);
+        } catch (errFlash) {
+            console.log("⚠️ Gemini Flash 失敗，切換至備援...", errFlash.message);
             try {
-                const rawReport = await callGoogleGemmaAPI('gemma-3-12b-it');
+                // 👇 備援：可以試著切換到另一個有 20 次額度的 Gemini 3 Flash
+                const rawReport = await callGoogleGemmaAPI('gemini-3-flash');
                 cleanReport = extractCleanReport(rawReport);
-            } catch (err12b) {
-                throw new Error(`雙引擎無法服務。\n主將: ${err4b.message}\n備援: ${err12b.message}`);
+            } catch (errFallback) {
+                throw new Error(`圖片分析額度可能已耗盡 (每日限 20 次)。\n主將: ${errFlash.message}`);
             }
         }
 
