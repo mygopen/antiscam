@@ -83,18 +83,26 @@ export async function onRequestPost(context) {
 let cleanReport = '';
 
         try {
-            // 👇 圖片分析必須使用支援多模態的 Gemini，動用每天 20 次的珍貴額度
+            // 👇 主將：優先動用 Gemini 2.5 Flash 處理圖片
             const rawReport = await callGoogleGemmaAPI('gemini-2.5-flash');
             cleanReport = extractCleanReport(rawReport);
             
         } catch (errFlash) {
-            console.log("⚠️ Gemini Flash 失敗，切換至備援...", errFlash.message);
+            console.log("⚠️ Gemini Flash 失敗，切換至 Pro 備援...", errFlash.message);
             try {
-                // 👇 備援：可以試著切換到另一個有 20 次額度的 Gemini 3 Flash
-                const rawReport = await callGoogleGemmaAPI('gemini-3-flash');
+                // 👇 備援 1：切換到 Gemini 2.5 Pro 繼續嘗試
+                const rawReport = await callGoogleGemmaAPI('gemini-2.5-pro');
                 cleanReport = extractCleanReport(rawReport);
-            } catch (errFallback) {
-                throw new Error(`圖片分析額度可能已耗盡 (每日限 20 次)。\n主將: ${errFlash.message}`);
+            } catch (errPro) {
+                console.log("⚠️ Gemini 額度全數耗盡，測試 Gemma 3 終極備援...", errPro.message);
+                try {
+                    // 👇 終極備援：如果 Google 官方悄悄修復/開放了 Gemma 3 的看圖能力，這裡就能成功接住！
+                    const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
+                    cleanReport = extractCleanReport(rawReport);
+                } catch (errGemma) {
+                    // 如果連 Gemma 3 都報錯 (404不支援)，就正式宣告今日額度結束
+                    throw new Error(`圖片分析額度已耗盡或模型暫不支援。\nFlash: ${errFlash.message}\nGemma: ${errGemma.message}`);
+                }
             }
         }
 
