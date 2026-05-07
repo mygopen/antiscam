@@ -33,7 +33,11 @@ export async function onRequest(context) {
         "xsddk.com",
         "yaewsn.com",
         "jimanman888.com",
-        "dearxi.com"
+        "dearxi.com",
+        "discover-news.tokyo/",
+        "planeta-info.com",
+        "spp.it.com",
+        "lam810522.com"
     ];
 
     // 檢查邏輯：完全符合，或是其子網域
