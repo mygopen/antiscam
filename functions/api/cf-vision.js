@@ -118,7 +118,7 @@ let cleanReport = '';
                 const rawReport = await callGeminiVisionAPI('gemini-2.5-pro');
                 cleanReport = extractCleanReport(rawReport);
             } catch (errPro) {
-                throw new Error(`圖片分析額度已耗盡或模型暫不支援。\nFlash: ${errFlash.message}\nPro: ${errPro.message}`);
+                throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
             }
         }
 
