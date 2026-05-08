@@ -37,6 +37,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/risk-config.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
@@ -154,13 +155,8 @@
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
-
-        // 👇 定義知名的社群/通訊平台網域，攔截這些網址
-        const SOCIAL_MEDIA_DOMAINS = [
-            'facebook.com', 'fb.com', 'fb.me', 'instagram.com', 'ig.me', 
-            'twitter.com', 'x.com', 'tiktok.com', 'youtube.com', 'youtu.be', 't.me',
-            'threads.net', 'threads.com', 'line.me', 'dcard.tw', 'plurk.com', 'weibo.com', 'xiaohongshu.com'
-        ];
+        const RISK_CONFIG = window.RISK_CONFIG || {};
+        const getRiskList = (key) => Array.isArray(RISK_CONFIG[key]) ? RISK_CONFIG[key] : [];
 
         // --- Icons ---
         const IconBase = ({ children, size = 20, className = "" }) => (
@@ -533,18 +529,19 @@
             });
 
             // 👇 判斷是否為社群平台
-            const isSocialMedia = SOCIAL_MEDIA_DOMAINS.some(s => domain === s || domain.endsWith('.' + s));
+            const socialMediaDomains = getRiskList('socialMediaDomains');
+            const isSocialMedia = socialMediaDomains.some(s => domain === s || domain.endsWith('.' + s));
 
             const isTrustedTLD = domain.endsWith('.com.tw') ||
                 domain.endsWith('.org.tw') ||
                 domain.endsWith('.gov.tw') ||
                 domain.endsWith('.edu.tw');
 
-            const highRiskSuffixes = ['.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia', '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou', '.chat', '.cn','.cv', '.gal', '.pro', '.vip', '.cc', '.pw', '.ws'];
+            const highRiskSuffixes = getRiskList('highRiskTlds');
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const isSuspiciousTLD = domain.endsWith('.info');
 
-            const shorteners = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly', 'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see', 'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc', 'aka.ms', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com', 'l.messenger.com'];
+            const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
 
@@ -564,12 +561,12 @@
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
             const traceChain = traceData ? traceData.chain : [];
-            const freeHostingProviders = ['dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'weebly.com', 'github.io', 'vercel.app', 'netlify.app', 'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com', 'pages.dev', 'myshopify.com', 'surge.sh', 'cloudfront.net', 'workers.dev', 'web.app', 'azureedge.net', 'ondigitalocean.app', 'eu.cc'];
+            const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
 
             // 修正：只有在白名單內或高流量且不是免費空間時才視為高流量網站
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
-            const safeShorteners = ['lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly', 'bitly.com', 'aka.ms'];
+            const safeShorteners = getRiskList('safeShorteners');
 
             let trafficStatus = 'warning';
             let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
@@ -610,7 +607,8 @@
             const hasMultipleHyphens = hyphenCount >= 2;
 
             // [修改] 檢查網域是否包含 -tw、-com 或 -online 等常見詐騙字樣
-            const hasSuspiciousTempDomain = domain.includes('-tw') || domain.includes('-com') || domain.includes('-online');
+            const suspiciousDomainFragments = getRiskList('suspiciousDomainFragments');
+            const hasSuspiciousTempDomain = suspiciousDomainFragments.some(fragment => domain.includes(fragment));
 
             let isRedirected = false;
             let finalDomain = '';
@@ -649,7 +647,7 @@
 
                         finalHyphenCount = (finalDomain.match(/-/g) || []).length;
                         isFinalFakeGov = finalDomain.includes('gov') && !finalDomain.endsWith('.gov') && !finalDomain.endsWith('.gov.tw');
-                        hasFinalSuspiciousTemp = finalDomain.includes('-tw') || finalDomain.includes('-com') || finalDomain.includes('-online');
+                        hasFinalSuspiciousTemp = suspiciousDomainFragments.some(fragment => finalDomain.includes(fragment));
 
                         // 👇 檢查最終網域是否使用詐騙後綴
                         isFinalVeryHighRiskTLD = highRiskSuffixes.some(s => finalDomain.endsWith(s));
@@ -659,19 +657,19 @@
                             return finalDomain === lowerW || finalDomain.endsWith('.' + lowerW);
                         });
                         // 👇 2. 新增：判斷是否導向台灣常見的合法開店平台
-                        const safePlatforms = ['shoplineapp.com', 'cyberbiz.co', 'meepshoper.com', 'waca.tw', 'waca.ec', 'waca.store', 'easystore.co', '91app.com', 'qdm.tw', 'boutir.com', 'myshopify.com'];
+                        const safePlatforms = getRiskList('safeCommercePlatforms');
                         isFinalSafePlatform = safePlatforms.some(p => finalDomain === p || finalDomain.endsWith('.' + p));
                     }
                 } catch (e) { }
             }
 
-            const highRiskRegistrars = ['namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy', 'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'];
+            const highRiskRegistrars = getRiskList('highRiskRegistrars');
             const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
             const isDeepSubdomain = domain.split('.').length >= 5;
-            const hasSuspiciousParams = ['token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='].some(key => fullUrl.toLowerCase().includes(key));
+            const hasSuspiciousParams = getRiskList('sensitiveUrlParams').some(key => fullUrl.toLowerCase().includes(key));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
-            const fakeServiceKeywords = ['einvoice', 'taipower', 'water', 'fetc'];
+            const fakeServiceKeywords = getRiskList('fakeServiceKeywords');
             const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
 
             // --- [優化版] 精確風險權重判定 ---
@@ -694,7 +692,7 @@
                 riskScore = 100;
             } else {
                 // 1. 內容分析優化：區分「惡意阻擋」與「安全防護(WAF)」
-                const commonInternationalTLDs = ['.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev', '.io', '.ai', '.co', '.app'];
+                const commonInternationalTLDs = getRiskList('commonInternationalTlds');
                 const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
 
                 if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
@@ -784,11 +782,7 @@
                     if (isFakeService) riskScore += 90;
 
                     // 金融與品牌偽裝強力攔截器
-                    const scamKeywords = [
-                        'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov', 
-                        '7-11-com', 'myship-711', '711-tw', 'familytw', 'famiport', 'myship', 
-                        'com-tw', '-online', '-verify', '-login' 
-                    ];
+                    const scamKeywords = getRiskList('scamKeywords');
                     const containsScamKeyword = scamKeywords.some(kw => domain.includes(kw));
                     if (containsScamKeyword && !isWhitelisted) {
                         riskScore += 90;
@@ -1656,7 +1650,7 @@
                     if (document.activeElement) document.activeElement.blur();
 
                     // 👇 判斷輸入網址是否為社群平台
-                    const isSocialInput = SOCIAL_MEDIA_DOMAINS.some(s => urlObj.hostname === s || urlObj.hostname.endsWith('.' + s));
+                    const isSocialInput = getRiskList('socialMediaDomains').some(s => urlObj.hostname === s || urlObj.hostname.endsWith('.' + s));
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
