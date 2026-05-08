@@ -27,6 +27,10 @@ function hasHighRiskTld(domain) {
     return riskConfig.highRiskTlds.some(suffix => domain.toLowerCase().endsWith(suffix));
 }
 
+function hasSuspiciousTld(domain) {
+    return riskConfig.suspiciousTlds.some(suffix => domain.toLowerCase().endsWith(suffix));
+}
+
 function isFakeGov(domain, isWhitelisted = false) {
     const lowerDomain = domain.toLowerCase();
     return lowerDomain.includes('gov') &&
@@ -199,6 +203,8 @@ test('高風險 TLD 會被標記', () => {
     assert.equal(hasHighRiskTld('promo.shop'), true);
     assert.equal(hasHighRiskTld('verify-login.xyz'), true);
     assert.equal(hasHighRiskTld('mygopen.com'), false);
+    assert.equal(hasHighRiskTld('infodemic.cc'), false);
+    assert.equal(hasSuspiciousTld('infodemic.cc'), true);
 });
 
 test('假政府網域只攔截非正式政府後綴', () => {

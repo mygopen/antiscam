@@ -669,7 +669,8 @@
 
             const highRiskSuffixes = getRiskList('highRiskTlds');
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
-            const isSuspiciousTLD = domain.endsWith('.info');
+            const suspiciousTlds = getRiskList('suspiciousTlds');
+            const isSuspiciousTLD = suspiciousTlds.some(s => domain.endsWith(s)) || domain.endsWith('.info');
 
             const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
@@ -880,6 +881,8 @@
                     // 無法取得日期時，若非高流量網站，則視為潛在風險
                     if (!isHighTraffic && isVeryHighRiskTLD) {
                         riskScore += 40;
+                    } else if (!isHighTraffic && isSuspiciousTLD) {
+                        riskScore += 10;
                     } else if (!isHighTraffic) {
                         // 👇 降至 10 分，避免因 RDAP API 不穩誤殺合法的老舊或受保護網站
                         riskScore += 10; 
@@ -890,6 +893,7 @@
                 if (!isWhitelisted) {
                     // 🚨 來源或最終網域使用了 .top, .xyz 等高風險後綴，直接重罰
                     if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) riskScore += 75;
+                    else if (isSuspiciousTLD) riskScore += 15;
 
                     if (isRedirected) {
                         const currentCleanDomain = domain.replace(/^www\./, '');
@@ -1044,6 +1048,9 @@
             } else if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '網域或轉址目標為高風險網址，請注意！';
+            } else if (isSuspiciousTLD) {
+                domainAnalysisStatus = 'warning';
+                domainAnalysisDetails = '網域使用較常被濫用的後綴，需搭配其他風險指標判斷';
             } else if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '網域包含 "-tw", "-com" 等常見詐騙偽裝字樣，風險極高！';

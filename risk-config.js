@@ -7,7 +7,10 @@ window.RISK_CONFIG = {
     highRiskTlds: [
         '.shop', '.xyz', '.top', '.club', '.live', '.fun', '.store', '.asia',
         '.digital', '.click', '.site', '.cloud', '.sbs', '.icu', '.cyou',
-        '.chat', '.cn', '.cv', '.gal', '.pro', '.vip', '.cc', '.pw', '.ws'
+        '.chat', '.cn', '.cv', '.gal', '.pro', '.vip', '.pw', '.ws'
+    ],
+    suspiciousTlds: [
+        '.cc'
     ],
     commonInternationalTlds: [
         '.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev',
