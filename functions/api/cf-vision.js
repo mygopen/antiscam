@@ -66,16 +66,40 @@ export async function onRequestPost(context) {
         };
 
         // 👇 攔截器更新：移除 view 擷取，直接回傳 4 行
+        const cleanAiLine = (line) => line.replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim();
+
+        const normalizeRiskLine = (line) => {
+            const cleaned = cleanAiLine(line || '');
+            const riskText = cleaned.replace(/^⚠️\s*風險：?/, '').trim();
+
+            if (/(未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
+                return "⚠️ 風險：未發現";
+            }
+
+            const hasHigh = /高/.test(riskText);
+            const hasMedium = /中/.test(riskText);
+            const hasLow = /低/.test(riskText);
+            const riskCount = [hasHigh, hasMedium, hasLow].filter(Boolean).length;
+
+            if (riskCount === 1) {
+                if (hasHigh) return "⚠️ 風險：高風險";
+                if (hasMedium) return "⚠️ 風險：中風險";
+                if (hasLow) return "⚠️ 風險：未發現";
+            }
+
+            return "⚠️ 風險：未發現";
+        };
+
         const extractCleanReport = (rawText) => {
             const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
             const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
             const urlMatch = rawText.match(/🔗.*?(?=\n|$)/);
             const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
 
-            const risk = riskMatch ? riskMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "⚠️ 風險：待確認";
-            const analysis = analysisMatch ? analysisMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🔍 分析：細節待查證";
-            const urlExtract = urlMatch ? urlMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🔗 網址：無";
-            const advice = adviceMatch ? adviceMatch[0].replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim() : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
+            const risk = riskMatch ? normalizeRiskLine(riskMatch[0]) : "⚠️ 風險：未發現";
+            const analysis = analysisMatch ? cleanAiLine(analysisMatch[0]) : "🔍 分析：細節待查證";
+            const urlExtract = urlMatch ? cleanAiLine(urlMatch[0]) : "🔗 網址：無";
+            const advice = adviceMatch ? cleanAiLine(adviceMatch[0]) : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
 
             return `${risk}\n${analysis}\n${urlExtract}\n${advice}`;
         };
@@ -222,7 +246,7 @@ let cleanReport = '';
         // =========================================================
         
         // 1. 軟化 AI 原生的「低風險」斬釘截鐵語氣 (無敵版：不管 AI 加上什麼廢話，只要這行有⚠️且包含「低」，全部強迫換掉！)
-        cleanReport = cleanReport.replace(/⚠️.*低.*/, '⚠️ 風險：未偵測到明顯風險的網址或特徵');
+        cleanReport = cleanReport.replace(/⚠️.*低.*/, '⚠️ 風險：未發現');
         
         // 2. 把文字切成一行一行，如果那一行是用 🔍 開頭的，就把它丟掉，剩下的重新組合起來！
         cleanReport = cleanReport.split('\n').filter(line => !line.trim().startsWith('🔍')).join('\n');
