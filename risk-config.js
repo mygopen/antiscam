@@ -54,5 +54,31 @@ window.RISK_CONFIG = {
     ],
     sensitiveUrlParams: [
         'token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='
+    ],
+    sensitiveFormKeywords: [
+        'password', 'passwd', 'pwd', 'passcode', 'otp', 'pin', 'verify',
+        'verification', 'auth', 'token', 'session', 'login', 'account',
+        'username', 'userid', 'idnumber', 'identity', 'creditcard', 'cardnumber',
+        'cvv', 'cvc', 'expire', 'expiry', 'bank', '身分證', '身份證',
+        '統一編號', '信用卡', '卡號', '驗證碼', '簡訊碼', '密碼',
+        '帳號', '銀行', '金融卡', '有效期限', '安全碼'
+    ],
+    trustedResourceDomains: [
+        'google.com', 'googleapis.com', 'gstatic.com', 'googletagmanager.com',
+        'google-analytics.com', 'cloudflare.com', 'cloudflareinsights.com',
+        'jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com', 'bootstrapcdn.com',
+        'jquery.com', 'facebook.net', 'youtube.com'
+    ],
+    protectedBrands: [
+        { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
+        { name: '國泰世華', keywords: ['cathay', 'cathaybk'], domains: ['cathaybk.com.tw'] },
+        { name: '玉山銀行', keywords: ['esun', 'esunbank'], domains: ['esunbank.com.tw', 'esunbank.com'] },
+        { name: '台新銀行', keywords: ['taishin', 'taishinbank'], domains: ['taishinbank.com.tw'] },
+        { name: '富邦銀行', keywords: ['fubon', 'taipeifubon'], domains: ['fubon.com', 'taipeifubon.com.tw'] },
+        { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
+        { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
+        { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
+        { name: '台灣電力公司', keywords: ['taipower'], domains: ['taipower.com.tw'] },
+        { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] }
     ]
 };

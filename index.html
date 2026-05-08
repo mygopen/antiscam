@@ -239,6 +239,131 @@
             return entropy;
         };
 
+        const normalizeHostname = (hostname) => hostname.toLowerCase().replace(/^www\./, '');
+
+        const isSameRootDomain = (a, b) => {
+            const cleanA = normalizeHostname(a);
+            const cleanB = normalizeHostname(b);
+            return cleanA === cleanB || cleanA.endsWith('.' + cleanB) || cleanB.endsWith('.' + cleanA);
+        };
+
+        const isTrustedResourceDomain = (hostname) => {
+            const trustedDomains = getRiskList('trustedResourceDomains');
+            return trustedDomains.some(domain => isSameRootDomain(hostname, domain));
+        };
+
+        const getComparableDomainText = (hostname) => {
+            return normalizeHostname(hostname).replace(/[^a-z0-9]/g, '');
+        };
+
+        const levenshteinDistance = (a, b) => {
+            const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+            for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+            return matrix[a.length][b.length];
+        };
+
+        const checkBrandSimilarity = (hostname, currentWhitelist = []) => {
+            const domainText = getComparableDomainText(hostname);
+            const protectedBrands = getRiskList('protectedBrands');
+
+            for (const brand of protectedBrands) {
+                const officialDomains = brand.domains || [];
+                const isOfficialDomain = officialDomains.some(domain => isSameRootDomain(hostname, domain));
+                const isWhitelisted = currentWhitelist.some(domain => isSameRootDomain(hostname, domain));
+                if (isOfficialDomain || isWhitelisted) continue;
+
+                for (const keyword of (brand.keywords || [])) {
+                    const normalizedKeyword = keyword.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (!normalizedKeyword || normalizedKeyword.length < 3) continue;
+
+                    const containsBrand = domainText.includes(normalizedKeyword);
+                    let closeTypo = false;
+                    for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
+                        const segment = domainText.slice(i, i + normalizedKeyword.length);
+                        if (levenshteinDistance(segment, normalizedKeyword) <= 1) {
+                            closeTypo = true;
+                            break;
+                        }
+                    }
+
+                    if (containsBrand || closeTypo) {
+                        return { matched: true, brandName: brand.name, keyword };
+                    }
+                }
+            }
+
+            return { matched: false, brandName: null, keyword: null };
+        };
+
+        const analyzePageSignals = (doc, fullUrl) => {
+            let domainHostname = '';
+            try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
+
+            const sensitiveKeywords = getRiskList('sensitiveFormKeywords');
+            const sensitiveFields = [];
+            doc.querySelectorAll('input, textarea, select').forEach(el => {
+                const type = (el.getAttribute('type') || '').toLowerCase();
+                const haystack = [
+                    type,
+                    el.getAttribute('name'),
+                    el.getAttribute('id'),
+                    el.getAttribute('placeholder'),
+                    el.getAttribute('autocomplete'),
+                    el.getAttribute('aria-label')
+                ].filter(Boolean).join(' ').toLowerCase();
+
+                const isSensitiveType = ['password', 'tel', 'email'].includes(type);
+                const matchedKeyword = sensitiveKeywords.find(keyword => haystack.includes(keyword.toLowerCase()));
+                if (isSensitiveType || matchedKeyword) {
+                    sensitiveFields.push({
+                        type: type || 'unknown',
+                        keyword: matchedKeyword || type
+                    });
+                }
+            });
+
+            const externalResources = [];
+            const collectExternalUrl = (rawUrl, kind) => {
+                if (!rawUrl || rawUrl.startsWith('data:') || rawUrl.startsWith('blob:') || rawUrl.startsWith('#')) return;
+                try {
+                    const parsed = new URL(rawUrl, fullUrl);
+                    if (!/^https?:$/i.test(parsed.protocol)) return;
+                    if (!domainHostname || isSameRootDomain(parsed.hostname, domainHostname) || isTrustedResourceDomain(parsed.hostname)) return;
+                    externalResources.push({ kind, hostname: parsed.hostname, url: parsed.href });
+                } catch (e) { }
+            };
+
+            doc.querySelectorAll('script[src]').forEach(el => collectExternalUrl(el.getAttribute('src'), 'script'));
+            doc.querySelectorAll('iframe[src], frame[src]').forEach(el => collectExternalUrl(el.getAttribute('src'), 'iframe'));
+            doc.querySelectorAll('form[action]').forEach(el => collectExternalUrl(el.getAttribute('action'), 'form'));
+
+            const externalFormActions = externalResources.filter(item => item.kind === 'form');
+            const externalIframeSources = externalResources.filter(item => item.kind === 'iframe');
+
+            return {
+                sensitiveFields: {
+                    count: sensitiveFields.length,
+                    examples: sensitiveFields.slice(0, 3)
+                },
+                externalResources: {
+                    count: externalResources.length,
+                    formActionCount: externalFormActions.length,
+                    iframeCount: externalIframeSources.length,
+                    examples: externalResources.slice(0, 3)
+                }
+            };
+        };
+
         const fetchGeoLocation = async (ip) => {
             try {
                 const geoRes = await fetch(`https://ipwho.is/${ip}`);
@@ -273,6 +398,10 @@
                 let hasIframe = false;
                 let hasApk = false; // 👈 新增 APK 偵測變數
                 let linkStats = { total: 0, internal: 0, external: 0 };
+                let pageSignals = {
+                    sensitiveFields: { count: 0, examples: [] },
+                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] }
+                };
                 if (data.contents) {
                     text = data.contents;
                     hasIframe = /<iframe/i.test(text);
@@ -285,8 +414,9 @@
                             const doc = parser.parseFromString(text, 'text/html');
                             const title = doc.title || "";
                             if (title.toLowerCase().includes("index of /")) {
-                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url };
+                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url, linkStats, pageSignals };
                             }
+                            pageSignals = analyzePageSignals(doc, fullUrl);
                             const links = doc.querySelectorAll('a');
                             linkStats.total = links.length;
                             let domainHostname = '';
@@ -317,15 +447,15 @@
                         } catch (e) { }
                     }
                 }
-                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats };
-                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats, hasApk };
+                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats, hasApk, pageSignals };
+                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats, hasApk, pageSignals };
             } catch (e) {
                 try {
                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
                     const resBackup = await fetch(backupProxy);
-                    if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null };
+                    if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] } } };
                 } catch (err) { }
-                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null };
+                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] } } };
             }
         };
 
@@ -544,11 +674,22 @@
             const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
+            const defaultSiteStatus = {
+                status: 'ok',
+                msg: '網頁原始碼讀取成功',
+                hasIframe: false,
+                finalUrl: null,
+                linkStats: { total: 0, internal: 0, external: 0 },
+                pageSignals: {
+                    sensitiveFields: { count: 0, examples: [] },
+                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] }
+                }
+            };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
             const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData, safeBrowsingData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
-                Promise.resolve({ status: 'ok', msg: '網頁原始碼讀取成功', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 } }),
+                withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, null),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }),
@@ -671,6 +812,14 @@
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
             const fakeServiceKeywords = getRiskList('fakeServiceKeywords');
             const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
+            const pageSignals = siteStatusData.pageSignals || defaultSiteStatus.pageSignals;
+            const sensitiveFieldCount = pageSignals.sensitiveFields?.count || 0;
+            const externalResourceCount = pageSignals.externalResources?.count || 0;
+            const externalFormActionCount = pageSignals.externalResources?.formActionCount || 0;
+            const brandSimilarity = checkBrandSimilarity(domain, currentWhitelist);
+            const finalBrandSimilarity = finalDomain ? checkBrandSimilarity(finalDomain, currentWhitelist) : { matched: false };
+            const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : finalBrandSimilarity;
+            const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
 
             // --- [優化版] 精確風險權重判定 ---
             let riskScore = 0;
@@ -780,6 +929,10 @@
 
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
+                    if (hasBrandSimilarity) riskScore += 80;
+                    if (sensitiveFieldCount > 0 && !isHighTraffic) riskScore += Math.min(60, 25 + sensitiveFieldCount * 10);
+                    if (externalFormActionCount > 0) riskScore += 60;
+                    else if (externalResourceCount >= 3 && !isHighTraffic) riskScore += 20;
 
                     // 金融與品牌偽裝強力攔截器
                     const scamKeywords = getRiskList('scamKeywords');
@@ -885,6 +1038,9 @@
             else if (isFakeService) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到偽裝成公共事業 (如電子發票、水電費、遠通)，極高風險！';
+            } else if (hasBrandSimilarity) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 網域名稱與「${matchedBrandSimilarity.brandName}」高度相似，但不是官方網域，疑似釣魚仿冒！`;
             } else if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '網域或轉址目標為高風險網址，請注意！';
@@ -933,6 +1089,9 @@
                     redirect: { status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), label: '轉址/短網址', details: (traceData && traceData.redirectCount >= 3) ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}` : (isRedirected ? redirectDetails : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')), finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
+                    formFields: { status: sensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : 'safe', label: '表單敏感欄位', details: sensitiveFieldCount > 0 ? `偵測到 ${sensitiveFieldCount} 個可能要求帳號、密碼、OTP 或金融資料的欄位` : '未偵測到敏感表單欄位' },
+                    externalResources: { status: externalFormActionCount > 0 ? 'danger' : (externalResourceCount >= 3 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (externalResourceCount >= 3 ? `偵測到 ${externalResourceCount} 個非同網域外部 script/iframe 資源` : '未偵測到異常外部表單或資源') },
+                    brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },

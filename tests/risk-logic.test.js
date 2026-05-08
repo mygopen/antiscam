@@ -113,6 +113,72 @@ function normalizeRiskLine(line) {
     return '⚠️ 風險：未發現';
 }
 
+function isSensitiveFormField(attrs) {
+    const type = (attrs.type || '').toLowerCase();
+    const haystack = [
+        type,
+        attrs.name,
+        attrs.id,
+        attrs.placeholder,
+        attrs.autocomplete,
+        attrs.ariaLabel
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    const isSensitiveType = ['password', 'tel', 'email'].includes(type);
+    const matchedKeyword = riskConfig.sensitiveFormKeywords.find(keyword => haystack.includes(keyword.toLowerCase()));
+    return isSensitiveType || !!matchedKeyword;
+}
+
+function isExternalResource(rawUrl, fullUrl) {
+    const domainHostname = new URL(fullUrl).hostname;
+    const parsed = new URL(rawUrl, fullUrl);
+    return !matchesDomainList(parsed.hostname, [domainHostname]) &&
+        !matchesDomainList(parsed.hostname, riskConfig.trustedResourceDomains);
+}
+
+function comparableDomainText(hostname) {
+    return hostname.toLowerCase().replace(/^www\./, '').replace(/[^a-z0-9]/g, '');
+}
+
+function levenshteinDistance(a, b) {
+    const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
+    }
+    return matrix[a.length][b.length];
+}
+
+function checkBrandSimilarity(hostname, whitelist = []) {
+    const domainText = comparableDomainText(hostname);
+
+    for (const brand of riskConfig.protectedBrands) {
+        if (matchesDomainList(hostname, brand.domains) || matchesDomainList(hostname, whitelist)) continue;
+
+        for (const keyword of brand.keywords) {
+            const normalizedKeyword = keyword.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!normalizedKeyword || normalizedKeyword.length < 3) continue;
+            if (domainText.includes(normalizedKeyword)) return { matched: true, brandName: brand.name };
+
+            for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
+                const segment = domainText.slice(i, i + normalizedKeyword.length);
+                if (levenshteinDistance(segment, normalizedKeyword) <= 1) {
+                    return { matched: true, brandName: brand.name };
+                }
+            }
+        }
+    }
+
+    return { matched: false };
+}
+
 test('白名單支援完全符合與子網域符合', () => {
     const whitelist = ['example.com', 'trusted.org.tw'];
 
@@ -176,4 +242,25 @@ test('截圖分析風險 parsing 會正規化明確與不明確結果', () => {
     assert.equal(normalizeRiskLine('⚠️ 風險：低風險'), '⚠️ 風險：未發現');
     assert.equal(normalizeRiskLine('⚠️ 風險：判斷為【高、中 或 低】風險。'), '⚠️ 風險：未發現');
     assert.equal(normalizeRiskLine(''), '⚠️ 風險：未發現');
+});
+
+test('表單敏感欄位會抓到密碼、OTP 與金融資料欄位', () => {
+    assert.equal(isSensitiveFormField({ type: 'password', name: 'password' }), true);
+    assert.equal(isSensitiveFormField({ type: 'text', name: 'otp_code' }), true);
+    assert.equal(isSensitiveFormField({ type: 'text', placeholder: '請輸入信用卡卡號' }), true);
+    assert.equal(isSensitiveFormField({ type: 'text', name: 'nickname' }), false);
+});
+
+test('外部資源與 form action 會排除同網域與信任 CDN', () => {
+    assert.equal(isExternalResource('/login', 'https://example.com'), false);
+    assert.equal(isExternalResource('https://static.example.com/app.js', 'https://example.com'), false);
+    assert.equal(isExternalResource('https://www.googletagmanager.com/gtag/js', 'https://example.com'), false);
+    assert.equal(isExternalResource('https://evil-submit.example.net/form', 'https://example.com'), true);
+});
+
+test('品牌相似網域會抓到仿冒與 typo，並排除官方/白名單網域', () => {
+    assert.equal(checkBrandSimilarity('ctbcbank-login.shop').matched, true);
+    assert.equal(checkBrandSimilarity('ctbcbamk-login.shop').matched, true);
+    assert.equal(checkBrandSimilarity('ctbcbank.com').matched, false);
+    assert.equal(checkBrandSimilarity('fubonlife.tw', ['fubonlife.tw']).matched, false);
 });
