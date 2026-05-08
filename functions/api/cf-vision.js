@@ -38,7 +38,7 @@ export async function onRequestPost(context) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
         }
 
-        const callGoogleGemmaAPI = async (modelName) => {
+        const callGeminiVisionAPI = async (modelName) => {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${env.GEMINI_API_KEY}`;
             const res = await fetch(url, {
                 method: 'POST',
@@ -108,25 +108,17 @@ let cleanReport = '';
 
         try {
             // 👇 主將：優先動用 Gemini 2.5 Flash 處理圖片
-            const rawReport = await callGoogleGemmaAPI('gemini-2.5-flash');
+            const rawReport = await callGeminiVisionAPI('gemini-2.5-flash');
             cleanReport = extractCleanReport(rawReport);
             
         } catch (errFlash) {
             console.log("⚠️ Gemini Flash 失敗，切換至 Pro 備援...", errFlash.message);
             try {
                 // 👇 備援 1：切換到 Gemini 2.5 Pro 繼續嘗試
-                const rawReport = await callGoogleGemmaAPI('gemini-2.5-pro');
+                const rawReport = await callGeminiVisionAPI('gemini-2.5-pro');
                 cleanReport = extractCleanReport(rawReport);
             } catch (errPro) {
-                console.log("⚠️ Gemini 額度全數耗盡，測試 Gemma 3 終極備援...", errPro.message);
-                try {
-                    // 👇 終極備援：如果 Google 官方悄悄修復/開放了 Gemma 3 的看圖能力，這裡就能成功接住！
-                    const rawReport = await callGoogleGemmaAPI('gemma-3-4b-it');
-                    cleanReport = extractCleanReport(rawReport);
-                } catch (errGemma) {
-                    // 如果連 Gemma 3 都報錯 (404不支援)，就正式宣告今日額度結束
-                    throw new Error(`圖片分析額度已耗盡或模型暫不支援。\nFlash: ${errFlash.message}\nGemma: ${errGemma.message}`);
-                }
+                throw new Error(`圖片分析額度已耗盡或模型暫不支援。\nFlash: ${errFlash.message}\nPro: ${errPro.message}`);
             }
         }
 
