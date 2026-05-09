@@ -47,6 +47,12 @@ window.RISK_CONFIG = {
     suspiciousDomainFragments: [
         '-tw', '-com', '-online'
     ],
+    safeSubdomainLabels: [
+        'www', 'm', 'mobile', 'api', 'app', 'admin', 'auth', 'login',
+        'shop', 'store', 'blog', 'news', 'help', 'support', 'static',
+        'assets', 'cdn', 'img', 'images', 'media', 'mail', 'email',
+        'smtp', 'webmail', 'tw', 'en', 'zh', 'www2'
+    ],
     fakeServiceKeywords: [
         'einvoice', 'taipower', 'water', 'fetc'
     ],

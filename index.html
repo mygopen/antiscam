@@ -305,6 +305,65 @@
             return { matched: false, brandName: null, keyword: null };
         };
 
+        const getDomainParts = (hostname) => {
+            const parts = normalizeHostname(hostname).split('.').filter(Boolean);
+            const secondLevelTLDs = [
+                'com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'net.tw',
+                'co.uk', 'org.uk', 'gov.uk',
+                'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
+                'com.hk', 'org.hk',
+                'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn'
+            ];
+            const lastTwo = parts.slice(-2).join('.');
+            const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
+            return {
+                subdomainLabels: parts.length > registeredSize ? parts.slice(0, -registeredSize) : [],
+                rootLabel: parts.length >= registeredSize ? parts[parts.length - registeredSize] : (parts[0] || '')
+            };
+        };
+
+        const hasReadableVowelPattern = (text) => /[aeiou]/i.test(text) && !/[bcdfghjklmnpqrstvwxz]{4,}/i.test(text);
+
+        const analyzeSuspiciousSubdomain = (hostname) => {
+            const { subdomainLabels, rootLabel } = getDomainParts(hostname);
+            const safeLabels = getRiskList('safeSubdomainLabels');
+            const rootTokens = rootLabel.split(/[-_]+/).filter(token => token.length >= 3);
+            const suspiciousReasons = [];
+
+            const candidateLabels = subdomainLabels.filter(label => {
+                const clean = label.toLowerCase();
+                return clean && !safeLabels.includes(clean);
+            });
+
+            candidateLabels.forEach(label => {
+                const cleanLabel = label.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                const compactLabel = cleanLabel.replace(/-/g, '');
+                if (!compactLabel || compactLabel.length < 2) return;
+
+                const segments = cleanLabel.split('-').filter(Boolean);
+                const hasHyphen = cleanLabel.includes('-');
+                const hasTopicOverlap = rootTokens.some(token => compactLabel.includes(token) || token.includes(compactLabel));
+                const hasShortRandomSegment = segments.some(segment => {
+                    if (!/[a-z]/.test(segment) || segment.length < 2 || segment.length > 8) return false;
+                    return !/[aeiou]/.test(segment) || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(segment);
+                });
+                const looksUnreadable = compactLabel.length >= 6 &&
+                    compactLabel.length <= 20 &&
+                    (!hasReadableVowelPattern(compactLabel) || calculateEntropy(compactLabel) > 3.4);
+
+                if (hasHyphen && !hasTopicOverlap) suspiciousReasons.push('子網域含連字號且與主網域主題無明顯關聯');
+                if (hasShortRandomSegment) suspiciousReasons.push('子網域包含短隨機片段');
+                if (looksUnreadable) suspiciousReasons.push('子網域長度 6-20 且不易讀成自然詞');
+            });
+
+            const uniqueReasons = [...new Set(suspiciousReasons)];
+            return {
+                matched: uniqueReasons.length > 0,
+                label: candidateLabels[0] || '',
+                reasons: uniqueReasons
+            };
+        };
+
         const analyzePageSignals = (doc, fullUrl) => {
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
@@ -741,6 +800,7 @@
             const lacksVowels = subdomainPart.length >= 5 && !/[aeiou]/i.test(subdomainPart);
             // 特徵 B：連續出現 4 個以上的子音字母，極度不符合正常英文拼字邏輯
             const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxz]{4,}/i.test(subdomainPart);
+            const suspiciousSubdomain = analyzeSuspiciousSubdomain(domain);
             
             // 只要符合任一項特徵，且不是常見的 www 等，就判定為高風險亂碼
             const isHighEntropy = (isLongGibberish || lacksVowels || hasConsecutiveConsonants) && subdomainPart !== 'www';
@@ -949,6 +1009,7 @@
                     if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
                     if (hasSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
+                    if (suspiciousSubdomain.matched && !isHighTraffic) riskScore += Math.min(45, 15 + suspiciousSubdomain.reasons.length * 10);
 
                     // 👇 修改：精準打擊單頁式詐騙，降低正常老網站的誤殺率 👇
                     if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && !isHighTraffic) {
@@ -1093,6 +1154,7 @@
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
+                    subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
                     redirect: { status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), label: '轉址/短網址', details: (traceData && traceData.redirectCount >= 3) ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}` : (isRedirected ? redirectDetails : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')), finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
