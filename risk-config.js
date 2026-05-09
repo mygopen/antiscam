@@ -27,6 +27,11 @@ window.RISK_CONFIG = {
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
         'bitly.com', 'aka.ms'
     ],
+    emailTrackingRedirectors: [
+        'awstrack.me', 'sendgrid.net', 'ct.sendgrid.net', 'u.ct.sendgrid.net',
+        'mailchimp.com', 'list-manage.com', 'mandrillapp.com', 'mailgun.org',
+        'sendinblue.com', 'brevo.com', 'hubspotemail.net', 'hs-sites.com'
+    ],
     freeHostingProviders: [
         'dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com',
         'weebly.com', 'github.io', 'vercel.app', 'netlify.app',
@@ -60,6 +65,12 @@ window.RISK_CONFIG = {
         'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov',
         '7-11-com', 'myship-711', '711-tw', 'familytw', 'famiport', 'myship',
         'com-tw', '-online', '-verify', '-login'
+    ],
+    financialPhishingKeywords: [
+        '中信', '中國信託', 'ctbc', 'ctbcbank', '信用卡', '金融卡',
+        '異常交易', '异常交易', '交易異常', '交易异常', '取消交易',
+        '確認取消', '确认取消', '帳戶異常', '账户异常', '持卡人',
+        'card', 'creditcard', 'transaction', 'verify', 'verification'
     ],
     sensitiveUrlParams: [
         'token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='

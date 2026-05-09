@@ -23,6 +23,80 @@ function matchesDomainList(domain, list) {
     });
 }
 
+function extractNestedUrls(rawUrl) {
+    const variants = [String(rawUrl || '')];
+    for (let i = 0; i < 2; i++) {
+        try {
+            const decoded = decodeURIComponent(variants[variants.length - 1]);
+            if (!variants.includes(decoded)) variants.push(decoded);
+        } catch (e) {
+            break;
+        }
+    }
+
+    const found = [];
+    for (let i = 0; i < variants.length; i++) {
+        const text = variants[i];
+        const embeddedProtocolPattern = /\/https?:\/\//gi;
+        let embeddedMatch;
+        while ((embeddedMatch = embeddedProtocolPattern.exec(text)) !== null) {
+            const embedded = text.slice(embeddedMatch.index + 1);
+            if (!variants.includes(embedded)) variants.push(embedded);
+        }
+        const normalized = text.replace(/https?:\/(?!\/)/gi, match => `${match}/`);
+        const matches = normalized.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+        matches.forEach(match => {
+            try {
+                const parsed = new URL(match.replace(/[),.]+$/, ''));
+                found.push(parsed.href);
+            } catch (e) { }
+        });
+    }
+
+    try {
+        const parsedInput = new URL(rawUrl);
+        return [...new Set(found)].filter(url => {
+            try {
+                const parsed = new URL(url);
+                return parsed.href !== parsedInput.href && parsed.hostname !== parsedInput.hostname;
+            } catch (e) { return true; }
+        });
+    } catch (e) {
+        return [...new Set(found)];
+    }
+}
+
+function isEmailTrackingRedirector(hostname) {
+    return matchesDomainList(hostname, riskConfig.emailTrackingRedirectors);
+}
+
+function hasFinancialPhishingText(text) {
+    const haystack = decodeSignalText(text || '');
+    return riskConfig.financialPhishingKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+}
+
+function analyzeEmailTrackingRisk(rawUrl) {
+    const parsed = new URL(rawUrl);
+    const domain = parsed.hostname.toLowerCase();
+    const nestedUrls = extractNestedUrls(rawUrl);
+    const nestedDomains = nestedUrls.map(url => new URL(url).hostname.toLowerCase());
+    const isEmailTrackingDomain = isEmailTrackingRedirector(domain);
+    const hasEmailTrackingRedirect = isEmailTrackingDomain && nestedUrls.length > 0;
+    const hasFinancialPhishingSignal = hasFinancialPhishingText(rawUrl + '\n' + nestedUrls.join('\n'));
+    const isDeepSubdomain = domain.split('.').length >= 5;
+    const isHighEntropy = hasHighEntropySubdomain(domain);
+    const hasPattern = hasEmailTrackingRedirect && (isDeepSubdomain || isHighEntropy || hasFinancialPhishingSignal);
+
+    return {
+        domain,
+        nestedDomains,
+        isEmailTrackingDomain,
+        hasEmailTrackingRedirect,
+        hasFinancialPhishingSignal,
+        hasPattern
+    };
+}
+
 function hasHighRiskTld(domain) {
     return riskConfig.highRiskTlds.some(suffix => domain.toLowerCase().endsWith(suffix));
 }
@@ -425,4 +499,23 @@ test('一般 index.html 不應只因路徑被判成下載釣魚', () => {
     });
     assert.equal(normalPage.suspiciousPath, true);
     assert.equal(isDownloadPhishingSignal(normalPage), false);
+});
+
+test('郵件追蹤跳板會解析 encoded 目的地並升為強風險', () => {
+    const url = 'https://rsnk3yff.r.us-east-2.awstrack.me/L0/https:%2F%2Fu20993664.ct.sendgrid.net%2Fls%2Fclick%3Fupn=u001.ctbc-card-verify/1/token';
+    const result = analyzeEmailTrackingRisk(url);
+
+    assert.equal(result.isEmailTrackingDomain, true);
+    assert.equal(result.hasEmailTrackingRedirect, true);
+    assert.deepEqual(result.nestedDomains, ['u20993664.ct.sendgrid.net']);
+    assert.equal(result.hasFinancialPhishingSignal, true);
+    assert.equal(result.hasPattern, true);
+});
+
+test('危險細節應拉高 summary 分數下限', () => {
+    const riskScore = capWeakSignalRisk(20, true);
+    const hasDangerDetail = true;
+    const summaryScore = hasDangerDetail && riskScore < 70 ? 70 : riskScore;
+
+    assert.equal(summaryScore, 70);
 });

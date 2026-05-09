@@ -263,6 +263,57 @@
                 riskyDomains.some(domain => isSameRootDomain(lowerHostname, domain));
         };
 
+        const isEmailTrackingRedirector = (hostname) => {
+            const trackers = getRiskList('emailTrackingRedirectors');
+            return trackers.some(domain => isSameRootDomain(hostname, domain));
+        };
+
+        const extractNestedUrls = (rawUrl) => {
+            const variants = [String(rawUrl || '')];
+            for (let i = 0; i < 2; i++) {
+                try {
+                    const decoded = decodeURIComponent(variants[variants.length - 1]);
+                    if (!variants.includes(decoded)) variants.push(decoded);
+                } catch (e) { break; }
+            }
+
+            const found = [];
+            for (let i = 0; i < variants.length; i++) {
+                const text = variants[i];
+                const embeddedProtocolPattern = /\/https?:\/\//gi;
+                let embeddedMatch;
+                while ((embeddedMatch = embeddedProtocolPattern.exec(text)) !== null) {
+                    const embedded = text.slice(embeddedMatch.index + 1);
+                    if (!variants.includes(embedded)) variants.push(embedded);
+                }
+                const normalized = text.replace(/https?:\/(?!\/)/gi, match => `${match}/`);
+                const matches = normalized.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+                matches.forEach(match => {
+                    try {
+                        const parsed = new URL(match.replace(/[),.]+$/, ''));
+                        found.push(parsed.href);
+                    } catch (e) { }
+                });
+            }
+
+            try {
+                const parsedInput = new URL(rawUrl);
+                return [...new Set(found)].filter(url => {
+                    try {
+                        const parsed = new URL(url);
+                        return parsed.href !== parsedInput.href && parsed.hostname !== parsedInput.hostname;
+                    } catch (e) { return true; }
+                });
+            } catch (e) {
+                return [...new Set(found)];
+            }
+        };
+
+        const hasFinancialPhishingText = (text) => {
+            const haystack = decodeSignalText(text || '');
+            return getRiskList('financialPhishingKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
+        };
+
         const createEmptyPageSignals = () => ({
             sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
             externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] },
@@ -832,6 +883,13 @@
             const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
+            const nestedUrls = extractNestedUrls(fullUrl);
+            const nestedDomains = nestedUrls.map(item => {
+                try { return new URL(item).hostname.toLowerCase(); } catch (e) { return ''; }
+            }).filter(Boolean);
+            const isEmailTrackingDomain = isEmailTrackingRedirector(domain);
+            const hasNestedUrl = nestedUrls.length > 0;
+            const hasEmailTrackingRedirect = isEmailTrackingDomain && hasNestedUrl;
             const defaultSiteStatus = {
                 status: 'ok',
                 msg: '網頁原始碼讀取成功',
@@ -970,6 +1028,7 @@
             const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
             const isDeepSubdomain = domain.split('.').length >= 5;
             const hasSuspiciousParams = getRiskList('sensitiveUrlParams').some(key => fullUrl.toLowerCase().includes(key));
+            const hasNestedSuspiciousParams = nestedUrls.some(url => getRiskList('sensitiveUrlParams').some(key => url.toLowerCase().includes(key)));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
             const fakeServiceKeywords = getRiskList('fakeServiceKeywords');
@@ -995,8 +1054,17 @@
                 (installKeywordCount > 0 || dynamicDownloadCount > 0 || suspiciousDownloadPathCount >= 2);
             const brandSimilarity = checkBrandSimilarity(domain, currentWhitelist);
             const finalBrandSimilarity = finalDomain ? checkBrandSimilarity(finalDomain, currentWhitelist) : { matched: false };
-            const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : finalBrandSimilarity;
+            const nestedBrandSimilarity = nestedDomains.map(item => checkBrandSimilarity(item, currentWhitelist)).find(item => item.matched) || { matched: false };
+            const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : (finalBrandSimilarity.matched ? finalBrandSimilarity : nestedBrandSimilarity);
             const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
+            const hasFinancialPhishingSignal = !isWhitelisted &&
+                hasFinancialPhishingText(fullUrl + '\n' + nestedUrls.join('\n')) &&
+                !isFinalWhitelisted;
+            const hasEncodedRedirectRisk = hasNestedUrl &&
+                (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
+            const hasEmailTrackingPhishingPattern = !isWhitelisted &&
+                hasEmailTrackingRedirect &&
+                (isDeepSubdomain || isHighEntropy || suspiciousSubdomain.matched || hasFinancialPhishingSignal || hasBrandSimilarity);
 
             // --- [優化版] 精確風險權重判定 ---
             let riskScore = 0;
@@ -1109,6 +1177,9 @@
                         }
                     }
 
+                    if (hasEmailTrackingPhishingPattern) riskScore += 85;
+                    else if (hasEncodedRedirectRisk) riskScore += 45;
+                    if (hasFinancialPhishingSignal) riskScore += 80;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -1128,10 +1199,10 @@
                     }
 
                     if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
-                    if (isDeepSubdomain && isLowTraffic) riskScore += 50;
-                    if (hasSuspiciousParams) riskScore += 40;
+                    if (isDeepSubdomain && (isLowTraffic || hasEmailTrackingRedirect)) riskScore += 50;
+                    if (hasSuspiciousParams || hasNestedSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
-                    if (suspiciousSubdomain.matched && isLowTraffic) riskScore += Math.min(45, 15 + suspiciousSubdomain.reasons.length * 10);
+                    if (suspiciousSubdomain.matched && (isLowTraffic || hasEmailTrackingRedirect)) riskScore += Math.min(45, 15 + suspiciousSubdomain.reasons.length * 10);
 
                     // 👇 修改：精準打擊單頁式詐騙，降低正常老網站的誤殺率 👇
                     if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && isLowTraffic) {
@@ -1192,6 +1263,8 @@
                 isFinalFakeGov ||
                 isFakeService ||
                 isDownloadPhishingSignal ||
+                hasEmailTrackingPhishingPattern ||
+                hasFinancialPhishingSignal ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
@@ -1199,6 +1272,22 @@
 
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
                 riskScore = 60;
+            }
+
+            if (!isWhitelisted && !isSocialMedia) {
+                const hasDangerDetail = hasBrandSimilarity ||
+                    hasEmailTrackingPhishingPattern ||
+                    hasFinancialPhishingSignal ||
+                    isFakeGov ||
+                    isFinalFakeGov ||
+                    isFakeService ||
+                    isVeryHighRiskTLD ||
+                    isFinalVeryHighRiskTLD ||
+                    hasSuspiciousTempDomain ||
+                    hasFinalSuspiciousTemp ||
+                    isDownloadPhishingSignal ||
+                    isApkSite;
+                if (hasDangerDetail && riskScore < 70) riskScore = 70;
             }
 
             // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
@@ -1221,6 +1310,14 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到可疑下載誘導：頁面包含 Android/App 安裝話術、動態下載程式或可疑下載路徑。';
                 siteContentMsg = '危險：包含可疑應用程式下載誘導';
+            } else if (hasEmailTrackingPhishingPattern) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到郵件追蹤跳板型釣魚：${domain} 透過郵件追蹤服務包裝 encoded 目的地，並伴隨亂碼/深層子網域或金融詐騙特徵。`;
+                siteContentMsg = '危險：疑似郵件釣魚追蹤跳板';
+            } else if (hasFinancialPhishingSignal) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 偵測到金融機構或信用卡異常交易相關釣魚語意，但網域不是官方網域。';
+                siteContentMsg = '危險：疑似金融釣魚連結';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
@@ -1298,13 +1395,13 @@
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
-                    redirect: { status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), label: '轉址/短網址', details: (traceData && traceData.redirectCount >= 3) ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}` : (isRedirected ? redirectDetails : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')), finalUrl: isRedirected ? siteStatusData.finalUrl : null },
+                    redirect: { status: hasEmailTrackingPhishingPattern ? 'danger' : (hasEncodedRedirectRisk ? 'warning' : ((traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')))), label: '轉址/短網址', details: hasEmailTrackingPhishingPattern ? `偵測到郵件追蹤跳板與 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}` : (hasEncodedRedirectRisk ? `網址內嵌 ${nestedUrls.length} 個 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}` : ((traceData && traceData.redirectCount >= 3) ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}` : (isRedirected ? redirectDetails : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址'))), finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
-                    params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
+                    params: { status: (hasSuspiciousParams || hasNestedSuspiciousParams) ? 'danger' : 'safe', label: '網址參數檢查', details: (hasSuspiciousParams || hasNestedSuspiciousParams) ? '包含敏感參數 (token/auth/session/verify)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
                     apkCheck: { status: isApkSite || isDownloadPhishingSignal ? 'danger' : (suspiciousDownloadPath ? 'warning' : 'safe'), label: '可疑檔案下載', details: isApkSite ? `偵測到 ${apkUrlCount} 個不明 APK 檔下載，極高風險！` : (isDownloadPhishingSignal ? `偵測到可疑下載誘導：安裝關鍵字 ${installKeywordCount} 個、動態下載特徵 ${dynamicDownloadCount} 個、可疑路徑 ${suspiciousDownloadPathCount} 個` : (suspiciousDownloadPath ? `網址路徑含可疑下載片段：${downloadSignals.suspiciousPathFragments.join('、')}` : '未偵測到可疑 Android 應用程式')) }
