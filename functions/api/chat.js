@@ -21,7 +21,7 @@ export async function onRequestPost(context) {
             throw new Error("找不到 GEMINI_API_KEY！");
         }
 
-        // 👇 純文字對話，交給擁有 14,400 次免費額度的 Gemma 3 4B
+        // 👇 純文字對話，交給 Gemma 3 4B
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${env.GEMINI_API_KEY}`;
         const res = await fetch(url, {
             method: 'POST',
