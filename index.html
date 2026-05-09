@@ -263,6 +263,65 @@
                 riskyDomains.some(domain => isSameRootDomain(lowerHostname, domain));
         };
 
+        const createEmptyPageSignals = () => ({
+            sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
+            externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] },
+            downloadSignals: { apkUrlCount: 0, installKeywordCount: 0, dynamicDownloadCount: 0, suspiciousPath: false, suspiciousPathFragments: [], examples: [] }
+        });
+
+        const decodeSignalText = (text) => {
+            const raw = String(text || '');
+            const variants = [raw];
+            try { variants.push(decodeURIComponent(raw)); } catch (e) { }
+            return [...new Set(variants)].join('\n').toLowerCase();
+        };
+
+        const analyzeSuspiciousDownloadPath = (fullUrl) => {
+            try {
+                const path = new URL(fullUrl).pathname.toLowerCase();
+                const fragments = getRiskList('suspiciousDownloadPathFragments');
+                const matched = fragments.filter(fragment => path.includes(fragment.toLowerCase()));
+                return { matched: matched.length > 0, fragments: matched };
+            } catch (e) {
+                return { matched: false, fragments: [] };
+            }
+        };
+
+        const analyzeDownloadSignals = (doc, rawText, fullUrl) => {
+            const textParts = [rawText || '', fullUrl || ''];
+            if (doc) {
+                doc.querySelectorAll('a[href], area[href], link[href]').forEach(el => textParts.push(el.getAttribute('href') || ''));
+                doc.querySelectorAll('[onclick], [data-url], [data-href], [data-download], [data-apk]').forEach(el => {
+                    ['onclick', 'data-url', 'data-href', 'data-download', 'data-apk'].forEach(attr => textParts.push(el.getAttribute(attr) || ''));
+                });
+                doc.querySelectorAll('script').forEach(el => textParts.push(el.textContent || ''));
+                textParts.push(doc.body ? doc.body.textContent : '');
+            }
+
+            const haystack = decodeSignalText(textParts.join('\n'));
+            const apkMatches = haystack.match(/(?:https?:\/\/|\/|[\w.-])[\w./?=&%:+-]*\.apk(?:[?#][\w./?=&%:+-]*)?/gi) || [];
+            const installKeywords = getRiskList('apkInstallKeywords').filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const dynamicPatterns = [
+                /(?:window\.)?open\s*\(/i,
+                /location\.(?:href|assign|replace)\s*[=(]/i,
+                /createelement\s*\(\s*['"]a['"]\s*\)/i,
+                /\.click\s*\(\s*\)/i,
+                /download\s*=/i,
+                /fetch\s*\(/i
+            ];
+            const dynamicDownloadCount = dynamicPatterns.filter(pattern => pattern.test(haystack)).length;
+            const suspiciousPath = analyzeSuspiciousDownloadPath(fullUrl);
+
+            return {
+                apkUrlCount: [...new Set(apkMatches)].length,
+                installKeywordCount: installKeywords.length,
+                dynamicDownloadCount,
+                suspiciousPath: suspiciousPath.matched,
+                suspiciousPathFragments: suspiciousPath.fragments,
+                examples: [...new Set([...apkMatches, ...installKeywords, ...suspiciousPath.fragments])].slice(0, 3)
+            };
+        };
+
         const getComparableDomainText = (hostname) => {
             return normalizeHostname(hostname).replace(/[^a-z0-9]/g, '');
         };
@@ -375,7 +434,7 @@
             };
         };
 
-        const analyzePageSignals = (doc, fullUrl) => {
+        const analyzePageSignals = (doc, fullUrl, rawText = '') => {
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
 
@@ -442,7 +501,8 @@
                     suspiciousIframeCount: suspiciousExternalIframes.length,
                     suspiciousScriptCount: suspiciousExternalScripts.length,
                     examples: externalResources.slice(0, 3)
-                }
+                },
+                downloadSignals: analyzeDownloadSignals(doc, rawText, fullUrl)
             };
         };
 
@@ -464,7 +524,7 @@
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
             try {
                 const res = await fetch(proxyUrl);
-                if (!res.ok) return { status: 'unknown', msg: '無法檢測網站狀態', hasIframe: false, finalUrl: null };
+                if (!res.ok) return { status: 'unknown', msg: '無法檢測網站狀態', hasIframe: false, finalUrl: null, hasApk: false, pageSignals: createEmptyPageSignals() };
                 const data = await res.json();
                 if (data.status && data.status.http_code >= 400) {
                     return {
@@ -472,7 +532,9 @@
                         code: data.status.http_code,
                         msg: `網站無法正常存取 (HTTP ${data.status.http_code})`,
                         hasIframe: false,
-                        finalUrl: data.status.url
+                        finalUrl: data.status.url,
+                        hasApk: false,
+                        pageSignals: createEmptyPageSignals()
                     };
                 }
                 let text = "";
@@ -480,15 +542,13 @@
                 let hasIframe = false;
                 let hasApk = false; // 👈 新增 APK 偵測變數
                 let linkStats = { total: 0, internal: 0, external: 0 };
-                let pageSignals = {
-                    sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
-                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] }
-                };
+                let pageSignals = createEmptyPageSignals();
                 if (data.contents) {
                     text = data.contents;
                     hasIframe = /<iframe/i.test(text);
-                    // 👇 粗暴且有效的檢查：只要網頁原始碼裡包含 .apk 就發出警報
-                    hasApk = text.toLowerCase().includes('.apk');
+                    pageSignals.downloadSignals = analyzeDownloadSignals(null, text, fullUrl);
+                    // 只要原始碼、編碼字串或下載屬性裡出現 APK，就發出警報。
+                    hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
                     if (text.length < 500) isBlank = true;
                     else {
                         try {
@@ -496,9 +556,10 @@
                             const doc = parser.parseFromString(text, 'text/html');
                             const title = doc.title || "";
                             if (title.toLowerCase().includes("index of /")) {
-                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url, linkStats, pageSignals };
+                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url, linkStats, hasApk, pageSignals };
                             }
-                            pageSignals = analyzePageSignals(doc, fullUrl);
+                            pageSignals = analyzePageSignals(doc, fullUrl, text);
+                            hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
                             const links = doc.querySelectorAll('a');
                             linkStats.total = links.length;
                             let domainHostname = '';
@@ -535,9 +596,23 @@
                 try {
                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
                     const resBackup = await fetch(backupProxy);
-                    if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] } } };
+                    if (resBackup.ok) {
+                        const backupText = await resBackup.text();
+                        let pageSignals = createEmptyPageSignals();
+                        let hasIframe = /<iframe/i.test(backupText);
+                        let hasApk = false;
+                        try {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(backupText, 'text/html');
+                            pageSignals = analyzePageSignals(doc, fullUrl, backupText);
+                        } catch (err) {
+                            pageSignals.downloadSignals = analyzeDownloadSignals(null, backupText, fullUrl);
+                        }
+                        hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
+                        return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, hasApk, pageSignals };
+                    }
                 } catch (err) { }
-                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] } } };
+                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: createEmptyPageSignals() };
             }
         };
 
@@ -763,10 +838,7 @@
                 hasIframe: false,
                 finalUrl: null,
                 linkStats: { total: 0, internal: 0, external: 0 },
-                pageSignals: {
-                    sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
-                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] }
-                }
+                pageSignals: createEmptyPageSignals()
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
@@ -911,6 +983,16 @@
             const suspiciousExternalResourceCount = pageSignals.externalResources?.suspiciousCount || 0;
             const suspiciousExternalIframeCount = pageSignals.externalResources?.suspiciousIframeCount || 0;
             const suspiciousExternalScriptCount = pageSignals.externalResources?.suspiciousScriptCount || 0;
+            const downloadSignals = pageSignals.downloadSignals || createEmptyPageSignals().downloadSignals;
+            const apkUrlCount = downloadSignals.apkUrlCount || 0;
+            const installKeywordCount = downloadSignals.installKeywordCount || 0;
+            const dynamicDownloadCount = downloadSignals.dynamicDownloadCount || 0;
+            const suspiciousDownloadPath = !!downloadSignals.suspiciousPath;
+            const suspiciousDownloadPathCount = downloadSignals.suspiciousPathFragments?.length || 0;
+            const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
+            const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount > 0 || suspiciousDownloadPath);
+            const hasSuspiciousDownloadLanding = suspiciousDownloadPath &&
+                (installKeywordCount > 0 || dynamicDownloadCount > 0 || suspiciousDownloadPathCount >= 2);
             const brandSimilarity = checkBrandSimilarity(domain, currentWhitelist);
             const finalBrandSimilarity = finalDomain ? checkBrandSimilarity(finalDomain, currentWhitelist) : { matched: false };
             const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : finalBrandSimilarity;
@@ -924,7 +1006,9 @@
 
             
             // 👇 如果網頁有 APK 且不在白名單內，視為極度危險
-            const isApkSite = siteStatusData.hasApk && !isWhitelisted; 
+            const isApkSite = (siteStatusData.hasApk || apkUrlCount > 0) && !isWhitelisted;
+            const isDownloadPhishingSignal = !isWhitelisted && !isApkSite &&
+                (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
 
             if (blocklistListed) {
                 riskScore = 100;
@@ -1028,6 +1112,7 @@
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
+                    if (isDownloadPhishingSignal) riskScore += 80;
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
                     else if (lowRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += 10;
                     if (externalFormActionCount > 0) riskScore += 60;
@@ -1106,6 +1191,7 @@
                 isFakeGov ||
                 isFinalFakeGov ||
                 isFakeService ||
+                isDownloadPhishingSignal ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
@@ -1131,6 +1217,10 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到網頁誘導下載不明 APK (Android App)，極可能是夾帶木馬的惡意軟體！';
                 siteContentMsg = '危險：包含惡意應用程式下載連結';
+            } else if (isDownloadPhishingSignal) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 偵測到可疑下載誘導：頁面包含 Android/App 安裝話術、動態下載程式或可疑下載路徑。';
+                siteContentMsg = '危險：包含可疑應用程式下載誘導';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
@@ -1187,7 +1277,7 @@
                         label: 'Google 官方安全庫', 
                         details: isGoogleFlagged ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : 'Google Safe Browsing 未發現威脅' 
                     },
-                    siteContent: { status: isSocialMedia ? 'warning' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger'), label: '網站內容狀態', details: siteContentMsg },
+                    siteContent: { status: isSocialMedia ? 'warning' : ((isApkSite || isDownloadPhishingSignal) ? 'danger' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger')), label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -1217,7 +1307,7 @@
                     params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
-                    apkCheck: { status: isApkSite ? 'danger' : 'safe', label: '可疑檔案下載', details: isApkSite ? '偵測到不明 APK 檔下載，極高風險！' : '未偵測到可疑 Android 應用程式' }
+                    apkCheck: { status: isApkSite || isDownloadPhishingSignal ? 'danger' : (suspiciousDownloadPath ? 'warning' : 'safe'), label: '可疑檔案下載', details: isApkSite ? `偵測到 ${apkUrlCount} 個不明 APK 檔下載，極高風險！` : (isDownloadPhishingSignal ? `偵測到可疑下載誘導：安裝關鍵字 ${installKeywordCount} 個、動態下載特徵 ${dynamicDownloadCount} 個、可疑路徑 ${suspiciousDownloadPathCount} 個` : (suspiciousDownloadPath ? `網址路徑含可疑下載片段：${downloadSignals.suspiciousPathFragments.join('、')}` : '未偵測到可疑 Android 應用程式')) }
                 }
             };
         };
@@ -1968,7 +2058,7 @@
                                 scanData.checks.siteContent.status = 'danger';
                                 scanData.checks.siteContent.details = '系統已鎖定其惡意轉址或隱匿行為 (詐騙集團試圖規避掃描)';
                             }
-                            else if (brandDataRes.detectedBrand && brandDataRes.officialDomain) {
+                            else if (brandDataRes.detectedBrand && brandDataRes.officialDomain && scanData.riskScore < 70) {
                                 // 2. 發現是真正的官方網站
                                 scanData.checks.siteContent.status = 'safe';
                                 scanData.checks.siteContent.details = 'AI 確認此為正規之官方網站內容';
@@ -2045,6 +2135,7 @@
                 if (result.details.siteStatus.status === 'error' && !result.isSocialMedia) warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
                 if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
+                if (result.checks.apkCheck.status === 'danger') warnings.push(`⚠️ ${result.checks.apkCheck.details}`);
                 if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
                 if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
                 if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);

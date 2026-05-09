@@ -245,6 +245,53 @@ function capWeakSignalRisk(score, hasStrongRiskSignal) {
     return !hasStrongRiskSignal && score > 60 ? 60 : score;
 }
 
+function decodeSignalText(text) {
+    const raw = String(text || '');
+    const variants = [raw];
+    try { variants.push(decodeURIComponent(raw)); } catch (e) { }
+    return [...new Set(variants)].join('\n').toLowerCase();
+}
+
+function analyzeSuspiciousDownloadPath(fullUrl) {
+    const pathName = new URL(fullUrl).pathname.toLowerCase();
+    const matched = riskConfig.suspiciousDownloadPathFragments.filter(fragment => pathName.includes(fragment.toLowerCase()));
+    return { matched: matched.length > 0, fragments: matched };
+}
+
+function analyzeDownloadSignals({ html = '', url }) {
+    const haystack = decodeSignalText(`${html}\n${url}`);
+    const apkMatches = haystack.match(/(?:https?:\/\/|\/|[\w.-])[\w./?=&%:+-]*\.apk(?:[?#][\w./?=&%:+-]*)?/gi) || [];
+    const installKeywords = riskConfig.apkInstallKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const dynamicPatterns = [
+        /(?:window\.)?open\s*\(/i,
+        /location\.(?:href|assign|replace)\s*[=(]/i,
+        /createelement\s*\(\s*['"]a['"]\s*\)/i,
+        /\.click\s*\(\s*\)/i,
+        /download\s*=/i,
+        /fetch\s*\(/i
+    ];
+    const suspiciousPath = analyzeSuspiciousDownloadPath(url);
+
+    return {
+        apkUrlCount: [...new Set(apkMatches)].length,
+        installKeywordCount: installKeywords.length,
+        dynamicDownloadCount: dynamicPatterns.filter(pattern => pattern.test(haystack)).length,
+        suspiciousPath: suspiciousPath.matched,
+        suspiciousPathFragments: suspiciousPath.fragments
+    };
+}
+
+function isDownloadPhishingSignal(signals) {
+    const hasInstallKeywordSignal = signals.installKeywordCount >= 2 ||
+        (signals.installKeywordCount > 0 && signals.suspiciousPath);
+    const hasDynamicDownloadSignal = signals.dynamicDownloadCount >= 2 &&
+        (signals.installKeywordCount > 0 || signals.suspiciousPath);
+    const hasSuspiciousDownloadLanding = signals.suspiciousPath &&
+        (signals.installKeywordCount > 0 || signals.dynamicDownloadCount > 0 || signals.suspiciousPathFragments.length >= 2);
+    return signals.apkUrlCount === 0 &&
+        (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
+}
+
 test('白名單支援完全符合與子網域符合', () => {
     const whitelist = ['example.com', 'trusted.org.tw'];
 
@@ -351,4 +398,31 @@ test('弱訊號不應單獨疊成高風險', () => {
     assert.equal(capWeakSignalRisk(85, false), 60);
     assert.equal(capWeakSignalRisk(85, true), 85);
     assert.equal(capWeakSignalRisk(45, false), 45);
+});
+
+test('APK 與下載誘導訊號會抓到明確與動態下載', () => {
+    const explicitApk = analyzeDownloadSignals({
+        url: 'https://cms.tulingwangluo.com/publiccms/dxz/index.html',
+        html: '<a href="/files/security.apk">立即下載 Android APP</a>'
+    });
+    assert.equal(explicitApk.apkUrlCount, 1);
+    assert.equal(explicitApk.suspiciousPath, true);
+
+    const dynamicDownload = analyzeDownloadSignals({
+        url: 'https://cms.tulingwangluo.com/publiccms/dxz/index.html',
+        html: '<button onclick="window.open(apiUrl)">下载安装</button><script>location.href = nextUrl; fetch("/api/app")</script>'
+    });
+    assert.equal(dynamicDownload.apkUrlCount, 0);
+    assert.equal(dynamicDownload.installKeywordCount >= 1, true);
+    assert.equal(dynamicDownload.dynamicDownloadCount >= 2, true);
+    assert.equal(isDownloadPhishingSignal(dynamicDownload), true);
+});
+
+test('一般 index.html 不應只因路徑被判成下載釣魚', () => {
+    const normalPage = analyzeDownloadSignals({
+        url: 'https://example.com/index.html',
+        html: '<main>Company profile</main>'
+    });
+    assert.equal(normalPage.suspiciousPath, true);
+    assert.equal(isDownloadPhishingSignal(normalPage), false);
 });

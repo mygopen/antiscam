@@ -72,6 +72,17 @@ window.RISK_CONFIG = {
         '統一編號', '信用卡', '卡號', '驗證碼', '簡訊碼', '密碼',
         '帳號', '銀行', '金融卡', '有效期限', '安全碼'
     ],
+    apkInstallKeywords: [
+        'apk', 'android', 'app下載', '下載app', '立即下載', '下載安裝',
+        '下载安装', '立即安装', '安全安装', '安裝包', '安装包',
+        '允許安裝未知來源', '允许安装未知来源', '未知來源', '未知来源',
+        '客服app', '官方app', '手機版下載'
+    ],
+    suspiciousDownloadPathFragments: [
+        '/publiccms/', '/cms/', '/dxz/', '/download/', '/downloads/',
+        '/apk/', '/app/', '/install/', '/static/apk/', '/package/',
+        '/update/', '/index.html'
+    ],
     trustedResourceDomains: [
         'google.com', 'googleapis.com', 'gstatic.com', 'googletagmanager.com',
         'google-analytics.com', 'cloudflare.com', 'cloudflareinsights.com',
