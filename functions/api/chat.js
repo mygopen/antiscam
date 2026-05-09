@@ -13,22 +13,25 @@ export async function onRequestPost(context) {
 3. 【功能介紹】如果使用者打招呼、說 OK、或問你能做什麼（例如「可以問什麼」），請友善回答：「你可以把可疑的網址貼給我，或是上傳截圖，阿麥會幫你檢查有沒有詐騙風險喔！🦁」
 4. 【拒絕閒聊】如果是完全無關的長篇大論，再委婉提醒你只負責防詐騙。`;
 
-        // 將對話紀錄轉成純文字，讓 Google Gemma 3 能夠理解上下文
-        const chatHistory = messages.map(m => `${m.role === 'user' ? '使用者' : '阿麥'}：${m.content}`).join('\n');
-        const fullPrompt = `${systemPrompt}\n\n【對話紀錄】\n${chatHistory}\n\n請以「阿麥」的身份給出簡短回覆：`;
-
-        if (!env.GEMINI_API_KEY) {
-            throw new Error("找不到 GEMINI_API_KEY！");
+        if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
+            throw new Error("找不到 CLOUDFLARE_ACCOUNT_ID 或 CLOUDFLARE_API_TOKEN！");
         }
 
-        // 👇 純文字對話，交給 Gemma 4 26B
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent?key=${env.GEMINI_API_KEY}`;
+        // 👇 純文字對話，交給 Cloudflare Workers AI 的免費 Llama 3.1 8B
+        const url = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.1-8b-instruct`;
         const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: fullPrompt }] }],
-                generationConfig: { maxOutputTokens: 80, temperature: 0.6 }
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    ...messages
+                ],
+                max_tokens: 80,
+                temperature: 0.6
             })
         });
 
@@ -38,7 +41,7 @@ export async function onRequestPost(context) {
         }
 
         const data = await res.json();
-        let reply = data.candidates[0].content.parts[0].text.trim();
+        let reply = data.result.response.trim();
         
         // 移除 AI 可能自己加上的「阿麥：」前綴
         reply = reply.replace(/^阿麥：/, '').trim();
