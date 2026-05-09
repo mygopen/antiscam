@@ -1364,6 +1364,25 @@
                 domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
             }
 
+            let redirectStatus = 'safe';
+            let redirectCheckDetails = '未偵測到跨網域轉址';
+            if (hasEmailTrackingPhishingPattern) {
+                redirectStatus = 'danger';
+                redirectCheckDetails = `偵測到郵件追蹤跳板與 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}`;
+            } else if (hasEncodedRedirectRisk) {
+                redirectStatus = 'warning';
+                redirectCheckDetails = `網址內嵌 ${nestedUrls.length} 個 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}`;
+            } else if (traceData && traceData.redirectCount >= 3) {
+                redirectStatus = 'warning';
+                redirectCheckDetails = `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`;
+            } else if (isRedirected) {
+                redirectStatus = isKnownShortener ? 'warning' : 'safe';
+                redirectCheckDetails = redirectDetails;
+            } else if (traceData && traceData.isHighRisk) {
+                redirectStatus = 'warning';
+                redirectCheckDetails = `後端偵測異常: ${traceData.riskReason}`;
+            }
+
             return {
                 domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed, isSocialMedia: isSocialMedia,
                 details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
@@ -1395,7 +1414,7 @@
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
-                    redirect: { status: hasEmailTrackingPhishingPattern ? 'danger' : (hasEncodedRedirectRisk ? 'warning' : ((traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')))), label: '轉址/短網址', details: hasEmailTrackingPhishingPattern ? `偵測到郵件追蹤跳板與 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}` : (hasEncodedRedirectRisk ? `網址內嵌 ${nestedUrls.length} 個 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}` : ((traceData && traceData.redirectCount >= 3) ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}` : (isRedirected ? redirectDetails : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址'))), finalUrl: isRedirected ? siteStatusData.finalUrl : null },
+                    redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
