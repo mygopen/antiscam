@@ -252,6 +252,17 @@
             return trustedDomains.some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const hasRiskyHostnamePattern = (hostname) => {
+            const lowerHostname = normalizeHostname(hostname);
+            const riskyTlds = [...getRiskList('highRiskTlds'), ...getRiskList('suspiciousTlds')];
+            const riskyDomains = [
+                ...getRiskList('urlShorteners'),
+                ...getRiskList('freeHostingProviders')
+            ];
+            return riskyTlds.some(tld => lowerHostname.endsWith(tld)) ||
+                riskyDomains.some(domain => isSameRootDomain(lowerHostname, domain));
+        };
+
         const getComparableDomainText = (hostname) => {
             return normalizeHostname(hostname).replace(/[^a-z0-9]/g, '');
         };
@@ -381,12 +392,16 @@
                     el.getAttribute('aria-label')
                 ].filter(Boolean).join(' ').toLowerCase();
 
-                const isSensitiveType = ['password', 'tel', 'email'].includes(type);
+                const isStrongSensitiveType = type === 'password';
+                const isWeakSensitiveType = ['tel', 'email'].includes(type);
                 const matchedKeyword = sensitiveKeywords.find(keyword => haystack.includes(keyword.toLowerCase()));
-                if (isSensitiveType || matchedKeyword) {
+                const strongSensitivePattern = /(password|passwd|pwd|passcode|otp|pin|creditcard|cardnumber|cvv|cvc|expire|expiry|bank|身分證|身份證|統一編號|信用卡|卡號|驗證碼|簡訊碼|密碼|銀行|金融卡|有效期限|安全碼)/i;
+                const isHighRisk = isStrongSensitiveType || strongSensitivePattern.test(haystack) || (matchedKeyword && strongSensitivePattern.test(matchedKeyword));
+                if (isStrongSensitiveType || isWeakSensitiveType || matchedKeyword) {
                     sensitiveFields.push({
                         type: type || 'unknown',
-                        keyword: matchedKeyword || type
+                        keyword: matchedKeyword || type,
+                        risk: isHighRisk ? 'high' : 'low'
                     });
                 }
             });
@@ -398,7 +413,7 @@
                     const parsed = new URL(rawUrl, fullUrl);
                     if (!/^https?:$/i.test(parsed.protocol)) return;
                     if (!domainHostname || isSameRootDomain(parsed.hostname, domainHostname) || isTrustedResourceDomain(parsed.hostname)) return;
-                    externalResources.push({ kind, hostname: parsed.hostname, url: parsed.href });
+                    externalResources.push({ kind, hostname: parsed.hostname, url: parsed.href, suspicious: hasRiskyHostnamePattern(parsed.hostname) });
                 } catch (e) { }
             };
 
@@ -408,16 +423,24 @@
 
             const externalFormActions = externalResources.filter(item => item.kind === 'form');
             const externalIframeSources = externalResources.filter(item => item.kind === 'iframe');
+            const suspiciousExternalResources = externalResources.filter(item => item.suspicious);
+            const suspiciousExternalIframes = externalIframeSources.filter(item => item.suspicious);
+            const suspiciousExternalScripts = externalResources.filter(item => item.kind === 'script' && item.suspicious);
 
             return {
                 sensitiveFields: {
                     count: sensitiveFields.length,
+                    highRiskCount: sensitiveFields.filter(item => item.risk === 'high').length,
+                    lowRiskCount: sensitiveFields.filter(item => item.risk === 'low').length,
                     examples: sensitiveFields.slice(0, 3)
                 },
                 externalResources: {
                     count: externalResources.length,
                     formActionCount: externalFormActions.length,
                     iframeCount: externalIframeSources.length,
+                    suspiciousCount: suspiciousExternalResources.length,
+                    suspiciousIframeCount: suspiciousExternalIframes.length,
+                    suspiciousScriptCount: suspiciousExternalScripts.length,
                     examples: externalResources.slice(0, 3)
                 }
             };
@@ -458,8 +481,8 @@
                 let hasApk = false; // 👈 新增 APK 偵測變數
                 let linkStats = { total: 0, internal: 0, external: 0 };
                 let pageSignals = {
-                    sensitiveFields: { count: 0, examples: [] },
-                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] }
+                    sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
+                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] }
                 };
                 if (data.contents) {
                     text = data.contents;
@@ -512,9 +535,9 @@
                 try {
                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
                     const resBackup = await fetch(backupProxy);
-                    if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] } } };
+                    if (resBackup.ok) return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] } } };
                 } catch (err) { }
-                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] } } };
+                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: { sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] }, externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] } } };
             }
         };
 
@@ -522,13 +545,13 @@
             try {
                 const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://tranco-list.eu/api/ranks/domain/${domain}`)}`;
                 const res = await fetch(proxyUrl);
-                if (!res.ok) return null;
+                if (!res.ok) return { status: 'unavailable', rank: null };
                 const data = await res.json();
                 if (data.ranks && data.ranks.length > 0) {
-                    return data.ranks[0].rank;
+                    return { status: 'ranked', rank: data.ranks[0].rank };
                 }
-                return null;
-            } catch (e) { return null; }
+                return { status: 'unranked', rank: null };
+            } catch (e) { return { status: 'unavailable', rank: null }; }
         };
 
         const fetchRDAPData = async (domain) => {
@@ -741,17 +764,17 @@
                 finalUrl: null,
                 linkStats: { total: 0, internal: 0, external: 0 },
                 pageSignals: {
-                    sensitiveFields: { count: 0, examples: [] },
-                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, examples: [] }
+                    sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
+                    externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] }
                 }
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, siteStatusData, blocklistListed, trancoRank, rdapData, traceData, safeBrowsingData] = await Promise.all([
+            const [geoLocationData, siteStatusData, blocklistListed, trancoData, rdapData, traceData, safeBrowsingData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
-                withTimeout(checkTrancoRank(domain), 5000, null),
+                withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
@@ -764,13 +787,17 @@
             const traceChain = traceData ? traceData.chain : [];
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
+            const trancoRank = trancoData?.rank || null;
+            const trancoStatus = trancoData?.status || 'unavailable';
 
-            // 修正：只有在白名單內或高流量且不是免費空間時才視為高流量網站
+            // Tranco 查詢失敗不等於低信任；只有明確查無排名才視為低流量。
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
+            const isLowTraffic = trancoStatus === 'unranked' && !isHighTraffic;
+            const isUnknownTraffic = trancoStatus === 'unavailable' && !isHighTraffic;
             const safeShorteners = getRiskList('safeShorteners');
 
             let trafficStatus = 'warning';
-            let trafficDetails = '未進入 Tranco 全球熱門排名 (流量較低)';
+            let trafficDetails = isUnknownTraffic ? 'Tranco 排名查詢暫時無法取得，不以低流量扣分' : '未進入 Tranco 全球熱門排名 (流量較低)';
             if (trancoRank && !isFreeHosting) {
                 trafficStatus = 'safe';
                 trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
@@ -786,6 +813,8 @@
             } else if (isFreeHosting) {
                 trafficStatus = 'warning';
                 trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
+            } else if (isUnknownTraffic) {
+                trafficStatus = 'unknown';
             }
 
             const subdomainPart = domain.split('.')[0];
@@ -875,8 +904,13 @@
             const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
             const pageSignals = siteStatusData.pageSignals || defaultSiteStatus.pageSignals;
             const sensitiveFieldCount = pageSignals.sensitiveFields?.count || 0;
+            const highRiskSensitiveFieldCount = pageSignals.sensitiveFields?.highRiskCount || 0;
+            const lowRiskSensitiveFieldCount = pageSignals.sensitiveFields?.lowRiskCount || 0;
             const externalResourceCount = pageSignals.externalResources?.count || 0;
             const externalFormActionCount = pageSignals.externalResources?.formActionCount || 0;
+            const suspiciousExternalResourceCount = pageSignals.externalResources?.suspiciousCount || 0;
+            const suspiciousExternalIframeCount = pageSignals.externalResources?.suspiciousIframeCount || 0;
+            const suspiciousExternalScriptCount = pageSignals.externalResources?.suspiciousScriptCount || 0;
             const brandSimilarity = checkBrandSimilarity(domain, currentWhitelist);
             const finalBrandSimilarity = finalDomain ? checkBrandSimilarity(finalDomain, currentWhitelist) : { matched: false };
             const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : finalBrandSimilarity;
@@ -910,7 +944,7 @@
                         riskScore += 0; // 知名網站，容忍 SPA 空白
                     } else if (isCommonInternational && siteStatusData.status === 'blank') {
                         // 👇 常見網域的空白頁多半是 React/Vue 等 SPA，或是 Cloudflare 防護，降至 10 分輕微懷疑
-                        riskScore += 10;
+                        riskScore += isLowTraffic ? 10 : 5;
                     } else {
                         riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
                     }
@@ -939,11 +973,11 @@
                     }
                 } else {
                     // 無法取得日期時，若非高流量網站，則視為潛在風險
-                    if (!isHighTraffic && isVeryHighRiskTLD) {
+                    if (isLowTraffic && isVeryHighRiskTLD) {
                         riskScore += 40;
-                    } else if (!isHighTraffic && isSuspiciousTLD) {
+                    } else if (isLowTraffic && isSuspiciousTLD) {
                         riskScore += 10;
-                    } else if (!isHighTraffic) {
+                    } else if (isLowTraffic) {
                         // 👇 降至 10 分，避免因 RDAP API 不穩誤殺合法的老舊或受保護網站
                         riskScore += 10; 
                     }
@@ -994,9 +1028,12 @@
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
-                    if (sensitiveFieldCount > 0 && !isHighTraffic) riskScore += Math.min(60, 25 + sensitiveFieldCount * 10);
+                    if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
+                    else if (lowRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += 10;
                     if (externalFormActionCount > 0) riskScore += 60;
-                    else if (externalResourceCount >= 3 && !isHighTraffic) riskScore += 20;
+                    else if (suspiciousExternalIframeCount > 0) riskScore += 35;
+                    else if (suspiciousExternalScriptCount > 0 && isLowTraffic) riskScore += 20;
+                    else if (suspiciousExternalResourceCount > 0 && isLowTraffic) riskScore += 15;
 
                     // 金融與品牌偽裝強力攔截器
                     const scamKeywords = getRiskList('scamKeywords');
@@ -1006,13 +1043,13 @@
                     }
 
                     if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
-                    if (isDeepSubdomain && !isHighTraffic) riskScore += 50;
+                    if (isDeepSubdomain && isLowTraffic) riskScore += 50;
                     if (hasSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
-                    if (suspiciousSubdomain.matched && !isHighTraffic) riskScore += Math.min(45, 15 + suspiciousSubdomain.reasons.length * 10);
+                    if (suspiciousSubdomain.matched && isLowTraffic) riskScore += Math.min(45, 15 + suspiciousSubdomain.reasons.length * 10);
 
                     // 👇 修改：精準打擊單頁式詐騙，降低正常老網站的誤殺率 👇
-                    if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && !isHighTraffic) {
+                    if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && isLowTraffic) {
                         let isNewDomain = false;
                         if (rdapData.date) {
                             const regDate = new Date(rdapData.date);
@@ -1041,7 +1078,7 @@
                     if (isFreeHosting) {
                         riskScore += 30;
                         if (isHighEntropy) riskScore += 50;
-                    } else if (isHighEntropy && !isHighTraffic) {
+                    } else if (isHighEntropy && isLowTraffic) {
                         // 👇 修改：如果亂碼長度極端誇張 (>=15)，給予 70 分重罰 (釣魚專屬碼特徵)
                         if (isExtremeGibberish) {
                             riskScore += 70;
@@ -1061,6 +1098,22 @@
                 }
             } // 👈 關閉最外層的 if (!blocklistListed) else 區塊
 
+            const hasStrongRiskSignal = blocklistListed ||
+                isApkSite ||
+                (isGoogleFlagged && !isWhitelisted) ||
+                isVeryHighRiskTLD ||
+                isFinalVeryHighRiskTLD ||
+                isFakeGov ||
+                isFinalFakeGov ||
+                isFakeService ||
+                hasBrandSimilarity ||
+                hasSuspiciousTempDomain ||
+                hasFinalSuspiciousTemp ||
+                (traceData && traceData.isHighRisk && !isFinalSafePlatform);
+
+            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
+                riskScore = 60;
+            }
 
             // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
             if (isWhitelisted && !isFakeGov && !isSocialMedia) riskScore = 0; // 修正白名單歸零邏輯
@@ -1158,8 +1211,8 @@
                     redirect: { status: (traceData && traceData.redirectCount >= 3) ? 'warning' : (isRedirected ? (isKnownShortener ? 'warning' : 'safe') : (traceData && traceData.isHighRisk ? 'warning' : 'safe')), label: '轉址/短網址', details: (traceData && traceData.redirectCount >= 3) ? `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}` : (isRedirected ? redirectDetails : (traceData && traceData.isHighRisk ? `後端偵測異常: ${traceData.riskReason}` : '未偵測到跨網域轉址')), finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
-                    formFields: { status: sensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : 'safe', label: '表單敏感欄位', details: sensitiveFieldCount > 0 ? `偵測到 ${sensitiveFieldCount} 個可能要求帳號、密碼、OTP 或金融資料的欄位` : '未偵測到敏感表單欄位' },
-                    externalResources: { status: externalFormActionCount > 0 ? 'danger' : (externalResourceCount >= 3 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (externalResourceCount >= 3 ? `偵測到 ${externalResourceCount} 個非同網域外部 script/iframe 資源` : '未偵測到異常外部表單或資源') },
+                    formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
+                    externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     params: { status: hasSuspiciousParams ? 'danger' : 'safe', label: '網址參數檢查', details: hasSuspiciousParams ? '包含敏感參數 (token/auth/session)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },

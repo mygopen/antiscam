@@ -241,6 +241,10 @@ function analyzeSuspiciousSubdomain(hostname) {
     };
 }
 
+function capWeakSignalRisk(score, hasStrongRiskSignal) {
+    return !hasStrongRiskSignal && score > 60 ? 60 : score;
+}
+
 test('白名單支援完全符合與子網域符合', () => {
     const whitelist = ['example.com', 'trusted.org.tw'];
 
@@ -319,6 +323,7 @@ test('外部資源與 form action 會排除同網域與信任 CDN', () => {
     assert.equal(isExternalResource('/login', 'https://example.com'), false);
     assert.equal(isExternalResource('https://static.example.com/app.js', 'https://example.com'), false);
     assert.equal(isExternalResource('https://www.googletagmanager.com/gtag/js', 'https://example.com'), false);
+    assert.equal(isExternalResource('https://d111111abcdef8.cloudfront.net/app.js', 'https://example.com'), false);
     assert.equal(isExternalResource('https://evil-submit.example.net/form', 'https://example.com'), true);
 });
 
@@ -340,4 +345,10 @@ test('可疑子網域模式會抓到 hyphen、短隨機片段與難讀命名', (
     assert.equal(analyzeSuspiciousSubdomain('api.example.com').matched, false);
     assert.equal(analyzeSuspiciousSubdomain('shop.example.com').matched, false);
     assert.equal(analyzeSuspiciousSubdomain('news.discover-news.tokyo').matched, false);
+});
+
+test('弱訊號不應單獨疊成高風險', () => {
+    assert.equal(capWeakSignalRisk(85, false), 60);
+    assert.equal(capWeakSignalRisk(85, true), 85);
+    assert.equal(capWeakSignalRisk(45, false), 45);
 });
