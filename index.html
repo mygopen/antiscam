@@ -1524,6 +1524,40 @@
             };
         };
 
+        const getHighRiskSummaryReasons = (scanData) => {
+            if (!scanData || !scanData.checks) return [];
+
+            const checks = scanData.checks;
+            const reasons = [];
+            const addReason = (condition, reason) => {
+                if (condition && !reasons.includes(reason)) reasons.push(reason);
+            };
+
+            addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+            addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
+            addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
+            addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
+            addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
+            addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
+            addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
+            addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
+            addReason(checks.age?.status === 'danger', '3 個月內新註冊網域');
+            addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
+
+            return reasons.slice(0, 3);
+        };
+
+        const enforceFinalRiskConsistency = (scanData) => {
+            if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed) return scanData;
+
+            const reasons = getHighRiskSummaryReasons(scanData);
+            if (reasons.length > 0 && scanData.riskScore < 70) {
+                scanData.riskScore = 70;
+            }
+            scanData.summaryReasons = reasons;
+            return scanData;
+        };
+
         const RiskMeter = ({ score }) => {
             let color = 'bg-green-500', text = '低度風險', width = '10%';
             if (score >= 70) { color = 'bg-red-600'; text = '高度風險'; width = '90%'; }
@@ -2290,6 +2324,7 @@
                         }
                     }
 
+                    enforceFinalRiskConsistency(scanData);
                     setBrandAnalysis(brandDataRes);
                     setResult(scanData);
 
@@ -2624,13 +2659,17 @@
                                     ) : (
                                         <img src="https://ik.imagekit.io/mygopen/safe02.png" alt="安全無虞" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
                                     )}
-                                    
-{/* 👇 移除 whitespace-nowrap，加入 leading-snug 讓長句子可以自然換行且行距美觀 👇 */}
-<h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide leading-snug ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
-    {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : (result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險'))}
-
-
-</h3>
+                                    <div className="min-w-0 space-y-1">
+                                        {/* 👇 移除 whitespace-nowrap，加入 leading-snug 讓長句子可以自然換行且行距美觀 👇 */}
+                                        <h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide leading-snug ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
+                                            {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : (result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險'))}
+                                        </h3>
+                                        {result.riskScore >= 70 && result.summaryReasons?.length > 0 && (
+                                            <p className="text-sm sm:text-base text-red-700 leading-relaxed font-semibold">
+                                                主要原因：{result.summaryReasons.join('、')}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* ================= 新增：高風險專屬的檢舉通報區塊 ================= */}

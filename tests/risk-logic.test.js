@@ -123,6 +123,40 @@ function analyzeEmailTrackingRisk(rawUrl) {
     };
 }
 
+function getHighRiskSummaryReasons(scanData) {
+    if (!scanData || !scanData.checks) return [];
+
+    const checks = scanData.checks;
+    const reasons = [];
+    const addReason = (condition, reason) => {
+        if (condition && !reasons.includes(reason)) reasons.push(reason);
+    };
+
+    addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+    addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
+    addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
+    addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
+    addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
+    addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
+    addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
+    addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
+    addReason(checks.age?.status === 'danger', '3 個月內新註冊網域');
+    addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
+
+    return reasons.slice(0, 3);
+}
+
+function enforceFinalRiskConsistency(scanData) {
+    if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed) return scanData;
+
+    const reasons = getHighRiskSummaryReasons(scanData);
+    if (reasons.length > 0 && scanData.riskScore < 70) {
+        scanData.riskScore = 70;
+    }
+    scanData.summaryReasons = reasons;
+    return scanData;
+}
+
 function hasHighRiskTld(domain) {
     return riskConfig.highRiskTlds.some(suffix => domain.toLowerCase().endsWith(suffix));
 }
@@ -574,12 +608,30 @@ test('郵件追蹤跳板會解析 encoded 目的地並升為強風險', () => {
     assert.equal(result.hasPattern, true);
 });
 
-test('危險細節應拉高 summary 分數下限', () => {
-    const riskScore = capWeakSignalRisk(20, true);
-    const hasDangerDetail = true;
-    const summaryScore = hasDangerDetail && riskScore < 70 ? 70 : riskScore;
+test('完整 awstrack/sendgrid 郵件跳板即使無金融明文也應升為高風險', () => {
+    const url = 'https://rsnk3yff.r.us-east-2.awstrack.me/L0/https:%2F%2Fu20993664.ct.sendgrid.net%2Fls%2Fclick%3Fupn=u001.EoUuycmzOzB7iY6mIj-2BdPS1cPSTao2FYuTsJolqlUCrpKkKG-2BGf4m8gTrNXYDFFuGC2c_cu2GZKluXNWAOD2CALnJIh3lWCrBGiObaK-2BiRQWRIChIgjstkL5EEB7UQIlPFRYateNZH5KG78IOKH-2Bnl-2FlZhejWijUWnqyU4guJivT5Xh6QQumWusUWvzsNjrbpnGU61RARtShq2cbxP-2Bm-2Fb-2Fst5bOrFpZSJyWF8y9u-2BX04YfTWug3jT66VAejwC6hl7GWab1Bvm93A0-2B2LuXnVSdyM6g-3D-3D/1/010f019e0be730c5-c86fbdd3-dc20-4e59-b0c4-8ea3b0f7315a-000000/VDDvJfRKLoNifqbvwEQKjY8jC_4=258';
+    const result = analyzeEmailTrackingRisk(url);
+    const riskScore = result.hasPattern ? 85 : 0;
 
-    assert.equal(summaryScore, 70);
+    assert.equal(result.isEmailTrackingDomain, true);
+    assert.equal(result.hasEmailTrackingRedirect, true);
+    assert.deepEqual(result.nestedDomains, ['u20993664.ct.sendgrid.net']);
+    assert.equal(result.hasFinancialPhishingSignal, false);
+    assert.equal(result.hasPattern, true);
+    assert.equal(riskScore >= 70, true);
+});
+
+test('危險細節應拉高 summary 分數下限', () => {
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: capWeakSignalRisk(20, true),
+        checks: {
+            redirect: { status: 'danger', details: '偵測到郵件追蹤跳板與 encoded 目的地' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(scanData.riskScore, 70);
+    assert.deepEqual(scanData.summaryReasons, ['郵件追蹤跳板或隱藏轉址']);
 });
 
 test('台電 typo 與 base64 參數會被視為公共事業釣魚強風險', () => {
