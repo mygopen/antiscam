@@ -66,6 +66,12 @@ window.RISK_CONFIG = {
         '電費', '電費補助', '補助', '退款', '退費', '領取',
         '水費', '自來水', '停電通知', '用電異常'
     ],
+    logisticsScamKeywords: [
+        'dhl', 'delivery', 'shipping', 'shipment', 'parcel', 'express',
+        'logistics', 'ecommerce', 'tracking', 'customs', 'postage',
+        '包裹', '物流', '配送', '快遞', '運費', '關稅', '補繳',
+        '貨件', '運送', '追蹤', '清關'
+    ],
     scamKeywords: [
         'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov',
         '7-11-com', 'myship-711', '711-tw', 'familytw', 'famiport', 'myship',
@@ -117,6 +123,7 @@ window.RISK_CONFIG = {
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
         { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },
-        { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] }
+        { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] },
+        { name: 'DHL', keywords: ['dhl'], domains: ['dhl.com', 'dhl.com.tw'] }
     ]
 };

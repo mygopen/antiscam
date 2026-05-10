@@ -345,6 +345,11 @@
             return getRiskList('publicUtilityScamKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
         };
 
+        const hasLogisticsScamText = (text) => {
+            const haystack = decodeSignalText(text || '');
+            return getRiskList('logisticsScamKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
+        };
+
         const createEmptyPageSignals = () => ({
             sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
             externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] },
@@ -1113,6 +1118,12 @@
             const nestedBrandSimilarity = nestedDomains.map(item => checkBrandSimilarity(item, currentWhitelist)).find(item => item.matched) || { matched: false };
             const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : (finalBrandSimilarity.matched ? finalBrandSimilarity : nestedBrandSimilarity);
             const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
+            let domainAgeDays = null;
+            if (rdapData.date) {
+                const regDate = new Date(rdapData.date);
+                domainAgeDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
+            }
+            const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
             const hasFinancialPhishingSignal = !isWhitelisted &&
                 hasFinancialPhishingText(fullUrl + '\n' + nestedUrls.join('\n')) &&
                 !isFinalWhitelisted;
@@ -1120,6 +1131,12 @@
                 (hasPublicUtilityScamText(fullUrl + '\n' + nestedUrls.join('\n')) ||
                     (matchedBrandSimilarity.brandName === '台灣電力公司' && hasNestedUrl)) &&
                 !isFinalWhitelisted;
+            const hasLogisticsScamSignal = !isWhitelisted &&
+                hasLogisticsScamText(fullUrl + '\n' + nestedUrls.join('\n')) &&
+                !isFinalWhitelisted;
+            const hasLogisticsBrandPhishing = hasBrandSimilarity &&
+                matchedBrandSimilarity.brandName === 'DHL' &&
+                hasLogisticsScamSignal;
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
             const hasEmailTrackingPhishingPattern = !isWhitelisted &&
@@ -1173,10 +1190,11 @@
 
                 // 2. 網域年齡與信譽分析
                 if (rdapData.date) {
-                    const regDate = new Date(rdapData.date);
-                    const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
+                    const diffDays = domainAgeDays;
 
-                    if (diffDays < 120) {
+                    if (diffDays < 90) {
+                        riskScore += 95;
+                    } else if (diffDays < 120) {
                         riskScore += 85;
                     } else if (diffDays < 180) {
                         riskScore += 50;
@@ -1242,6 +1260,8 @@
                     if (hasFinancialPhishingSignal) riskScore += 80;
                     if (hasPublicUtilityScamSignal && hasBrandSimilarity) riskScore += 90;
                     else if (hasPublicUtilityScamSignal) riskScore += 60;
+                    if (hasLogisticsBrandPhishing) riskScore += 90;
+                    else if (hasLogisticsScamSignal && hasBrandSimilarity) riskScore += 70;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -1328,6 +1348,8 @@
                 hasEmailTrackingPhishingPattern ||
                 hasFinancialPhishingSignal ||
                 (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
+                hasLogisticsBrandPhishing ||
+                isVeryNewDomain ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
@@ -1342,6 +1364,8 @@
                     hasEmailTrackingPhishingPattern ||
                     hasFinancialPhishingSignal ||
                     (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
+                    hasLogisticsBrandPhishing ||
+                    isVeryNewDomain ||
                     isFakeGov ||
                     isFinalFakeGov ||
                     isFakeService ||
@@ -1386,6 +1410,10 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到公共事業仿冒：網域疑似模仿「${matchedBrandSimilarity.brandName}」，且網址含節電獎勵、電費補助或領取等詐騙語意。`;
                 siteContentMsg = '危險：疑似公共事業獎勵金釣魚連結';
+            } else if (hasLogisticsBrandPhishing) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到物流品牌仿冒：網域疑似模仿「${matchedBrandSimilarity.brandName}」，且包含配送、包裹、追蹤或電商物流語意。`;
+                siteContentMsg = '危險：疑似物流品牌釣魚連結';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
@@ -1471,11 +1499,11 @@
 
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     age: {
-                        status: (rdapDate && (new Date() - new Date(rdapDate)) < 120 * 86400000) ? 'danger' :
+                        status: (rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
                                 (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'),
                         label: '註冊時間',
-                        details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${(new Date() - new Date(rdapDate)) < 120 * 86400000 ? ' - 極新網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'),
+                        details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'),
                         link: `https://who.is/whois/${domain}`
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },

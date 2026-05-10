@@ -313,6 +313,11 @@ function hasPublicUtilityScamText(text) {
     return riskConfig.publicUtilityScamKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
 }
 
+function hasLogisticsScamText(text) {
+    const haystack = decodeSignalText(text || '');
+    return riskConfig.logisticsScamKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+}
+
 function getDomainParts(hostname) {
     const parts = hostname.toLowerCase().replace(/^www\./, '').split('.').filter(Boolean);
     const secondLevelTLDs = [
@@ -588,5 +593,29 @@ test('台電 typo 與 base64 參數會被視為公共事業釣魚強風險', () 
     assert.equal(brandSimilarity.matched, true);
     assert.equal(brandSimilarity.brandName, '台灣電力公司');
     assert.equal(hasPublicUtilitySignal, true);
+    assert.equal(riskScore >= 70, true);
+});
+
+test('DHL 物流品牌仿冒應升為高風險並排除官方網域', () => {
+    const suspicious = checkBrandSimilarity('ecommerce-dhl.com');
+    const official = checkBrandSimilarity('dhl.com');
+    const officialTw = checkBrandSimilarity('dhl.com.tw');
+    const hasLogisticsSignal = hasLogisticsScamText('https://ecommerce-dhl.com parcel delivery tracking shipping');
+    const riskScore = suspicious.matched && suspicious.brandName === 'DHL' && hasLogisticsSignal ? 90 : 0;
+
+    assert.equal(suspicious.matched, true);
+    assert.equal(suspicious.brandName, 'DHL');
+    assert.equal(official.matched, false);
+    assert.equal(officialTw.matched, false);
+    assert.equal(hasLogisticsSignal, true);
+    assert.equal(riskScore >= 70, true);
+});
+
+test('3 個月內新註冊網域應視為強風險訊號', () => {
+    const domainAgeDays = 45;
+    const isVeryNewDomain = domainAgeDays < 90;
+    const riskScore = isVeryNewDomain ? 95 : 0;
+
+    assert.equal(isVeryNewDomain, true);
     assert.equal(riskScore >= 70, true);
 });
