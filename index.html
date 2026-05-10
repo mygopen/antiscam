@@ -1139,6 +1139,10 @@
                 hasLogisticsScamSignal;
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
+            const hasSuspiciousEmailTrackingHost = !isWhitelisted &&
+                isEmailTrackingDomain &&
+                !hasNestedUrl &&
+                (isDeepSubdomain || isHighEntropy || suspiciousSubdomain.matched);
             const hasEmailTrackingPhishingPattern = !isWhitelisted &&
                 hasEmailTrackingRedirect &&
                 (isDeepSubdomain || isHighEntropy || suspiciousSubdomain.matched || hasFinancialPhishingSignal || hasBrandSimilarity);
@@ -1256,6 +1260,7 @@
                     }
 
                     if (hasEmailTrackingPhishingPattern) riskScore += 85;
+                    else if (hasSuspiciousEmailTrackingHost) riskScore += 75;
                     else if (hasEncodedRedirectRisk) riskScore += 45;
                     if (hasFinancialPhishingSignal) riskScore += 80;
                     if (hasPublicUtilityScamSignal && hasBrandSimilarity) riskScore += 90;
@@ -1353,6 +1358,7 @@
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
+                hasSuspiciousEmailTrackingHost ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform);
 
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
@@ -1373,6 +1379,7 @@
                     isFinalVeryHighRiskTLD ||
                     hasSuspiciousTempDomain ||
                     hasFinalSuspiciousTemp ||
+                    hasSuspiciousEmailTrackingHost ||
                     isDownloadPhishingSignal ||
                     isApkSite;
                 if (hasDangerDetail && riskScore < 70) riskScore = 70;
@@ -1402,6 +1409,10 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到郵件追蹤跳板型釣魚：${domain} 透過郵件追蹤服務包裝 encoded 目的地，並伴隨亂碼/深層子網域或金融詐騙特徵。`;
                 siteContentMsg = '危險：疑似郵件釣魚追蹤跳板';
+            } else if (hasSuspiciousEmailTrackingHost) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到可疑郵件追蹤網域：${domain} 屬於郵件追蹤服務，且使用深層或亂碼子網域，常見於釣魚郵件追蹤連結。`;
+                siteContentMsg = '危險：疑似郵件釣魚追蹤網域';
             } else if (hasFinancialPhishingSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到金融機構或信用卡異常交易相關釣魚語意，但網域不是官方網域。';
@@ -1465,6 +1476,9 @@
             if (hasEmailTrackingPhishingPattern) {
                 redirectStatus = 'danger';
                 redirectCheckDetails = `偵測到郵件追蹤跳板與 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}`;
+            } else if (hasSuspiciousEmailTrackingHost) {
+                redirectStatus = 'danger';
+                redirectCheckDetails = '偵測到郵件追蹤服務的深層或亂碼子網域，缺少可驗證的最終目的地';
             } else if (hasEncodedRedirectRisk) {
                 redirectStatus = 'warning';
                 redirectCheckDetails = `網址內嵌 ${nestedUrls.length} 個 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}`;

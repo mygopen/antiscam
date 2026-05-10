@@ -111,6 +111,9 @@ function analyzeEmailTrackingRisk(rawUrl) {
     const hasFinancialPhishingSignal = hasFinancialPhishingText(rawUrl + '\n' + nestedUrls.join('\n'));
     const isDeepSubdomain = domain.split('.').length >= 5;
     const isHighEntropy = hasHighEntropySubdomain(domain);
+    const hasSuspiciousEmailTrackingHost = isEmailTrackingDomain &&
+        nestedUrls.length === 0 &&
+        (isDeepSubdomain || isHighEntropy);
     const hasPattern = hasEmailTrackingRedirect && (isDeepSubdomain || isHighEntropy || hasFinancialPhishingSignal);
 
     return {
@@ -119,6 +122,7 @@ function analyzeEmailTrackingRisk(rawUrl) {
         isEmailTrackingDomain,
         hasEmailTrackingRedirect,
         hasFinancialPhishingSignal,
+        hasSuspiciousEmailTrackingHost,
         hasPattern
     };
 }
@@ -619,6 +623,26 @@ test('完整 awstrack/sendgrid 郵件跳板即使無金融明文也應升為高�
     assert.equal(result.hasFinancialPhishingSignal, false);
     assert.equal(result.hasPattern, true);
     assert.equal(riskScore >= 70, true);
+});
+
+test('深層亂碼郵件追蹤裸網域應升為高風險', () => {
+    const result = analyzeEmailTrackingRisk('https://rsnk3yff.r.us-east-2.awstrack.me/');
+    const riskScore = result.hasSuspiciousEmailTrackingHost ? 75 : 0;
+
+    assert.equal(result.isEmailTrackingDomain, true);
+    assert.equal(result.hasEmailTrackingRedirect, false);
+    assert.equal(result.hasSuspiciousEmailTrackingHost, true);
+    assert.equal(riskScore >= 70, true);
+});
+
+test('一般可讀郵件追蹤裸網域不應單獨升為高風險', () => {
+    const result = analyzeEmailTrackingRisk('https://click.example.awstrack.me/');
+    const riskScore = result.hasSuspiciousEmailTrackingHost ? 75 : 0;
+
+    assert.equal(result.isEmailTrackingDomain, true);
+    assert.equal(result.hasEmailTrackingRedirect, false);
+    assert.equal(result.hasSuspiciousEmailTrackingHost, false);
+    assert.equal(riskScore < 70, true);
 });
 
 test('危險細節應拉高 summary 分數下限', () => {
