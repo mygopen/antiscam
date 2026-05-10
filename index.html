@@ -350,10 +350,22 @@
             return getRiskList('logisticsScamKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
         };
 
+        const hasOfficialFlowPath = (fullUrl) => {
+            const haystack = decodeSignalText(fullUrl || '');
+            return getRiskList('officialFlowPathKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
+        };
+
+        const hasPunycodeOrUnicodeHostname = (hostname, rawUrl = '') => {
+            const lowerHostname = String(hostname || '').toLowerCase();
+            return lowerHostname.includes('xn--') || /[^\x00-\x7F]/.test(String(rawUrl || ''));
+        };
+
         const createEmptyPageSignals = () => ({
             sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
             externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] },
-            downloadSignals: { apkUrlCount: 0, installKeywordCount: 0, dynamicDownloadCount: 0, suspiciousPath: false, suspiciousPathFragments: [], examples: [] }
+            downloadSignals: { apkUrlCount: 0, installKeywordCount: 0, dynamicDownloadCount: 0, suspiciousPath: false, suspiciousPathFragments: [], examples: [] },
+            pageBrandSignals: { matched: false, brandName: null, keyword: null, source: null },
+            urgencySignals: { count: 0, examples: [] }
         });
 
         const decodeSignalText = (text) => {
@@ -546,6 +558,42 @@
             };
         };
 
+        const analyzePageBrandSignals = (doc, fullUrl, rawText = '') => {
+            let domainHostname = '';
+            try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
+
+            const textParts = [rawText || '', doc?.title || ''];
+            if (doc) {
+                doc.querySelectorAll('meta[name="description"], meta[property="og:title"], meta[property="og:site_name"], img[alt], [aria-label], link[rel*="icon"]').forEach(el => {
+                    ['content', 'alt', 'aria-label', 'href'].forEach(attr => textParts.push(el.getAttribute(attr) || ''));
+                });
+            }
+
+            const haystack = decodeSignalText(textParts.join('\n'));
+            for (const brand of getRiskList('protectedBrands')) {
+                const officialDomains = brand.domains || [];
+                if (officialDomains.some(domain => isSameRootDomain(domainHostname, domain))) continue;
+
+                const keywords = [brand.name, ...(brand.keywords || [])].filter(Boolean);
+                const matchedKeyword = keywords.find(keyword => haystack.includes(keyword.toLowerCase()));
+                if (matchedKeyword) {
+                    return { matched: true, brandName: brand.name, keyword: matchedKeyword, source: 'page' };
+                }
+            }
+
+            return { matched: false, brandName: null, keyword: null, source: null };
+        };
+
+        const analyzeUrgencySignals = (doc, rawText = '') => {
+            const textParts = [rawText || '', doc?.title || '', doc?.body?.textContent || ''];
+            const haystack = decodeSignalText(textParts.join('\n'));
+            const examples = getRiskList('urgencyScamKeywords')
+                .filter(keyword => haystack.includes(keyword.toLowerCase()))
+                .slice(0, 5);
+
+            return { count: examples.length, examples };
+        };
+
         const analyzePageSignals = (doc, fullUrl, rawText = '') => {
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
@@ -614,7 +662,9 @@
                     suspiciousScriptCount: suspiciousExternalScripts.length,
                     examples: externalResources.slice(0, 3)
                 },
-                downloadSignals: analyzeDownloadSignals(doc, rawText, fullUrl)
+                downloadSignals: analyzeDownloadSignals(doc, rawText, fullUrl),
+                pageBrandSignals: analyzePageBrandSignals(doc, fullUrl, rawText),
+                urgencySignals: analyzeUrgencySignals(doc, rawText)
             };
         };
 
@@ -806,6 +856,14 @@
             } catch (e) { return { date: null, privacyDetected: false, registrarName: null }; }
         };
 
+        const fetchCertificateData = async (domain) => {
+            try {
+                const res = await fetch(`/api/cert-age?domain=${encodeURIComponent(domain)}`);
+                if (!res.ok) return { notBefore: null, source: null };
+                return await res.json();
+            } catch (e) { return { notBefore: null, source: null }; }
+        };
+
         const fetchTraceData = async (url) => {
             try {
                 const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
@@ -961,12 +1019,13 @@
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, siteStatusData, blocklistListed, trancoData, rdapData, traceData, safeBrowsingData] = await Promise.all([
+            const [geoLocationData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }),
+                withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
                 withTimeout(fetch(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`).then(r => r.ok ? r.json() : { isUnsafe: false }).catch(() => ({ isUnsafe: false })), 4000, { isUnsafe: false })
@@ -1095,6 +1154,8 @@
             const fakeServiceKeywords = getRiskList('fakeServiceKeywords');
             const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
             const pageSignals = siteStatusData.pageSignals || defaultSiteStatus.pageSignals;
+            const pageBrandSignals = pageSignals.pageBrandSignals || createEmptyPageSignals().pageBrandSignals;
+            const urgencySignals = pageSignals.urgencySignals || createEmptyPageSignals().urgencySignals;
             const sensitiveFieldCount = pageSignals.sensitiveFields?.count || 0;
             const highRiskSensitiveFieldCount = pageSignals.sensitiveFields?.highRiskCount || 0;
             const lowRiskSensitiveFieldCount = pageSignals.sensitiveFields?.lowRiskCount || 0;
@@ -1124,6 +1185,19 @@
                 domainAgeDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
             }
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
+            let certAgeDays = null;
+            if (certData?.notBefore) {
+                const certDate = new Date(certData.notBefore);
+                if (!Number.isNaN(certDate.getTime())) {
+                    certAgeDays = Math.ceil(Math.abs(new Date() - certDate) / (1000 * 60 * 60 * 24));
+                }
+            }
+            const isVeryNewCertificate = certAgeDays !== null && certAgeDays < 90;
+            const isNewDomainWithNewCertificate = isVeryNewDomain && isVeryNewCertificate && !isWhitelisted;
+            const hasPageBrandMismatch = !isWhitelisted && !hasBrandSimilarity && !!pageBrandSignals.matched;
+            const hasOfficialFlowPathSignal = !isWhitelisted && hasOfficialFlowPath(fullUrl);
+            const hasUrgencyScamSignal = !isWhitelisted && (urgencySignals.count || 0) > 0;
+            const hasHomographSignal = !isWhitelisted && hasPunycodeOrUnicodeHostname(domain, fullUrl);
             const hasFinancialPhishingSignal = !isWhitelisted &&
                 hasFinancialPhishingText(fullUrl + '\n' + nestedUrls.join('\n')) &&
                 !isFinalWhitelisted;
@@ -1267,6 +1341,13 @@
                     else if (hasPublicUtilityScamSignal) riskScore += 60;
                     if (hasLogisticsBrandPhishing) riskScore += 90;
                     else if (hasLogisticsScamSignal && hasBrandSimilarity) riskScore += 70;
+                    if (hasPageBrandMismatch) riskScore += 80;
+                    if (hasOfficialFlowPathSignal && (hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic)) riskScore += 45;
+                    else if (hasOfficialFlowPathSignal) riskScore += 15;
+                    if (hasUrgencyScamSignal && (hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain)) riskScore += 45;
+                    else if (hasUrgencyScamSignal) riskScore += 10;
+                    if (hasHomographSignal) riskScore += 85;
+                    if (isNewDomainWithNewCertificate) riskScore += 60;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -1354,6 +1435,9 @@
                 hasFinancialPhishingSignal ||
                 (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                 hasLogisticsBrandPhishing ||
+                hasPageBrandMismatch ||
+                hasHomographSignal ||
+                isNewDomainWithNewCertificate ||
                 isVeryNewDomain ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
@@ -1371,6 +1455,9 @@
                     hasFinancialPhishingSignal ||
                     (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                     hasLogisticsBrandPhishing ||
+                    hasPageBrandMismatch ||
+                    hasHomographSignal ||
+                    isNewDomainWithNewCertificate ||
                     isVeryNewDomain ||
                     isFakeGov ||
                     isFinalFakeGov ||
@@ -1425,6 +1512,16 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到物流品牌仿冒：網域疑似模仿「${matchedBrandSimilarity.brandName}」，且包含配送、包裹、追蹤或電商物流語意。`;
                 siteContentMsg = '危險：疑似物流品牌釣魚連結';
+            } else if (hasPageBrandMismatch) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到頁面品牌與網域不一致：頁面看起來像「${pageBrandSignals.brandName}」，但目前網域不是官方網域。`;
+                siteContentMsg = '危險：疑似品牌釣魚頁';
+            } else if (hasHomographSignal) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 偵測到 Punycode/Unicode 混淆網域，可能利用相似字元偽裝官方網站。';
+            } else if (isNewDomainWithNewCertificate) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 網域與 HTTPS 憑證都在 3 個月內建立，常見於短期釣魚或免洗網站。';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
@@ -1520,6 +1617,11 @@
                         details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'),
                         link: `https://who.is/whois/${domain}`
                     },
+                    certificate: {
+                        status: isNewDomainWithNewCertificate ? 'danger' : (isVeryNewCertificate ? 'warning' : (certData?.notBefore ? 'safe' : 'unknown')),
+                        label: 'HTTPS 憑證時間',
+                        details: certData?.notBefore ? `憑證最早核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
+                    },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
@@ -1530,6 +1632,10 @@
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
+                    pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
+                    officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },
+                    urgency: { status: hasUrgencyScamSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain) ? 'warning' : 'info') : 'safe', label: '限時/恐嚇話術', details: hasUrgencyScamSignal ? `偵測到限時、帳戶異常或立即驗證類話術：${urgencySignals.examples.slice(0, 3).join('、')}` : '未偵測到常見限時或恐嚇話術' },
+                    homograph: { status: hasHomographSignal ? 'danger' : 'safe', label: '相似字元網域', details: hasHomographSignal ? '網域含 Punycode 或非 ASCII 字元，可能利用相似字元混淆官方網域' : '未偵測到 Punycode 或 Unicode 混淆網域' },
                     params: { status: (hasSuspiciousParams || hasNestedSuspiciousParams) ? 'danger' : 'safe', label: '網址參數檢查', details: (hasSuspiciousParams || hasNestedSuspiciousParams) ? '包含敏感參數 (token/auth/session/verify)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
                     entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },

@@ -86,6 +86,20 @@ window.RISK_CONFIG = {
     sensitiveUrlParams: [
         'token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='
     ],
+    officialFlowPathKeywords: [
+        '/login', '/signin', '/sign-in', '/verify', '/verification', '/auth',
+        '/account', '/card', '/bank', '/reward', '/bonus', '/claim',
+        '/delivery', '/tracking', '/parcel', '/payment', '/pay', '/checkout',
+        '登入', '驗證', '認證', '帳戶', '信用卡', '金融卡', '領取',
+        '獎勵', '補助', '配送', '包裹', '繳費', '付款'
+    ],
+    urgencyScamKeywords: [
+        '限時', '立即', '馬上', '逾期', '失效', '倒數', '剩餘', '最後',
+        '名額有限', '今日截止', '立即領取', '立即驗證', '帳戶異常',
+        '交易異常', '取消交易', '確認取消', '停權', '凍結',
+        'limited time', 'expires', 'expire', 'urgent', 'immediately',
+        'verify now', 'act now', 'last chance', 'account suspended'
+    ],
     sensitiveFormKeywords: [
         'password', 'passwd', 'pwd', 'passcode', 'otp', 'pin', 'verify',
         'verification', 'auth', 'token', 'session', 'login', 'account',
