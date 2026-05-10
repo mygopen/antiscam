@@ -278,6 +278,26 @@
             }
 
             const found = [];
+            try {
+                const parsed = new URL(rawUrl);
+                parsed.searchParams.forEach(value => {
+                    if (!value || value.length < 12 || !/^[A-Za-z0-9+/=_-]+$/.test(value)) return;
+                    const normalizedValue = value.replace(/-/g, '+').replace(/_/g, '/');
+                    const paddedValue = normalizedValue.padEnd(Math.ceil(normalizedValue.length / 4) * 4, '=');
+                    try {
+                        const decoded = atob(paddedValue);
+                        if (/https?:\/\//i.test(decoded)) {
+                            const matches = decoded.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+                            matches.forEach(match => {
+                                try {
+                                    found.push({ href: new URL(match).href, allowSameHost: true });
+                                } catch (e) { }
+                            });
+                        }
+                    } catch (e) { }
+                });
+            } catch (e) { }
+
             for (let i = 0; i < variants.length; i++) {
                 const text = variants[i];
                 const embeddedProtocolPattern = /\/https?:\/\//gi;
@@ -291,27 +311,38 @@
                 matches.forEach(match => {
                     try {
                         const parsed = new URL(match.replace(/[),.]+$/, ''));
-                        found.push(parsed.href);
+                        found.push({ href: parsed.href, allowSameHost: false });
                     } catch (e) { }
                 });
             }
 
             try {
                 const parsedInput = new URL(rawUrl);
-                return [...new Set(found)].filter(url => {
-                    try {
-                        const parsed = new URL(url);
-                        return parsed.href !== parsedInput.href && parsed.hostname !== parsedInput.hostname;
-                    } catch (e) { return true; }
+                const unique = [];
+                found.forEach(item => {
+                    if (!unique.some(existing => existing.href === item.href)) unique.push(item);
                 });
+                return unique.filter(item => {
+                    try {
+                        const parsed = new URL(item.href);
+                        if (parsed.href === parsedInput.href) return false;
+                        if (!item.allowSameHost && parsed.hostname === parsedInput.hostname) return false;
+                        return item.allowSameHost || !parsedInput.href.startsWith(parsed.href);
+                    } catch (e) { return true; }
+                }).map(item => item.href);
             } catch (e) {
-                return [...new Set(found)];
+                return [...new Set(found.map(item => item.href))];
             }
         };
 
         const hasFinancialPhishingText = (text) => {
             const haystack = decodeSignalText(text || '');
             return getRiskList('financialPhishingKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
+        };
+
+        const hasPublicUtilityScamText = (text) => {
+            const haystack = decodeSignalText(text || '');
+            return getRiskList('publicUtilityScamKeywords').some(keyword => haystack.includes(keyword.toLowerCase()));
         };
 
         const createEmptyPageSignals = () => ({
@@ -393,6 +424,31 @@
             return matrix[a.length][b.length];
         };
 
+        const damerauLevenshteinDistance = (a, b) => {
+            const matrix = Array.from({ length: a.length + 1 }, (_, i) => {
+                const row = Array(b.length + 1).fill(0);
+                row[0] = i;
+                return row;
+            });
+            for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                        matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
+                    }
+                }
+            }
+
+            return matrix[a.length][b.length];
+        };
+
         const checkBrandSimilarity = (hostname, currentWhitelist = []) => {
             const domainText = getComparableDomainText(hostname);
             const protectedBrands = getRiskList('protectedBrands');
@@ -411,7 +467,7 @@
                     let closeTypo = false;
                     for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
                         const segment = domainText.slice(i, i + normalizedKeyword.length);
-                        if (levenshteinDistance(segment, normalizedKeyword) <= 1) {
+                        if (damerauLevenshteinDistance(segment, normalizedKeyword) <= 1) {
                             closeTypo = true;
                             break;
                         }
@@ -1060,6 +1116,10 @@
             const hasFinancialPhishingSignal = !isWhitelisted &&
                 hasFinancialPhishingText(fullUrl + '\n' + nestedUrls.join('\n')) &&
                 !isFinalWhitelisted;
+            const hasPublicUtilityScamSignal = !isWhitelisted &&
+                (hasPublicUtilityScamText(fullUrl + '\n' + nestedUrls.join('\n')) ||
+                    (matchedBrandSimilarity.brandName === '台灣電力公司' && hasNestedUrl)) &&
+                !isFinalWhitelisted;
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
             const hasEmailTrackingPhishingPattern = !isWhitelisted &&
@@ -1180,6 +1240,8 @@
                     if (hasEmailTrackingPhishingPattern) riskScore += 85;
                     else if (hasEncodedRedirectRisk) riskScore += 45;
                     if (hasFinancialPhishingSignal) riskScore += 80;
+                    if (hasPublicUtilityScamSignal && hasBrandSimilarity) riskScore += 90;
+                    else if (hasPublicUtilityScamSignal) riskScore += 60;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -1265,6 +1327,7 @@
                 isDownloadPhishingSignal ||
                 hasEmailTrackingPhishingPattern ||
                 hasFinancialPhishingSignal ||
+                (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
@@ -1278,6 +1341,7 @@
                 const hasDangerDetail = hasBrandSimilarity ||
                     hasEmailTrackingPhishingPattern ||
                     hasFinancialPhishingSignal ||
+                    (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                     isFakeGov ||
                     isFinalFakeGov ||
                     isFakeService ||
@@ -1318,6 +1382,10 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到金融機構或信用卡異常交易相關釣魚語意，但網域不是官方網域。';
                 siteContentMsg = '危險：疑似金融釣魚連結';
+            } else if (hasPublicUtilityScamSignal && hasBrandSimilarity) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到公共事業仿冒：網域疑似模仿「${matchedBrandSimilarity.brandName}」，且網址含節電獎勵、電費補助或領取等詐騙語意。`;
+                siteContentMsg = '危險：疑似公共事業獎勵金釣魚連結';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';

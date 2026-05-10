@@ -35,6 +35,26 @@ function extractNestedUrls(rawUrl) {
     }
 
     const found = [];
+    try {
+        const parsed = new URL(rawUrl);
+        parsed.searchParams.forEach(value => {
+            if (!value || value.length < 12 || !/^[A-Za-z0-9+/=_-]+$/.test(value)) return;
+            const normalizedValue = value.replace(/-/g, '+').replace(/_/g, '/');
+            const paddedValue = normalizedValue.padEnd(Math.ceil(normalizedValue.length / 4) * 4, '=');
+            try {
+                const decoded = Buffer.from(paddedValue, 'base64').toString('utf8');
+                if (/https?:\/\//i.test(decoded)) {
+                    const matches = decoded.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+                    matches.forEach(match => {
+                        try {
+                            found.push({ href: new URL(match).href, allowSameHost: true });
+                        } catch (e) { }
+                    });
+                }
+            } catch (e) { }
+        });
+    } catch (e) { }
+
     for (let i = 0; i < variants.length; i++) {
         const text = variants[i];
         const embeddedProtocolPattern = /\/https?:\/\//gi;
@@ -48,21 +68,27 @@ function extractNestedUrls(rawUrl) {
         matches.forEach(match => {
             try {
                 const parsed = new URL(match.replace(/[),.]+$/, ''));
-                found.push(parsed.href);
+                found.push({ href: parsed.href, allowSameHost: false });
             } catch (e) { }
         });
     }
 
     try {
         const parsedInput = new URL(rawUrl);
-        return [...new Set(found)].filter(url => {
-            try {
-                const parsed = new URL(url);
-                return parsed.href !== parsedInput.href && parsed.hostname !== parsedInput.hostname;
-            } catch (e) { return true; }
+        const unique = [];
+        found.forEach(item => {
+            if (!unique.some(existing => existing.href === item.href)) unique.push(item);
         });
+        return unique.filter(item => {
+            try {
+                const parsed = new URL(item.href);
+                if (parsed.href === parsedInput.href) return false;
+                if (!item.allowSameHost && parsed.hostname === parsedInput.hostname) return false;
+                return item.allowSameHost || !parsedInput.href.startsWith(parsed.href);
+            } catch (e) { return true; }
+        }).map(item => item.href);
     } catch (e) {
-        return [...new Set(found)];
+        return [...new Set(found.map(item => item.href))];
     }
 }
 
@@ -234,6 +260,31 @@ function levenshteinDistance(a, b) {
     return matrix[a.length][b.length];
 }
 
+function damerauLevenshteinDistance(a, b) {
+    const matrix = Array.from({ length: a.length + 1 }, (_, i) => {
+        const row = Array(b.length + 1).fill(0);
+        row[0] = i;
+        return row;
+    });
+    for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
+            }
+        }
+    }
+
+    return matrix[a.length][b.length];
+}
+
 function checkBrandSimilarity(hostname, whitelist = []) {
     const domainText = comparableDomainText(hostname);
 
@@ -247,7 +298,7 @@ function checkBrandSimilarity(hostname, whitelist = []) {
 
             for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
                 const segment = domainText.slice(i, i + normalizedKeyword.length);
-                if (levenshteinDistance(segment, normalizedKeyword) <= 1) {
+                if (damerauLevenshteinDistance(segment, normalizedKeyword) <= 1) {
                     return { matched: true, brandName: brand.name };
                 }
             }
@@ -255,6 +306,11 @@ function checkBrandSimilarity(hostname, whitelist = []) {
     }
 
     return { matched: false };
+}
+
+function hasPublicUtilityScamText(text) {
+    const haystack = decodeSignalText(text || '');
+    return riskConfig.publicUtilityScamKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
 }
 
 function getDomainParts(hostname) {
@@ -451,6 +507,7 @@ test('外部資源與 form action 會排除同網域與信任 CDN', () => {
 test('品牌相似網域會抓到仿冒與 typo，並排除官方/白名單網域', () => {
     assert.equal(checkBrandSimilarity('ctbcbank-login.shop').matched, true);
     assert.equal(checkBrandSimilarity('ctbcbamk-login.shop').matched, true);
+    assert.equal(checkBrandSimilarity('taipwoer.com.tw').matched, true);
     assert.equal(checkBrandSimilarity('ctbcbank.com').matched, false);
     assert.equal(checkBrandSimilarity('fubonlife.tw', ['fubonlife.tw']).matched, false);
 });
@@ -518,4 +575,18 @@ test('危險細節應拉高 summary 分數下限', () => {
     const summaryScore = hasDangerDetail && riskScore < 70 ? 70 : riskScore;
 
     assert.equal(summaryScore, 70);
+});
+
+test('台電 typo 與 base64 參數會被視為公共事業釣魚強風險', () => {
+    const url = 'https://taipwoer.com.tw/menghuan.html?c=aHR0cHM6Ly90YWlwd29lci5jb20udHc=#/';
+    const nestedUrls = extractNestedUrls(url);
+    const brandSimilarity = checkBrandSimilarity('taipwoer.com.tw');
+    const hasPublicUtilitySignal = hasPublicUtilityScamText(`${url}\n${nestedUrls.join('\n')}`) || brandSimilarity.brandName === '台灣電力公司';
+    const riskScore = brandSimilarity.matched && hasPublicUtilitySignal && nestedUrls.length > 0 ? 90 : 0;
+
+    assert.deepEqual(nestedUrls, ['https://taipwoer.com.tw/']);
+    assert.equal(brandSimilarity.matched, true);
+    assert.equal(brandSimilarity.brandName, '台灣電力公司');
+    assert.equal(hasPublicUtilitySignal, true);
+    assert.equal(riskScore >= 70, true);
 });

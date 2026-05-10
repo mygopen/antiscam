@@ -59,7 +59,12 @@ window.RISK_CONFIG = {
         'smtp', 'webmail', 'tw', 'en', 'zh', 'www2'
     ],
     fakeServiceKeywords: [
-        'einvoice', 'taipower', 'water', 'fetc'
+        'einvoice', 'taipower', '台電', '台灣電力', 'water', 'fetc'
+    ],
+    publicUtilityScamKeywords: [
+        '台電', '台灣電力', 'taipower', '節電', '節電獎勵', '獎勵金',
+        '電費', '電費補助', '補助', '退款', '退費', '領取',
+        '水費', '自來水', '停電通知', '用電異常'
     ],
     scamKeywords: [
         'ctbc', 'ctbcbank', 'cathay', 'taishin', 'esun', 'fubon', 'post-gov',
@@ -111,7 +116,7 @@ window.RISK_CONFIG = {
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
-        { name: '台灣電力公司', keywords: ['taipower'], domains: ['taipower.com.tw'] },
+        { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },
         { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] }
     ]
 };
