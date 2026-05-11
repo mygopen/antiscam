@@ -59,7 +59,7 @@ window.RISK_CONFIG = {
         'smtp', 'webmail', 'tw', 'en', 'zh', 'www2'
     ],
     fakeServiceKeywords: [
-        'einvoice', 'taipower', '台電', '台灣電力', 'water', 'fetc'
+        'einvoice', 'invoicenat', 'einvoicenat', 'taipower', '台電', '台灣電力', 'water', 'fetc'
     ],
     publicUtilityScamKeywords: [
         '台電', '台灣電力', 'taipower', '節電', '節電獎勵', '獎勵金',
@@ -136,6 +136,7 @@ window.RISK_CONFIG = {
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
+        { name: '財政部電子發票', keywords: ['einvoice', 'invoicenat', 'einvoicenat'], domains: ['einvoice.nat.gov.tw', 'invoice.etax.nat.gov.tw', 'etax.nat.gov.tw', 'mof.gov.tw'] },
         { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },
         { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] },
         { name: 'DHL', keywords: ['dhl'], domains: ['dhl.com', 'dhl.com.tw'] }

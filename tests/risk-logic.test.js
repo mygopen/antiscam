@@ -522,6 +522,16 @@ test('假政府網域只攔截非正式政府後綴', () => {
     assert.equal(isFakeGov('gov-tw-login.shop', true), false);
 });
 
+test('電子發票 nat 偽裝網域會命中受保護品牌，官方網域不誤判', () => {
+    const suspicious = checkBrandSimilarity('www-invoicenat.tw');
+    assert.equal(suspicious.matched, true);
+    assert.equal(suspicious.brandName, '財政部電子發票');
+
+    const official = checkBrandSimilarity('einvoice.nat.gov.tw');
+    assert.equal(official.matched, false);
+    assert.equal(riskConfig.fakeServiceKeywords.includes('invoicenat'), true);
+});
+
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {
     assert.equal(matchesDomainList('bit.ly', riskConfig.urlShorteners), true);
     assert.equal(matchesDomainList('link.t.co', riskConfig.urlShorteners), true);
