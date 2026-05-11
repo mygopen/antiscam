@@ -67,6 +67,65 @@ function parseDateFromText(text) {
     return null;
 }
 
+function cleanRegistrarName(value) {
+    const cleaned = String(value || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!cleaned || /^not disclosed$/i.test(cleaned) || /^redacted/i.test(cleaned)) return null;
+    return cleaned;
+}
+
+function parseRegistrarFromText(text) {
+    const regexes = [
+        /(?:Registrar|Sponsoring Registrar|Registrar Name|Registration Service Provider|Authorized Agency|Record maintained by):?\s*([^\r\n<]+)/i,
+        /(?:註冊商|注册商|受理註冊機構|受理注册机构|申請人之受理註冊機構):?\s*([^\r\n<]+)/i
+    ];
+
+    for (const regex of regexes) {
+        const match = String(text || '').match(regex);
+        const registrar = cleanRegistrarName(match?.[1]);
+        if (registrar) return registrar;
+    }
+
+    return null;
+}
+
+function getVcardName(entity) {
+    if (!entity?.vcardArray || !Array.isArray(entity.vcardArray) || entity.vcardArray.length < 2) return null;
+    const fnEntry = entity.vcardArray[1]?.find(item => item[0] === 'fn');
+    return cleanRegistrarName(fnEntry?.[3]);
+}
+
+function getRegistrarName(data) {
+    if (!data || typeof data !== 'object') return null;
+
+    const directRegistrar =
+        data.registrarName ||
+        data.registrar ||
+        data.sponsoringRegistrar ||
+        data.sponsor ||
+        data.registrationServiceProvider;
+    const cleanedDirect = cleanRegistrarName(directRegistrar);
+    if (cleanedDirect) return cleanedDirect;
+
+    const entities = Array.isArray(data.entities) ? data.entities : [];
+    const preferred = entities.find(entity =>
+        Array.isArray(entity.roles) &&
+        entity.roles.some(role => /registrar|sponsor|reseller/i.test(role))
+    );
+    const preferredName = getVcardName(preferred) || cleanRegistrarName(preferred?.name || preferred?.handle);
+    if (preferredName) return preferredName;
+
+    for (const entity of entities) {
+        const name = getVcardName(entity) || cleanRegistrarName(entity?.name || entity?.handle);
+        if (name) return name;
+    }
+
+    return null;
+}
+
 function getRegistrationDate(data) {
     if (!data || typeof data !== 'object') return null;
 
@@ -83,6 +142,18 @@ function getRegistrationDate(data) {
     if (regEvent?.eventDate) return regEvent.eventDate;
 
     return null;
+}
+
+function withRegistrarName(data, registrarName) {
+    if (!registrarName) return data;
+    const output = data && typeof data === 'object' ? { ...data } : {};
+    output.registrarName = output.registrarName || registrarName;
+    const entities = Array.isArray(output.entities) ? [...output.entities] : [];
+    if (!entities.some(entity => Array.isArray(entity.roles) && entity.roles.includes('registrar'))) {
+        entities.unshift({ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", registrarName]]] });
+    }
+    output.entities = entities;
+    return output;
 }
 
 function hasRegistrationDate(data) {
@@ -125,6 +196,21 @@ async function fetchFallbackRegistrationData(rootDomain, tld) {
     return null;
 }
 
+async function fetchFallbackRegistrarData(rootDomain, tld) {
+    const socketData = await fetchWhoisSocket(rootDomain, tld);
+    if (socketData && getRegistrarName(socketData)) return socketData;
+
+    if (tld === 'tw') {
+        const twnicData = await fetchTwnicWeb(rootDomain);
+        if (twnicData && getRegistrarName(twnicData)) return twnicData;
+    }
+
+    const whoisWebData = await fetchWhoIsWeb(rootDomain);
+    if (whoisWebData && getRegistrarName(whoisWebData)) return whoisWebData;
+
+    return null;
+}
+
 // TCP Socket WHOIS
 async function fetchWhoisSocket(domain, tld) {
     const server = getWhoisServer(tld);
@@ -148,12 +234,15 @@ async function fetchWhoisSocket(domain, tld) {
         }
         
         const date = parseDateFromText(responseText);
+        const registrarName = parseRegistrarFromText(responseText);
         if (date) {
-            return {
+            return withRegistrarName({
                 events: [{ eventAction: "registration", eventDate: date }],
-                entities: [{ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", "TCP/Whois Lookup"]]] }],
                 source: "tcp-socket"
-            };
+            }, registrarName);
+        }
+        if (registrarName) {
+            return withRegistrarName({ events: [], source: "tcp-socket" }, registrarName);
         }
         return null;
     } catch (e) { return null; }
@@ -180,12 +269,15 @@ async function fetchTwnicWeb(domain) {
         const html = await res.text();
         // TWNIC 網頁通常顯示 "Record created on yyyy-mm-dd"
         const date = parseDateFromText(html);
+        const registrarName = parseRegistrarFromText(html);
         if (date) {
-            return {
+            return withRegistrarName({
                 events: [{ eventAction: "registration", eventDate: date }],
-                entities: [{ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", "TWNIC Web"]]] }],
                 source: "twnic-web"
-            };
+            }, registrarName);
+        }
+        if (registrarName) {
+            return withRegistrarName({ events: [], source: "twnic-web" }, registrarName);
         }
     }
     return null;
@@ -200,12 +292,15 @@ async function fetchWhoIsWeb(domain) {
         const html = await res.text();
         // who.is 結構通常是 class="queryResponseBody" 或直接在 pre tag 裡
         const date = parseDateFromText(html);
+        const registrarName = parseRegistrarFromText(html);
         if (date) {
-            return {
+            return withRegistrarName({
                 events: [{ eventAction: "registration", eventDate: date }],
-                entities: [{ roles: ["registrar"], vcardArray: ["vcard", [["fn", {}, "text", "Who.is Web"]]] }],
                 source: "whois-web"
-            };
+            }, registrarName);
+        }
+        if (registrarName) {
+            return withRegistrarName({ events: [], source: "whois-web" }, registrarName);
         }
     }
     return null;
@@ -274,10 +369,10 @@ export async function onRequest(context) {
        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
        try {
            const proxyRes = await fetch(proxyUrl);
-           if (proxyRes.ok) {
-               const data = await proxyRes.json();
-               if (hasRegistrationDate(data)) return jsonResponse(data);
-	           }
+	           if (proxyRes.ok) {
+	               const data = await proxyRes.json();
+               if (hasRegistrationDate(data) && getRegistrarName(data)) return jsonResponse(data);
+		           }
 	       } catch(e) {}
 
 	       const fallbackData = await fetchFallbackRegistrationData(rootDomain, tld);
@@ -289,7 +384,13 @@ export async function onRequest(context) {
 	    const data = await response.json();
 	    const directDate = getRegistrationDate(data);
 	    if (directDate) {
-	      return jsonResponse(withRegistrationEvent(data, directDate, "rdap"));
+	      let output = withRegistrationEvent(data, directDate, "rdap");
+	      if (!getRegistrarName(output)) {
+	        const registrarFallback = await fetchFallbackRegistrarData(rootDomain, tld);
+	        const registrarName = getRegistrarName(registrarFallback);
+	        if (registrarName) output = withRegistrarName(output, registrarName);
+	      }
+	      return jsonResponse(output);
 	    }
 
 	    const fallbackData = await fetchFallbackRegistrationData(rootDomain, tld);

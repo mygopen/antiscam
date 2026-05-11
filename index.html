@@ -808,8 +808,10 @@
                     : (data.registrationDate || data.createdDate || data.creationDate || data.created || data.registered || null);
                 let privacyDetected = false;
                 const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
-                let registrarName = null;
-                const registrarEntity = data.entities?.find(e => e.roles && e.roles.includes('registrar'));
+                let registrarName = data.registrarName || data.registrar || data.sponsoringRegistrar || data.sponsor || data.registrationServiceProvider || null;
+                const registrarEntity = data.entities?.find(e =>
+                    e.roles && e.roles.some(role => /registrar|sponsor|reseller/i.test(role))
+                );
                 if (registrarEntity) {
                     if (registrarEntity.vcardArray && registrarEntity.vcardArray.length > 1) {
                         const fnEntry = registrarEntity.vcardArray[1]?.find(item => item[0] === 'fn');
@@ -823,7 +825,7 @@
                     for (const ent of potentialRegistrars) {
                         if (ent.vcardArray) {
                             const fnEntry = ent.vcardArray[1]?.find(item => item[0] === 'fn');
-                            if (fnEntry && !privacyKeywords.some(kw => fnEntry[3].includes(kw))) {
+                            if (fnEntry && typeof fnEntry[3] === 'string' && !privacyKeywords.some(kw => fnEntry[3].includes(kw))) {
                                 registrarName = fnEntry[3];
                                 break;
                             }
