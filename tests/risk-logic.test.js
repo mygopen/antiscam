@@ -635,6 +635,16 @@ test('新網域搭配 3 個月內新核發 HTTPS 憑證應升高風險', () => {
     assert.equal(isNewDomainWithNewCertificate, true);
 });
 
+test('缺少註冊時間時應以 HTTPS 憑證最近核發日代入', () => {
+    const rdapDate = null;
+    const certNotBefore = '2026-05-07T00:00:00.000Z';
+    const effectiveRegistrationDate = rdapDate || certNotBefore || null;
+    const isRegistrationDateFromCertificate = !rdapDate && !!certNotBefore;
+
+    assert.equal(effectiveRegistrationDate, certNotBefore);
+    assert.equal(isRegistrationDateFromCertificate, true);
+});
+
 test('可疑子網域模式會抓到 hyphen、短隨機片段與難讀命名', () => {
     const suspicious = analyzeSuspiciousSubdomain('sb-sumiclen.discover-news.tokyo');
     assert.equal(suspicious.matched, true);

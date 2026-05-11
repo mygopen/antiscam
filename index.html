@@ -1045,7 +1045,8 @@
                 withTimeout(fetch(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`).then(r => r.ok ? r.json() : { isUnsafe: false }).catch(() => ({ isUnsafe: false })), 4000, { isUnsafe: false })
             ]);
 
-            const rdapDate = rdapData.date;
+            const isRegistrationDateFromCertificate = !rdapData.date && !!certData?.notBefore;
+            const rdapDate = rdapData.date || certData?.notBefore || null;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
             const serverInfo = geoLocationData || networkInfoData;
@@ -1196,8 +1197,8 @@
             const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : (finalBrandSimilarity.matched ? finalBrandSimilarity : nestedBrandSimilarity);
             const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
             let domainAgeDays = null;
-            if (rdapData.date) {
-                const regDate = new Date(rdapData.date);
+            if (rdapDate) {
+                const regDate = new Date(rdapDate);
                 domainAgeDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
             }
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
@@ -1637,7 +1638,7 @@
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
                                 (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'),
                         label: '註冊時間',
-                        details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'),
+                        details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'),
                         link: `https://who.is/whois/${domain}`
                     },
                     certificate: {
