@@ -144,6 +144,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
     addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
     addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
+    addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
     addReason(checks.age?.status === 'danger', '3 個月內新註冊網域');
     addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
 
@@ -440,6 +441,38 @@ function analyzeSuspiciousSubdomain(hostname) {
     };
 }
 
+function hasDeepSubdomainPhishingPattern({
+    hostname,
+    isWhitelisted = false,
+    isHighTraffic = false,
+    isLowTraffic = false,
+    hasSuspiciousParams = false,
+    hasNestedSuspiciousParams = false,
+    hasSuspiciousTempDomain = false
+}) {
+    const domain = hostname.toLowerCase();
+    const isDeepSubdomain = domain.split('.').length >= 5;
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain(domain);
+    const hasMultipleHyphens = (domain.match(/-/g) || []).length >= 2;
+    const embeddedTrustedTldLabels = ['com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'net.tw'];
+    const hasEmbeddedTrustedTldLabel = embeddedTrustedTldLabels.some(tld =>
+        `.${domain}.`.includes(`.${tld}.`) && !domain.endsWith(`.${tld}`)
+    );
+
+    return !isWhitelisted &&
+        !isHighTraffic &&
+        isDeepSubdomain &&
+        (
+            suspiciousSubdomain.matched ||
+            hasMultipleHyphens ||
+            hasEmbeddedTrustedTldLabel ||
+            hasSuspiciousParams ||
+            hasNestedSuspiciousParams ||
+            hasSuspiciousTempDomain ||
+            isLowTraffic
+        );
+}
+
 function capWeakSignalRisk(score, hasStrongRiskSignal) {
     return !hasStrongRiskSignal && score > 60 ? 60 : score;
 }
@@ -656,6 +689,34 @@ test('可疑子網域模式會抓到 hyphen、短隨機片段與難讀命名', (
     assert.equal(analyzeSuspiciousSubdomain('api.example.com').matched, false);
     assert.equal(analyzeSuspiciousSubdomain('shop.example.com').matched, false);
     assert.equal(analyzeSuspiciousSubdomain('news.discover-news.tokyo').matched, false);
+});
+
+test('深層可疑子網域會升為強風險並避免 summary 低風險', () => {
+    const hostname = 'mysshio-7ll.com.tw.ldtyy.link';
+    const hasPattern = hasDeepSubdomainPhishingPattern({ hostname });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: capWeakSignalRisk(hasPattern ? 75 : 0, hasPattern),
+        checks: {
+            subdomain: {
+                status: hasPattern ? 'danger' : 'warning',
+                details: '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵'
+            },
+            domainAnalysis: { status: hasPattern ? 'danger' : 'safe', details: '深層可疑子網域' }
+        }
+    });
+
+    assert.equal(hasPattern, true);
+    assert.equal(scanData.riskScore >= 70, true);
+    assert.ok(scanData.summaryReasons.includes('深層可疑子網域結構'));
+});
+
+test('一般多層子網域沒有其他可疑特徵時不應單獨升高風險', () => {
+    const hasPattern = hasDeepSubdomainPhishingPattern({
+        hostname: 'static.assets.images.example.com',
+        isHighTraffic: false
+    });
+
+    assert.equal(hasPattern, false);
 });
 
 test('弱訊號不應單獨疊成高風險', () => {

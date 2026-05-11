@@ -1167,6 +1167,10 @@
             const highRiskRegistrars = getRiskList('highRiskRegistrars');
             const isHighRiskRegistrar = registrarName && highRiskRegistrars.some(r => registrarName.toLowerCase().includes(r));
             const isDeepSubdomain = domain.split('.').length >= 5;
+            const embeddedTrustedTldLabels = ['com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'net.tw'];
+            const hasEmbeddedTrustedTldLabel = embeddedTrustedTldLabels.some(tld =>
+                `.${domain}.`.includes(`.${tld}.`) && !domain.endsWith(`.${tld}`)
+            );
             const hasSuspiciousParams = getRiskList('sensitiveUrlParams').some(key => fullUrl.toLowerCase().includes(key));
             const hasNestedSuspiciousParams = nestedUrls.some(url => getRiskList('sensitiveUrlParams').some(key => url.toLowerCase().includes(key)));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
@@ -1242,6 +1246,18 @@
             const hasEmailTrackingPhishingPattern = !isWhitelisted &&
                 hasEmailTrackingRedirect &&
                 (isDeepSubdomain || isHighEntropy || suspiciousSubdomain.matched || hasFinancialPhishingSignal || hasBrandSimilarity);
+            const hasDeepSubdomainPhishingPattern = !isWhitelisted &&
+                !isHighTraffic &&
+                isDeepSubdomain &&
+                (
+                    suspiciousSubdomain.matched ||
+                    hasMultipleHyphens ||
+                    hasEmbeddedTrustedTldLabel ||
+                    hasSuspiciousParams ||
+                    hasNestedSuspiciousParams ||
+                    hasSuspiciousTempDomain ||
+                    isLowTraffic
+                );
 
             // --- [優化版] 精確風險權重判定 ---
             let riskScore = 0;
@@ -1389,7 +1405,8 @@
                     }
 
                     if (hyphenCount >= 3 || finalHyphenCount >= 3) riskScore += 20;
-                    if (isDeepSubdomain && (isLowTraffic || hasEmailTrackingRedirect)) riskScore += 50;
+                    if (hasDeepSubdomainPhishingPattern) riskScore += 75;
+                    else if (isDeepSubdomain && (isLowTraffic || hasEmailTrackingRedirect)) riskScore += 50;
                     if (hasSuspiciousParams || hasNestedSuspiciousParams) riskScore += 40;
                     if (hasSuspiciousTempDomain || hasFinalSuspiciousTemp) riskScore += 70;
                     if (suspiciousSubdomain.matched && (isLowTraffic || hasEmailTrackingRedirect)) riskScore += Math.min(45, 15 + suspiciousSubdomain.reasons.length * 10);
@@ -1465,6 +1482,7 @@
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
                 hasSuspiciousEmailTrackingHost ||
+                hasDeepSubdomainPhishingPattern ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform);
 
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
@@ -1489,6 +1507,7 @@
                     hasSuspiciousTempDomain ||
                     hasFinalSuspiciousTemp ||
                     hasSuspiciousEmailTrackingHost ||
+                    hasDeepSubdomainPhishingPattern ||
                     isDownloadPhishingSignal ||
                     isApkSite;
                 if (hasDangerDetail && riskScore < 70) riskScore = 70;
@@ -1575,6 +1594,11 @@
             } else if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '網域或轉址目標為高風險網址，請注意！';
+            } else if (hasDeepSubdomainPhishingPattern) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = hasEmbeddedTrustedTldLabel ?
+                    '🚨 偵測到深層可疑子網域，且把 com.tw/gov.tw 等可信後綴嵌在子網域中，常見於假冒台灣網站。' :
+                    '🚨 偵測到深層可疑子網域，並伴隨連字號、隨機片段或可疑參數等釣魚特徵。';
             } else if (isSuspiciousTLD) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '網域使用較常被濫用的後綴，需搭配其他風險指標判斷';
@@ -1652,7 +1676,7 @@
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
-                    subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
+                    subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : '無法識別網路來源' },
@@ -1689,6 +1713,7 @@
             addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
             addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
             addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
+            addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
             addReason(checks.age?.status === 'danger', '3 個月內新註冊網域');
             addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
 
