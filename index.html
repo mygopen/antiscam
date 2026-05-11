@@ -1623,7 +1623,7 @@
                     certificate: {
                         status: isNewDomainWithNewCertificate ? 'danger' : (isVeryNewCertificate ? 'warning' : (certData?.notBefore ? 'safe' : 'unknown')),
                         label: 'HTTPS 憑證時間',
-                        details: certData?.notBefore ? `憑證最早核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
+                        details: certData?.notBefore ? `憑證最近核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
