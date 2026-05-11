@@ -156,6 +156,20 @@ function withRegistrarName(data, registrarName) {
     return output;
 }
 
+function mergeDomainData(primary, fallback) {
+    let output = primary && typeof primary === 'object' ? { ...primary } : {};
+    const fallbackDate = getRegistrationDate(fallback);
+    if (fallbackDate && !getRegistrationDate(output)) {
+        output = withRegistrationEvent(output, fallbackDate, fallback?.source || 'fallback');
+    }
+    const fallbackRegistrar = getRegistrarName(fallback);
+    if (fallbackRegistrar && !getRegistrarName(output)) {
+        output = withRegistrarName(output, fallbackRegistrar);
+    }
+    if (!output.source && fallback?.source) output.source = fallback.source;
+    return output;
+}
+
 function hasRegistrationDate(data) {
     return !!getRegistrationDate(data);
 }
@@ -250,6 +264,13 @@ async function fetchWhoisSocket(domain, tld) {
 
 // Proxy Helper
 async function fetchViaProxy(targetUrl) {
+    try {
+        const directRes = await fetch(targetUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+        });
+        if (directRes.ok) return directRes;
+    } catch (e) { }
+
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
     try {
         const res = await fetch(proxyUrl, {
@@ -395,7 +416,7 @@ export async function onRequest(context) {
 
 	    const fallbackData = await fetchFallbackRegistrationData(rootDomain, tld);
 	    if (fallbackData) {
-	      return jsonResponse(fallbackData);
+	      return jsonResponse(mergeDomainData(data, fallbackData));
 	    }
 
 	    return jsonResponse(data);

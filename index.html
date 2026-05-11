@@ -682,6 +682,14 @@
             } catch (err) { return null; }
         };
 
+        const fetchNetworkInfo = async (domain) => {
+            try {
+                const res = await fetch(`/api/network-info?domain=${encodeURIComponent(domain)}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (err) { return null; }
+        };
+
         const checkSiteAvailability = async (fullUrl) => {
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
             try {
@@ -1024,8 +1032,9 @@
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData] = await Promise.all([
+            const [geoLocationData, networkInfoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
+                withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
@@ -1039,6 +1048,8 @@
             const rdapDate = rdapData.date;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
+            const serverInfo = geoLocationData || networkInfoData;
+            const serverIp = serverInfo?.ip || resolvedIp || null;
             const traceChain = traceData ? traceData.chain : [];
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
@@ -1198,6 +1209,8 @@
                 }
             }
             const isVeryNewCertificate = certAgeDays !== null && certAgeDays < 90;
+            const certIssuerText = certData?.issuerName ? `；簽發者: ${certData.issuerName}` : '';
+            const certExpiryText = certData?.notAfter ? `；有效至: ${new Date(certData.notAfter).toISOString().split('T')[0]}` : '';
             const isNewDomainWithNewCertificate = isVeryNewDomain && isVeryNewCertificate && !isWhitelisted;
             const hasPageBrandMismatch = !isWhitelisted && !hasBrandSimilarity && !!pageBrandSignals.matched;
             const hasOfficialFlowPathSignal = !isWhitelisted && hasOfficialFlowPath(fullUrl);
@@ -1597,7 +1610,12 @@
 
             return {
                 domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed, isSocialMedia: isSocialMedia,
-                details: { serverCountry: geoLocationData?.isReal ? geoLocationData.country : '隱藏/無法偵測', siteStatus: siteStatusData },
+                details: {
+                    serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
+                    serverIp,
+                    serverOrg: serverInfo?.org || '',
+                    siteStatus: siteStatusData
+                },
                 checks: {
                     // 👇 新增這行：Google 官方的標記卡片
                     googleSafeBrowsing: { 
@@ -1625,7 +1643,7 @@
                     certificate: {
                         status: isNewDomainWithNewCertificate ? 'danger' : (isVeryNewCertificate ? 'warning' : (certData?.notBefore ? 'safe' : 'unknown')),
                         label: 'HTTPS 憑證時間',
-                        details: certData?.notBefore ? `憑證最近核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
+                        details: certData?.notBefore ? `憑證最近核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${certExpiryText}${certIssuerText}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },

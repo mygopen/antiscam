@@ -21,20 +21,36 @@ function getRegisteredDomain(hostname) {
 function parseCertRows(rows) {
   if (!Array.isArray(rows)) return { notBefore: null, source: null };
 
-  const timestamps = rows
-    .flatMap(row => [
-      row.not_before,
-      row.notBefore,
-      row.cert?.not_before,
-      row.tbs_certificate?.validity?.not_before
-    ])
-    .filter(Boolean)
-    .map(value => new Date(value))
-    .filter(date => !Number.isNaN(date.getTime()))
-    .sort((a, b) => b.getTime() - a.getTime());
+  const toDate = (value) => {
+    if (!value) return null;
+    const date = typeof value === 'number' ? new Date(value) : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const certs = rows
+    .map(row => {
+      const notBefore = toDate(row.not_before || row.notBefore || row.cert?.not_before || row.tbs_certificate?.validity?.not_before);
+      const notAfter = toDate(row.not_after || row.notAfter || row.cert?.not_after || row.tbs_certificate?.validity?.not_after);
+      const dnsNames = row.dns_names || row.altNames || (row.name_value ? String(row.name_value).split(/\s+/) : []);
+      return {
+        notBefore,
+        notAfter,
+        issuerName: row.issuer_name || row.issuerName || row.issuer?.name || row.issuerSubject || row.cert?.issuer?.name || null,
+        commonName: row.common_name || row.commonName || row.commonNames?.[0] || row.cert?.subject?.common_name || null,
+        dnsNames: Array.isArray(dnsNames) ? dnsNames.filter(Boolean).slice(0, 8) : []
+      };
+    })
+    .filter(cert => cert.notBefore)
+    .sort((a, b) => b.notBefore.getTime() - a.notBefore.getTime());
+
+  const latest = certs[0];
 
   return {
-    notBefore: timestamps[0] ? timestamps[0].toISOString() : null,
+    notBefore: latest ? latest.notBefore.toISOString() : null,
+    notAfter: latest?.notAfter ? latest.notAfter.toISOString() : null,
+    issuerName: latest?.issuerName || null,
+    commonName: latest?.commonName || null,
+    dnsNames: latest?.dnsNames || [],
     source: null
   };
 }
@@ -107,6 +123,28 @@ async function fetchCertSpotter(rootDomain) {
   }
 }
 
+async function fetchSslLabs(domain) {
+  try {
+    const url = `https://api.ssllabs.com/api/v3/analyze?host=${encodeURIComponent(domain)}&publish=off&startNew=off&fromCache=on&all=done`;
+    const text = await fetchText(url);
+    const data = parseJsonText(text);
+    const rows = (data.endpoints || [])
+      .map(endpoint => endpoint.details?.cert || endpoint.cert)
+      .filter(Boolean)
+      .map(cert => ({
+        notBefore: cert.notBefore,
+        notAfter: cert.notAfter,
+        issuerSubject: cert.issuerSubject,
+        commonNames: cert.commonNames,
+        altNames: cert.altNames
+      }));
+    const parsed = parseCertRows(rows);
+    return parsed.notBefore ? { ...parsed, source: 'ssllabs-cache' } : { notBefore: null, source: 'ssllabs-cache' };
+  } catch (err) {
+    return { notBefore: null, source: 'ssllabs-cache', error: err.message };
+  }
+}
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const domain = normalizeHostname(url.searchParams.get('domain'));
@@ -128,6 +166,12 @@ export async function onRequest(context) {
     return jsonResponse({ domain, rootDomain, ...certSpotterResult });
   }
   if (certSpotterResult.error) errors.push(certSpotterResult.error);
+
+  const sslLabsResult = await fetchSslLabs(domain);
+  if (sslLabsResult.notBefore) {
+    return jsonResponse({ domain, rootDomain, ...sslLabsResult });
+  }
+  if (sslLabsResult.error) errors.push(sslLabsResult.error);
 
   return jsonResponse({
     domain,
