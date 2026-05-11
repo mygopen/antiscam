@@ -801,8 +801,11 @@
                 let regEvent =
                     events.find(e => e.eventAction === 'registration') ||
                     events.find(e => e.eventAction === 'created') ||
+                    events.find(e => /registration|created|creation/i.test(e.eventAction || '')) ||
                     events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
-                const date = (regEvent && regEvent.eventDate) ? regEvent.eventDate : null;
+                const date = (regEvent && regEvent.eventDate)
+                    ? regEvent.eventDate
+                    : (data.registrationDate || data.createdDate || data.creationDate || data.created || data.registered || null);
                 let privacyDetected = false;
                 const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
                 let registrarName = null;

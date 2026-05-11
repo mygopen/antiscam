@@ -45,11 +45,11 @@ function parseDateFromText(text) {
     const regexes = [
         // 標準格式 YYYY-MM-DD
         // [修正] 新增 "Registration Time" (針對 .cn) 與 "Creation Time"
-        /(?:Creation Date|Registration Date|Registration Time|Creation Time|Created on|Registered on|Record created on|Domain Name Commencement Date):?\s*(\d{4}-\d{2}-\d{2})/i,
+        /(?:Creation Date|Created Date|Registration Date|Registration Time|Creation Time|Created on|Registered on|Record created on|Domain Name Commencement Date):?\s*(\d{4}-\d{2}-\d{2})/i,
         // 支援斜線 YYYY/MM/DD (常見於亞洲網域)
-        /(?:Creation Date|Registration Date|Registration Time|Created on|Registered on|Record created on):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
+        /(?:Creation Date|Created Date|Registration Date|Registration Time|Created on|Registered on|Record created on):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
         // 支援點號 YYYY.MM.DD
-        /(?:Creation Date|Registration Date|Created on|Registered on):?\s*(\d{4})\.(\d{2})\.(\d{2})/i,
+        /(?:Creation Date|Created Date|Registration Date|Created on|Registered on):?\s*(\d{4})\.(\d{2})\.(\d{2})/i,
         // 中文格式
         /(?:注册日期|申请日期|登録年月日):?\s*(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})/
     ];
@@ -64,6 +64,64 @@ function parseDateFromText(text) {
             return match[1];
         }
     }
+    return null;
+}
+
+function getRegistrationDate(data) {
+    if (!data || typeof data !== 'object') return null;
+
+    const directDate =
+        data.registrationDate ||
+        data.createdDate ||
+        data.creationDate ||
+        data.created ||
+        data.registered;
+    if (directDate) return directDate;
+
+    const events = Array.isArray(data.events) ? data.events : [];
+    const regEvent = events.find(e => /registration|created|creation/i.test(e.eventAction || ''));
+    if (regEvent?.eventDate) return regEvent.eventDate;
+
+    return null;
+}
+
+function hasRegistrationDate(data) {
+    return !!getRegistrationDate(data);
+}
+
+function withRegistrationEvent(data, date, source) {
+    const output = data && typeof data === 'object' ? { ...data } : {};
+    const events = Array.isArray(output.events) ? [...output.events] : [];
+    if (!events.some(event => /registration|created|creation/i.test(event.eventAction || '') && event.eventDate)) {
+        events.unshift({ eventAction: 'registration', eventDate: date });
+    }
+    output.events = events;
+    output.source = output.source || source;
+    return output;
+}
+
+function jsonResponse(data, init = {}) {
+    return new Response(JSON.stringify(data), {
+        ...init,
+        headers: {
+            "Content-Type": "application/json",
+            ...(init.headers || {})
+        }
+    });
+}
+
+async function fetchFallbackRegistrationData(rootDomain, tld) {
+    const socketData = await fetchWhoisSocket(rootDomain, tld);
+    if (socketData && hasRegistrationDate(socketData)) return socketData;
+
+    if (tld === 'tw') {
+        const twnicData = await fetchTwnicWeb(rootDomain);
+        if (twnicData && hasRegistrationDate(twnicData)) return twnicData;
+    }
+
+    const whoisWebData = await fetchWhoIsWeb(rootDomain);
+    if (whoisWebData && hasRegistrationDate(whoisWebData)) return whoisWebData;
+
     return null;
 }
 
@@ -179,7 +237,7 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   let domain = url.searchParams.get("domain");
 
-  if (!domain) return new Response(JSON.stringify({ error: "Missing domain" }), { status: 400 });
+  if (!domain) return jsonResponse({ error: "Missing domain" }, { status: 400 });
 
   domain = domain.toLowerCase();
   if (domain.startsWith("www.")) domain = domain.slice(4);
@@ -218,37 +276,30 @@ export async function onRequest(context) {
            const proxyRes = await fetch(proxyUrl);
            if (proxyRes.ok) {
                const data = await proxyRes.json();
-               if (data.events || data.entities) return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" }});
-           }
-       } catch(e) {}
+               if (hasRegistrationDate(data)) return jsonResponse(data);
+	           }
+	       } catch(e) {}
 
-       // 策略 C: TCP Socket 直連 Port 43 (底層協議)
-       const socketData = await fetchWhoisSocket(rootDomain, tld);
-       if (socketData) {
-           return new Response(JSON.stringify(socketData), { headers: { "Content-Type": "application/json" }});
-       }
+	       const fallbackData = await fetchFallbackRegistrationData(rootDomain, tld);
+	       if (fallbackData) return jsonResponse(fallbackData);
 
-       // 策略 D: 針對 .tw 的特殊網頁爬蟲 (方案六)
-       if (tld === 'tw') {
-           const twnicData = await fetchTwnicWeb(rootDomain);
-           if (twnicData) {
-               return new Response(JSON.stringify(twnicData), { headers: { "Content-Type": "application/json" }});
-           }
-       }
+	       return jsonResponse({ error: "Domain not found", status: response.status }, { status: 404 });
+	    }
 
-       // 策略 E: 通用網頁爬蟲 who.is (方案五)
-       const whoisWebData = await fetchWhoIsWeb(rootDomain);
-       if (whoisWebData) {
-           return new Response(JSON.stringify(whoisWebData), { headers: { "Content-Type": "application/json" }});
-       }
+	    const data = await response.json();
+	    const directDate = getRegistrationDate(data);
+	    if (directDate) {
+	      return jsonResponse(withRegistrationEvent(data, directDate, "rdap"));
+	    }
 
-       return new Response(JSON.stringify({ error: "Domain not found", status: response.status }), { status: 404, headers: { "Content-Type": "application/json" } });
-    }
+	    const fallbackData = await fetchFallbackRegistrationData(rootDomain, tld);
+	    if (fallbackData) {
+	      return jsonResponse(fallbackData);
+	    }
 
-    const data = await response.json();
-    return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+	    return jsonResponse(data);
 
-  } catch (err) {
-    return new Response(JSON.stringify({ error: "Server Error", details: err.message }), { status: 500, headers: { "Content-Type": "application/json" } });
-  }
+	  } catch (err) {
+	    return jsonResponse({ error: "Server Error", details: err.message }, { status: 500 });
+	  }
 }
