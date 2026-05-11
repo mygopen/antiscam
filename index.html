@@ -1051,6 +1051,9 @@
             const registrarName = rdapData.registrarName || '';
             const serverInfo = geoLocationData || networkInfoData;
             const serverIp = serverInfo?.ip || resolvedIp || null;
+            const serverCountryDetails = serverInfo?.isReal
+                ? `所在國家: ${serverInfo.country}${serverIp ? `；IP: ${serverIp}` : ''}${serverInfo.org ? `；服務商: ${serverInfo.org}` : ''}${serverInfo.asn ? `；ASN: ${serverInfo.asn}` : ''}`
+                : '無法自動判定伺服器所在國家';
             const traceChain = traceData ? traceData.chain : [];
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
@@ -1633,6 +1636,7 @@
                     },
 
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
+                    serverLocation: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '伺服器所在國家', details: serverCountryDetails },
                     age: {
                         status: (rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
@@ -1651,7 +1655,7 @@
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : 'danger') : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : '檢測到多層子網域 (≥ 5層結構)，常見於詐騙連結偽裝') : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
-                    network: { status: 'info', label: '網路服務商 (ISP/ASN)', details: geoLocationData?.isReal ? `${geoLocationData.org} (${geoLocationData.asn})` : '無法識別網路來源' },
+                    network: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
@@ -2916,10 +2920,11 @@
 
                                                 const renderIcon = () => {
                                                     if (check.label === '註冊商信譽') return <Flag size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
-                                                    if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
-                                                    if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
-                                                    if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
-                                                    if (check.label === '網路服務商 (ISP/ASN)') return <Wifi size={20} className="text-blue-500" />;
+	                                                    if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
+	                                                    if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
+	                                                    if (check.label === '網址參數檢查') return <Link size={20} className={check.status === 'danger' ? 'text-red-500' : 'text-green-500'} />;
+	                                                    if (check.label === '伺服器所在國家') return <Globe size={20} className="text-blue-500" />;
+	                                                    if (check.label === '網路服務商 (ISP/ASN)') return <Wifi size={20} className="text-blue-500" />;
                                                     if (check.label === '網頁連結分析') return <Link size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-blue-500'} />;
                                                     return check.status === 'safe' ? <CheckCircle className="text-green-500" size={20} /> : (check.status === 'info' ? <HelpCircle className="text-blue-500" size={20} /> : <AlertTriangle className={check.status === 'danger' ? 'text-red-500' : 'text-yellow-500'} size={20} />);
                                                 };
