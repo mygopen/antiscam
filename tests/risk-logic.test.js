@@ -238,22 +238,109 @@ function normalizeRiskLine(line) {
     const cleaned = (line || '').replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim();
     const riskText = cleaned.replace(/^⚠️\s*風險：?/, '').trim();
 
-    if (/(未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
+    if (/(高|high)/i.test(riskText) && !/(中|低|未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
+        return '⚠️ 風險：高風險';
+    }
+    if (/(中|medium)/i.test(riskText) && !/(高|低|未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
+        return '⚠️ 風險：中風險';
+    }
+    if (/(未發現|未偵測|無明顯|沒有明顯|低|low|none)/i.test(riskText)) {
         return '⚠️ 風險：未發現';
     }
 
-    const hasHigh = /高/.test(riskText);
-    const hasMedium = /中/.test(riskText);
-    const hasLow = /低/.test(riskText);
-    const riskCount = [hasHigh, hasMedium, hasLow].filter(Boolean).length;
+    return '⚠️ 風險：未發現';
+}
 
-    if (riskCount === 1) {
-        if (hasHigh) return '⚠️ 風險：高風險';
-        if (hasMedium) return '⚠️ 風險：中風險';
-        if (hasLow) return '⚠️ 風險：未發現';
+function normalizeUrlText(text) {
+    return String(text || '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/[：]/g, ':')
+        .replace(/[／]/g, '/')
+        .replace(/[．。]/g, '.')
+        .replace(/[–—−]/g, '-')
+        .replace(/https?:\s*\/\s*\//gi, match => match.toLowerCase().startsWith('https') ? 'https://' : 'http://')
+        .replace(/([A-Za-z0-9])-\s*\n\s*([A-Za-z0-9])/g, '$1-$2')
+        .replace(/([A-Za-z0-9./?&_=:%#-])\s*\n\s*([A-Za-z0-9])/g, '$1$2');
+}
+
+function stripTargetPunctuation(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^[<([{「『【]+/, '')
+        .replace(/[>),.，。；;:」』】\]]+$/g, '');
+}
+
+function dedupeTargets(items) {
+    const seen = new Set();
+    return items
+        .map(stripTargetPunctuation)
+        .filter(Boolean)
+        .filter(item => {
+            const key = item.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function extractVisualTargets(text) {
+    const normalized = normalizeUrlText(text);
+    const targets = [];
+    const add = (value) => {
+        const cleaned = stripTargetPunctuation(value);
+        if (!cleaned || cleaned.length < 4 || /^(無|none|null)$/i.test(cleaned)) return;
+        if (!targets.includes(cleaned)) targets.push(cleaned);
+    };
+
+    (normalized.match(/https?:\/\/[^\s<>"'，。；、）)]+/gi) || []).forEach(add);
+    (normalized.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) || []).forEach(add);
+    (normalized.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi) || []).forEach(add);
+
+    return dedupeTargets(targets);
+}
+
+function parseVisionJson(rawText) {
+    const text = String(rawText || '').trim();
+    const candidates = [
+        text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim(),
+        (text.match(/\{[\s\S]*\}/) || [])[0]
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch (e) { }
     }
 
-    return '⚠️ 風險：未發現';
+    return null;
+}
+
+function buildCleanScreenshotReport(rawText) {
+    const parsed = parseVisionJson(rawText);
+    const parsedTargets = [];
+    if (parsed) {
+        if (Array.isArray(parsed.urls)) parsed.urls.forEach(item => parsedTargets.push(item));
+        if (parsed.primaryUrl) parsedTargets.unshift(parsed.primaryUrl);
+        if (parsed.senderEmail) parsedTargets.push(parsed.senderEmail);
+    }
+
+    const targets = dedupeTargets([...parsedTargets, ...extractVisualTargets(rawText)]);
+    const primaryTarget = targets[0] || '無';
+
+    if (parsed) {
+        return {
+            report: [
+                normalizeRiskLine(`⚠️ 風險：${parsed.risk || parsed.riskLevel || ''}`),
+                `🔍 分析：${parsed.analysis || '細節待查證'}`,
+                `🔗 網址：${primaryTarget}`,
+                `🛡️ 建議：${parsed.advice || '請仔細查證，勿點擊可疑連結'}`
+            ].join('\n'),
+            targets
+        };
+    }
+
+    return { report: '', targets };
 }
 
 function isSensitiveFormField(attrs) {
@@ -599,6 +686,32 @@ test('截圖分析風險 parsing 會正規化明確與不明確結果', () => {
     assert.equal(normalizeRiskLine('⚠️ 風險：低風險'), '⚠️ 風險：未發現');
     assert.equal(normalizeRiskLine('⚠️ 風險：判斷為【高、中 或 低】風險。'), '⚠️ 風險：未發現');
     assert.equal(normalizeRiskLine(''), '⚠️ 風險：未發現');
+});
+
+test('截圖網址抽取會修復手機訊息截圖中的換行 URL', () => {
+    const text = `順豐速運
+https://sf-
+express.sfxpuerse.top/t/NAt0rR
+麻煩填寫基本資料`;
+    const targets = extractVisualTargets(text);
+
+    assert.equal(targets[0], 'https://sf-express.sfxpuerse.top/t/NAt0rR');
+});
+
+test('截圖 JSON 分析會保留主要網址並輸出四行報告', () => {
+    const rawText = JSON.stringify({
+        risk: 'high',
+        analysis: '疑似冒用順豐速運，要求填寫基本資料。',
+        urls: ['https://sf-express.sfxpuerse.top/t/NAt0rR'],
+        primaryUrl: 'https://sf-express.sfxpuerse.top/t/NAt0rR',
+        brand: '順豐速運',
+        advice: '請勿點擊或填寫資料。'
+    });
+    const result = buildCleanScreenshotReport(rawText);
+
+    assert.ok(result.report.includes('⚠️ 風險：高風險'));
+    assert.ok(result.report.includes('🔗 網址：https://sf-express.sfxpuerse.top/t/NAt0rR'));
+    assert.deepEqual(result.targets, ['https://sf-express.sfxpuerse.top/t/NAt0rR']);
 });
 
 test('表單敏感欄位會抓到密碼、OTP 與金融資料欄位', () => {

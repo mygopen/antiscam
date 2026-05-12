@@ -1,5 +1,125 @@
 // 檔案路徑：functions/api/cf-vision.js
 
+const cleanAiLine = (line) => String(line || '').replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim();
+
+const normalizeRiskLine = (line) => {
+    const cleaned = cleanAiLine(line || '');
+    const riskText = cleaned.replace(/^⚠️\s*風險：?/, '').trim();
+
+    if (/(高|high)/i.test(riskText) && !/(中|低|未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
+        return "⚠️ 風險：高風險";
+    }
+    if (/(中|medium)/i.test(riskText) && !/(高|低|未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
+        return "⚠️ 風險：中風險";
+    }
+    if (/(未發現|未偵測|無明顯|沒有明顯|低|low|none)/i.test(riskText)) {
+        return "⚠️ 風險：未發現";
+    }
+
+    return "⚠️ 風險：未發現";
+};
+
+const normalizeUrlText = (text) => String(text || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[：]/g, ':')
+    .replace(/[／]/g, '/')
+    .replace(/[．。]/g, '.')
+    .replace(/[–—−]/g, '-')
+    .replace(/https?:\s*\/\s*\//gi, match => match.toLowerCase().startsWith('https') ? 'https://' : 'http://')
+    .replace(/([A-Za-z0-9])-\s*\n\s*([A-Za-z0-9])/g, '$1-$2')
+    .replace(/([A-Za-z0-9./?&_=:%#-])\s*\n\s*([A-Za-z0-9])/g, '$1$2');
+
+const stripTargetPunctuation = (value) => String(value || '')
+    .trim()
+    .replace(/^[<([{「『【]+/, '')
+    .replace(/[>),.，。；;:」』】\]]+$/g, '');
+
+const dedupeTargets = (items) => {
+    const seen = new Set();
+    return items
+        .map(stripTargetPunctuation)
+        .filter(Boolean)
+        .filter(item => {
+            const key = item.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+};
+
+const extractVisualTargets = (text) => {
+    const normalized = normalizeUrlText(text);
+    const targets = [];
+    const add = (value) => {
+        const cleaned = stripTargetPunctuation(value);
+        if (!cleaned || cleaned.length < 4 || /^(無|none|null)$/i.test(cleaned)) return;
+        if (!targets.includes(cleaned)) targets.push(cleaned);
+    };
+
+    const urlMatches = normalized.match(/https?:\/\/[^\s<>"'，。；、）)]+/gi) || [];
+    urlMatches.forEach(add);
+
+    const emailMatches = normalized.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) || [];
+    emailMatches.forEach(add);
+
+    const domainMatches = normalized.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi) || [];
+    domainMatches.forEach(add);
+
+    return dedupeTargets(targets);
+};
+
+const parseVisionJson = (rawText) => {
+    const text = String(rawText || '').trim();
+    const candidates = [
+        text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim(),
+        (text.match(/\{[\s\S]*\}/) || [])[0]
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch (e) { }
+    }
+
+    return null;
+};
+
+const buildCleanReport = (rawText) => {
+    const parsed = parseVisionJson(rawText);
+    const parsedTargets = [];
+    if (parsed) {
+        if (Array.isArray(parsed.urls)) parsed.urls.forEach(item => parsedTargets.push(item));
+        if (parsed.primaryUrl) parsedTargets.unshift(parsed.primaryUrl);
+        if (parsed.senderEmail) parsedTargets.push(parsed.senderEmail);
+    }
+
+    const fallbackTargets = extractVisualTargets(rawText);
+    const targets = dedupeTargets([...parsedTargets, ...fallbackTargets]);
+    const primaryTarget = targets[0] || '無';
+
+    if (parsed) {
+        const risk = normalizeRiskLine(`⚠️ 風險：${parsed.risk || parsed.riskLevel || ''}`);
+        const analysis = cleanAiLine(`🔍 分析：${parsed.analysis || '細節待查證'}`);
+        const urlExtract = cleanAiLine(`🔗 網址：${primaryTarget}`);
+        const advice = cleanAiLine(`🛡️ 建議：${parsed.advice || '請仔細查證，勿點擊可疑連結'}`);
+        return { report: `${risk}\n${analysis}\n${urlExtract}\n${advice}`, targets };
+    }
+
+    const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
+    const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
+    const urlMatch = rawText.match(/🔗.*?(?=\n|$)/);
+    const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
+
+    const risk = riskMatch ? normalizeRiskLine(riskMatch[0]) : "⚠️ 風險：未發現";
+    const analysis = analysisMatch ? cleanAiLine(analysisMatch[0]) : "🔍 分析：細節待查證";
+    const urlFromLine = urlMatch ? cleanAiLine(urlMatch[0]).replace(/^🔗\s*網址：?/, '').trim() : '';
+    const urlExtract = cleanAiLine(`🔗 網址：${targets[0] || urlFromLine || '無'}`);
+    const advice = adviceMatch ? cleanAiLine(adviceMatch[0]) : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
+
+    return { report: `${risk}\n${analysis}\n${urlExtract}\n${advice}`, targets };
+};
+
 export async function onRequestPost(context) {
     const { request, env } = context;
 
@@ -22,17 +142,22 @@ export async function onRequestPost(context) {
         const base64String = btoa(binary);
         const mimeType = imageFile.type || 'image/jpeg';
 
-// 👇 提示詞優化：明確要求 AI 檢查「寄件者 Email 信箱」
-        const promptText = `請分析圖片有無詐騙風險。嚴禁任何英文、思考過程或前言。
-【特別指令】：
-1. 務必優先檢查圖片最上方的「瀏覽器網址列」、「文字中的網址」或「寄件者的 Email 信箱」。若發現網址/信箱是拼湊字詞、異常後綴(如.site, .vip)或明顯與官方名稱不符(如假冒台電但信箱是亂碼)，請強制判定為「高」風險。
-2. 盡可能將圖片中看到的「網址」或「寄件者信箱」精準擷取出來，若無請填寫「無」。
+        const promptText = `請分析圖片有無詐騙風險。只輸出 JSON，不要 markdown、不要前言、不要思考過程。
+最重要任務：先做 OCR，優先找出畫面中的網址、藍色連結、卡片預覽網址、瀏覽器網址列、寄件者 Email。
+若網址在手機截圖中換行，請合併成完整網址，例如「https://sf-」下一行「express.example.top」要輸出為「https://sf-express.example.top」。
+若同時看到多個網址，urls 請全部列出，primaryUrl 請放最可疑或最主要的那一個。
+若出現物流、銀行、政府、電商、付款、預約、匯款、填寫個資等語意，但網址不是官方網域，risk 請判為 high。
+若網址使用 .top, .xyz, .site, .vip, .shop, .click 等高風險後綴，risk 請判為 high。
 
-請用台灣繁體中文，根據圖片內容直接回答，並將括號替換為你的判斷結果，只輸出以下4行：
-⚠️ 風險：判斷為【高、中 或 低】風險。
-🔍 分析：【一段話指出這可能是什麼畫面，上面是否有網址，以及圖片可疑之處，例如：這看起來像是一個網頁，畫面中有網址，但內容涉及金錢或帳戶。】
-🔗 網址：【擷取到的網址或信箱，例如：myship-711.twox.site 或 scam@gmail.com，若無請填「無」】
-🛡️ 建議：【一句話給予防護建議】`;
+請回傳以下 JSON 欄位：
+{
+  "risk": "high | medium | low | none",
+  "analysis": "台灣繁體中文，一句話說明畫面與可疑點",
+  "urls": ["畫面中所有網址或 Email，沒有則空陣列"],
+  "primaryUrl": "最主要的網址或 Email，沒有則空字串",
+  "brand": "畫面疑似冒用的品牌，沒有則空字串",
+  "advice": "台灣繁體中文，一句防護建議"
+}`;
 
         if (!env.GEMINI_API_KEY) {
             throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
@@ -50,8 +175,7 @@ export async function onRequestPost(context) {
                             { inlineData: { mimeType: mimeType, data: base64String } }
                         ]
                     }],
-                    // 4 行字，放寬 tokens 到 150
-                    generationConfig: { maxOutputTokens: 150, temperature: 0.2 }
+                    generationConfig: { maxOutputTokens: 300, temperature: 0.1 }
                 })
             });
 
@@ -65,58 +189,24 @@ export async function onRequestPost(context) {
             return data.candidates[0].content.parts[0].text;
         };
 
-        // 👇 攔截器更新：移除 view 擷取，直接回傳 4 行
-        const cleanAiLine = (line) => line.replace(/[*#_`~]/g, '').replace(/【|】/g, '').trim();
-
-        const normalizeRiskLine = (line) => {
-            const cleaned = cleanAiLine(line || '');
-            const riskText = cleaned.replace(/^⚠️\s*風險：?/, '').trim();
-
-            if (/(未發現|未偵測|無明顯|沒有明顯)/.test(riskText)) {
-                return "⚠️ 風險：未發現";
-            }
-
-            const hasHigh = /高/.test(riskText);
-            const hasMedium = /中/.test(riskText);
-            const hasLow = /低/.test(riskText);
-            const riskCount = [hasHigh, hasMedium, hasLow].filter(Boolean).length;
-
-            if (riskCount === 1) {
-                if (hasHigh) return "⚠️ 風險：高風險";
-                if (hasMedium) return "⚠️ 風險：中風險";
-                if (hasLow) return "⚠️ 風險：未發現";
-            }
-
-            return "⚠️ 風險：未發現";
-        };
-
-        const extractCleanReport = (rawText) => {
-            const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
-            const analysisMatch = rawText.match(/🔍.*?(?=\n|$)/);
-            const urlMatch = rawText.match(/🔗.*?(?=\n|$)/);
-            const adviceMatch = rawText.match(/🛡️.*?(?=\n|$)/);
-
-            const risk = riskMatch ? normalizeRiskLine(riskMatch[0]) : "⚠️ 風險：未發現";
-            const analysis = analysisMatch ? cleanAiLine(analysisMatch[0]) : "🔍 分析：細節待查證";
-            const urlExtract = urlMatch ? cleanAiLine(urlMatch[0]) : "🔗 網址：無";
-            const advice = adviceMatch ? cleanAiLine(adviceMatch[0]) : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
-
-            return `${risk}\n${analysis}\n${urlExtract}\n${advice}`;
-        };
-
-let cleanReport = '';
+        let cleanReport = '';
+        let visualTargets = [];
 
         try {
             // 👇 主將：優先動用 Gemini 2.5 Flash 處理圖片
             const rawReport = await callGeminiVisionAPI('gemini-2.5-flash');
-            cleanReport = extractCleanReport(rawReport);
+            const builtReport = buildCleanReport(rawReport);
+            cleanReport = builtReport.report;
+            visualTargets = builtReport.targets;
             
         } catch (errFlash) {
             console.log("⚠️ Gemini Flash 失敗，切換至 Pro 備援...", errFlash.message);
             try {
                 // 👇 備援 1：切換到 Gemini 2.5 Pro 繼續嘗試
                 const rawReport = await callGeminiVisionAPI('gemini-2.5-pro');
-                cleanReport = extractCleanReport(rawReport);
+                const builtReport = buildCleanReport(rawReport);
+                cleanReport = builtReport.report;
+                visualTargets = builtReport.targets;
             } catch (errPro) {
                 throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
             }
@@ -126,7 +216,7 @@ let cleanReport = '';
         // 🌟 混合式分析核心移入後端：系統絕對權威查核
         // =========================================================
         const urlMatch = cleanReport.match(/🔗 網址：(.*?)(?=\n|$)/);
-        let extractedUrl = urlMatch ? urlMatch[1].trim() : "";
+        let extractedUrl = visualTargets[0] || (urlMatch ? urlMatch[1].trim() : "");
 
        if (extractedUrl && !extractedUrl.includes("無") && !extractedUrl.includes("None")) {
             try {
