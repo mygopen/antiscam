@@ -241,6 +241,11 @@
 
         const normalizeHostname = (hostname) => hostname.toLowerCase().replace(/^www\./, '');
 
+        const isOfficialTaiwanGovDomain = (hostname) => {
+            const cleanHostname = normalizeHostname(String(hostname || ''));
+            return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
+        };
+
         const isSameRootDomain = (a, b) => {
             const cleanA = normalizeHostname(a);
             const cleanB = normalizeHostname(b);
@@ -1125,9 +1130,10 @@
             } catch (e) { }
 
             const domain = targetDomain.toLowerCase();
+            const isOfficialTaiwanGov = isOfficialTaiwanGovDomain(domain);
 
             // 修正 1：嚴謹的白名單判定 (完全匹配或子網域匹配)
-            const isWhitelisted = currentWhitelist.some(w => {
+            const isWhitelisted = isOfficialTaiwanGov || currentWhitelist.some(w => {
                 const lowerW = w.toLowerCase();
                 return domain === lowerW || domain.endsWith('.' + lowerW);
             });
@@ -1299,7 +1305,7 @@
                         // 👇 檢查最終網域是否使用詐騙後綴
                         isFinalVeryHighRiskTLD = highRiskSuffixes.some(s => finalDomain.endsWith(s));
 
-                        isFinalWhitelisted = currentWhitelist.some(w => {
+                        isFinalWhitelisted = isOfficialTaiwanGovDomain(finalDomain) || currentWhitelist.some(w => {
                             const lowerW = w.toLowerCase();
                             return finalDomain === lowerW || finalDomain.endsWith('.' + lowerW);
                         });
@@ -1730,7 +1736,7 @@
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
-            if (isWhitelisted && siteStatusData.status === 'ok') siteContentMsg = '受信賴的白名單網域';
+            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : '受信賴的白名單網域';
 
             // 決定網域特徵卡片的 UI 文字
             let domainAnalysisStatus = 'safe';
@@ -1890,7 +1896,7 @@
                             '未命中目前內建的官方警示資料',
                         link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
                     },
-                    siteContent: { status: isSocialMedia ? 'warning' : ((hasOfficialAlert || isApkSite || isDownloadPhishingSignal) ? 'danger' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger')), label: '網站內容狀態', details: siteContentMsg },
+                    siteContent: { status: isSocialMedia ? 'warning' : ((hasOfficialAlert || isApkSite || isDownloadPhishingSignal) ? 'danger' : (isWhitelisted || siteStatusData.status === 'ok' ? 'safe' : 'danger')), label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -2139,12 +2145,7 @@
 
                 const data = await res.json();
                 
-                // 若通報成功，自動將此網址加入前端的「已通報清單」，UI 按鈕會自動變灰
-                if (data.success && !reportedUrls.includes(url)) {
-                    const newReported = [...reportedUrls, url];
-                    setReportedUrls(newReported);
-                    localStorage.setItem('reportedUrls', JSON.stringify(newReported));
-                }
+                // 背景自動通報只作為後台分析資料，不應標記成使用者已手動檢舉。
             } catch (e) {
                 console.log('背景自動通報失敗，不影響主流程', e);
             }
