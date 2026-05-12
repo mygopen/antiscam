@@ -1150,7 +1150,10 @@
             }
 
             const subdomainPart = domain.split('.')[0];
+            const domainParts = getDomainParts(domain);
+            const rootLabel = domainParts.rootLabel || '';
             const entropy = calculateEntropy(subdomainPart);
+            const rootEntropy = calculateEntropy(rootLabel);
             
             // 1. 長亂碼檢查 (既有邏輯：高數學亂度 或 12碼以上的英數組合)
             const isLongGibberish = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
@@ -1165,6 +1168,9 @@
             
             // 只要符合任一項特徵，且不是常見的 www 等，就判定為高風險亂碼
             const isHighEntropy = (isLongGibberish || lacksVowels || hasConsecutiveConsonants) && subdomainPart !== 'www';
+            const isSuspiciousRootLabel = rootLabel.length >= 8 &&
+                !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
+                (!hasReadableVowelPattern(rootLabel) || rootEntropy > 3.2 || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(rootLabel));
             
             const hyphenCount = (domain.match(/-/g) || []).length;
             const hasMultipleHyphens = hyphenCount >= 2;
@@ -1234,6 +1240,8 @@
                 `.${domain}.`.includes(`.${tld}.`) && !domain.endsWith(`.${tld}`)
             );
             const hasSuspiciousParams = getRiskList('sensitiveUrlParams').some(key => fullUrl.toLowerCase().includes(key));
+            const matchedLandingParams = getRiskList('suspiciousLandingParams').filter(key => fullUrl.toLowerCase().includes(key));
+            const hasSuspiciousLandingParams = matchedLandingParams.length > 0;
             const hasNestedSuspiciousParams = nestedUrls.some(url => getRiskList('sensitiveUrlParams').some(key => url.toLowerCase().includes(key)));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
@@ -1302,14 +1310,26 @@
                 hasLogisticsScamSignal;
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
+            const hasShoppingLandingUrlRisk = !isWhitelisted &&
+                hasSuspiciousLandingParams &&
+                (
+                    isSuspiciousRootLabel ||
+                    suspiciousSubdomain.matched ||
+                    isVeryNewDomain ||
+                    isUnknownTraffic ||
+                    isLowTraffic ||
+                    hasSuspiciousTempDomain
+                );
             const hasShoppingScamSignal = !isWhitelisted &&
                 shoppingScamSignals.matched &&
                 (
                     isLowTraffic ||
                     isUnknownTraffic ||
                     isHighEntropy ||
+                    isSuspiciousRootLabel ||
                     hasSuspiciousTempDomain ||
                     hasSuspiciousParams ||
+                    hasSuspiciousLandingParams ||
                     isVeryNewDomain ||
                     externalFormActionCount > 0 ||
                     suspiciousSubdomain.matched
@@ -1465,6 +1485,7 @@
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
                     if (isDownloadPhishingSignal) riskScore += 80;
+                    if (hasShoppingLandingUrlRisk) riskScore += siteStatusData.status === 'ok' ? 50 : 75;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
                     else if (lowRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += 10;
@@ -1559,6 +1580,7 @@
                 hasFinalSuspiciousTemp ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
+                hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform);
 
@@ -1585,6 +1607,7 @@
                     hasFinalSuspiciousTemp ||
                     hasSuspiciousEmailTrackingHost ||
                     hasDeepSubdomainPhishingPattern ||
+                    hasShoppingLandingUrlRisk ||
                     hasShoppingScamSignal ||
                     isDownloadPhishingSignal ||
                     isApkSite;
@@ -1641,6 +1664,9 @@
             } else if (hasShoppingScamSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到一頁式購物詐騙特徵：${shoppingScamSignals.reasons.slice(0, 3).join('、')}。`;
+            } else if (hasShoppingLandingUrlRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到可疑購物/廣告落地頁網址：含 ${matchedLandingParams.slice(0, 3).join('、')} 等追蹤參數，且網域名稱隨機度高或缺乏信任訊號。`;
             } else if (isNewDomainWithNewCertificate) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 網域與 HTTPS 憑證都在 3 個月內建立，常見於短期釣魚或免洗網站。';
@@ -1765,6 +1791,7 @@
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
                     shoppingScam: { status: hasShoppingScamSignal ? 'danger' : (shoppingScamSignals.matched ? 'warning' : 'safe'), label: '一頁式購物詐騙', details: shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : '未偵測到一頁式購物詐騙結構' },
+                    shoppingLanding: { status: hasShoppingLandingUrlRisk ? 'danger' : (hasSuspiciousLandingParams ? 'warning' : 'safe'), label: '購物/廣告落地頁網址', details: hasSuspiciousLandingParams ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${isSuspiciousRootLabel ? '；主網域名稱隨機度偏高' : ''}` : '未偵測到可疑購物落地頁參數' },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
                     officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },
@@ -1793,6 +1820,7 @@
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
+            addReason(checks.shoppingLanding?.status === 'danger', '可疑購物/廣告落地頁網址');
             addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
             addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
             addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');

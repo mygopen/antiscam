@@ -86,6 +86,10 @@ window.RISK_CONFIG = {
     sensitiveUrlParams: [
         'token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='
     ],
+    suspiciousLandingParams: [
+        'ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=',
+        'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='
+    ],
     officialFlowPathKeywords: [
         '/login', '/signin', '/sign-in', '/verify', '/verification', '/auth',
         '/account', '/card', '/bank', '/reward', '/bonus', '/claim',
