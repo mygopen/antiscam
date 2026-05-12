@@ -955,6 +955,20 @@
             } catch (e) { return null; }
         };
 
+        const checkOfficialAlerts = async (domain, fullUrl) => {
+            try {
+                const params = new URLSearchParams({
+                    domain,
+                    url: fullUrl
+                });
+                const res = await fetch(`/api/check-official-alerts?${params.toString()}`);
+                if (!res.ok) return { matched: false, count: 0, matches: [] };
+                return await res.json();
+            } catch (e) {
+                return { matched: false, count: 0, matches: [] };
+            }
+        };
+
         const checkCommunityBlocklists = async (domain) => {
             const lowerDomain = domain.toLowerCase();
             try {
@@ -1102,7 +1116,7 @@
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, networkInfoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData] = await Promise.all([
+            const [geoLocationData, networkInfoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
@@ -1112,7 +1126,8 @@
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
-                withTimeout(fetch(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`).then(r => r.ok ? r.json() : { isUnsafe: false }).catch(() => ({ isUnsafe: false })), 4000, { isUnsafe: false })
+                withTimeout(fetch(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`).then(r => r.ok ? r.json() : { isUnsafe: false }).catch(() => ({ isUnsafe: false })), 4000, { isUnsafe: false }),
+                withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] })
             ]);
 
             const isRegistrationDateFromCertificate = !rdapData.date && !!certData?.notBefore;
@@ -1278,6 +1293,10 @@
             const suspiciousDownloadPath = !!downloadSignals.suspiciousPath;
             const suspiciousDownloadPathCount = downloadSignals.suspiciousPathFragments?.length || 0;
             const shoppingScamSignals = pageSignals.shoppingScamSignals || createEmptyPageSignals().shoppingScamSignals;
+            const officialAlertMatches = officialAlertData?.matches || [];
+            const officialAlertMatch = officialAlertMatches[0] || null;
+            const hasOfficialAlert = !isWhitelisted && !!officialAlertData?.matched;
+            const hasOfficialAlertUrlMatch = hasOfficialAlert && officialAlertMatches.some(item => item.matchType === 'url');
             const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
             const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount > 0 || suspiciousDownloadPath);
             const hasSuspiciousDownloadLanding = suspiciousDownloadPath &&
@@ -1385,6 +1404,8 @@
                 (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
 
             if (blocklistListed) {
+                riskScore = 100;
+            } else if (hasOfficialAlertUrlMatch) {
                 riskScore = 100;
             } else if (isApkSite) {
                 riskScore = 100; // 👈 誘騙下載 APK 強制判死刑 (100分)
@@ -1498,6 +1519,7 @@
                     if (hasUrgencyScamSignal && (hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain)) riskScore += 45;
                     else if (hasUrgencyScamSignal) riskScore += 10;
                     if (hasHomographSignal) riskScore += 85;
+                    if (hasOfficialAlert) riskScore += hasOfficialAlertUrlMatch ? 100 : 90;
                     if (isNewDomainWithNewCertificate) riskScore += 60;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
@@ -1578,6 +1600,7 @@
             } // 👈 關閉最外層的 if (!blocklistListed) else 區塊
 
             const hasStrongRiskSignal = blocklistListed ||
+                hasOfficialAlert ||
                 isApkSite ||
                 (isGoogleFlagged && !isWhitelisted) ||
                 isVeryHighRiskTLD ||
@@ -1610,6 +1633,7 @@
 
             if (!isWhitelisted && !isSocialMedia) {
                 const hasDangerDetail = hasBrandSimilarity ||
+                    hasOfficialAlert ||
                     hasEmailTrackingPhishingPattern ||
                     hasFinancialPhishingSignal ||
                     (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
@@ -1647,7 +1671,11 @@
             let domainAnalysisDetails = '網域命名結構無明顯異常';
 
             // 👇 新增 APK 專屬的紅色警告卡片
-            if (isApkSite) {
+            if (hasOfficialAlert) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 官方警示資料命中：${officialAlertMatch.source} 已公告「${officialAlertMatch.title}」，${officialAlertMatch.warning}`;
+                siteContentMsg = '危險：此網址已出現在官方警示資料';
+            } else if (isApkSite) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到網頁誘導下載不明 APK (Android App)，極可能是夾帶木馬的惡意軟體！';
                 siteContentMsg = '危險：包含惡意應用程式下載連結';
@@ -1782,7 +1810,15 @@
                         label: 'Google 官方安全庫', 
                         details: isGoogleFlagged ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : 'Google Safe Browsing 未發現威脅' 
                     },
-                    siteContent: { status: isSocialMedia ? 'warning' : ((isApkSite || isDownloadPhishingSignal) ? 'danger' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger')), label: '網站內容狀態', details: siteContentMsg },
+                    officialAlerts: {
+                        status: hasOfficialAlert ? 'danger' : 'safe',
+                        label: '官方警示資料',
+                        details: hasOfficialAlert ?
+                            `${officialAlertMatch.source} 公告：${officialAlertMatch.category}「${officialAlertMatch.productName || officialAlertMatch.title}」。${officialAlertMatch.violationType}；${officialAlertMatch.warning}${officialAlertMatch.claimSummary ? ` ${officialAlertMatch.claimSummary}` : ''}` :
+                            '未命中目前內建的官方警示資料',
+                        link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
+                    },
+                    siteContent: { status: isSocialMedia ? 'warning' : ((hasOfficialAlert || isApkSite || isDownloadPhishingSignal) ? 'danger' : ((siteStatusData.status === 'ok') ? 'safe' : 'danger')), label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -1840,6 +1876,7 @@
             };
 
             addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+            addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');

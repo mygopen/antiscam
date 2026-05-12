@@ -137,6 +137,7 @@ function getHighRiskSummaryReasons(scanData) {
     };
 
     addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+    addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
     addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
     addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
@@ -160,6 +161,53 @@ function enforceFinalRiskConsistency(scanData) {
     }
     scanData.summaryReasons = reasons;
     return scanData;
+}
+
+const officialAlertFixtures = [
+    {
+        source: '衛生福利部食品藥物管理署',
+        category: '涉嫌違規廣告產品',
+        title: '國外網站涉嫌違規廣告產品：潤姬桃子',
+        rootDomain: 'special-newseeds.com',
+        urls: [
+            'https://special-newseeds.com/uhmk/item/uhmktwit240704v104hcn.php?waxc=UHdg52anNXbGSzHy.7whg4cn'
+        ]
+    }
+];
+
+function normalizeOfficialAlertHostname(value) {
+    const input = String(value || '').trim().toLowerCase();
+    if (!input) return '';
+    try {
+        return new URL(input.startsWith('http') ? input : `https://${input}`).hostname.replace(/^www\./, '');
+    } catch (e) {
+        return input.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+    }
+}
+
+function normalizeOfficialAlertUrl(value) {
+    try {
+        const parsed = new URL(String(value || '').trim());
+        parsed.hash = '';
+        return parsed.href.replace(/\/$/, '').toLowerCase();
+    } catch (e) {
+        return '';
+    }
+}
+
+function findOfficialAlertFixture({ domain, targetUrl }) {
+    const normalizedDomain = normalizeOfficialAlertHostname(domain);
+    const normalizedTargetUrl = normalizeOfficialAlertUrl(targetUrl);
+    return officialAlertFixtures
+        .map(alert => {
+            const root = normalizeOfficialAlertHostname(alert.rootDomain);
+            const fullUrlMatched = normalizedTargetUrl &&
+                alert.urls.some(url => normalizeOfficialAlertUrl(url) === normalizedTargetUrl);
+            const domainMatched = normalizedDomain === root || normalizedDomain.endsWith(`.${root}`);
+            if (!fullUrlMatched && !domainMatched) return null;
+            return { ...alert, matchType: fullUrlMatched ? 'url' : 'domain' };
+        })
+        .filter(Boolean);
 }
 
 function hasHighRiskTld(domain) {
@@ -1163,4 +1211,37 @@ test('3 個月內新註冊網域應視為強風險訊號', () => {
 
     assert.equal(isVeryNewDomain, true);
     assert.equal(riskScore >= 70, true);
+});
+
+test('官方警示資料完整網址命中應直接升為最高風險', () => {
+    const matches = findOfficialAlertFixture({
+        domain: 'special-newseeds.com',
+        targetUrl: 'https://special-newseeds.com/uhmk/item/uhmktwit240704v104hcn.php?waxc=UHdg52anNXbGSzHy.7whg4cn'
+    });
+    const hasOfficialAlertUrlMatch = matches.some(item => item.matchType === 'url');
+    const riskScore = hasOfficialAlertUrlMatch ? 100 : 0;
+
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].source, '衛生福利部食品藥物管理署');
+    assert.equal(hasOfficialAlertUrlMatch, true);
+    assert.equal(riskScore, 100);
+});
+
+test('官方警示資料 root domain 命中應升為高風險並拉高 summary', () => {
+    const matches = findOfficialAlertFixture({
+        domain: 'www.special-newseeds.com',
+        targetUrl: 'https://www.special-newseeds.com/'
+    });
+    const hasOfficialAlert = matches.length > 0;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasOfficialAlert ? 40 : 0,
+        checks: {
+            officialAlerts: { status: hasOfficialAlert ? 'danger' : 'safe', details: '食藥署公告涉嫌違規廣告產品' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(matches[0].matchType, 'domain');
+    assert.equal(scanData.riskScore, 70);
+    assert.deepEqual(scanData.summaryReasons, ['官方機關已公告警示']);
 });
