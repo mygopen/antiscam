@@ -588,6 +588,19 @@ function analyzeDisposableRootLabel(rootLabel) {
     return { matched: looksMachineGenerated, reasons, entropy: entropyValue };
 }
 
+function hasSensitiveUrlParam(rawUrl) {
+    try {
+        const parsed = new URL(rawUrl);
+        const sensitiveKeys = riskConfig.sensitiveUrlParams
+            .map(key => String(key).toLowerCase().replace(/=$/, ''))
+            .filter(Boolean);
+        for (const key of parsed.searchParams.keys()) {
+            if (sensitiveKeys.includes(key.toLowerCase())) return true;
+        }
+    } catch (e) { }
+    return false;
+}
+
 function analyzeSuspiciousSubdomain(hostname) {
     const { subdomainLabels, rootLabel } = getDomainParts(hostname);
     const rootTokens = rootLabel.split(/[-_]+/).filter(token => token.length >= 3);
@@ -836,6 +849,15 @@ test('電子發票 nat 偽裝網域會命中受保護品牌，官方網域不誤
     const official = checkBrandSimilarity('einvoice.nat.gov.tw');
     assert.equal(official.matched, false);
     assert.equal(riskConfig.fakeServiceKeywords.includes('invoicenat'), true);
+});
+
+test('政府 JWT result 參數不應因參數值內容誤判為敏感參數', () => {
+    const govUrl = 'https://500.gov.tw/FOAS/actions/GspValid.action?result=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.auth.token.session.verify';
+    const phishingUrl = 'https://verify.example.com/login?token=abc123';
+
+    assert.equal(matchesDomainList('500.gov.tw', ['gov.tw']), true);
+    assert.equal(hasSensitiveUrlParam(govUrl), false);
+    assert.equal(hasSensitiveUrlParam(phishingUrl), true);
 });
 
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {
