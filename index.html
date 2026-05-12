@@ -1464,6 +1464,8 @@
             
             // 👇 新增：如果 Google 官方標記危險，直接給 100 分滿分死刑
             const isGoogleFlagged = safeBrowsingData && safeBrowsingData.isUnsafe;
+            const blocklistListedForRisk = blocklistListed && !isOfficialTaiwanGov;
+            const isGoogleFlaggedForRisk = isGoogleFlagged && !isWhitelisted;
 
             
             // 👇 如果網頁有 APK 且不在白名單內，視為極度危險
@@ -1471,14 +1473,14 @@
             const isDownloadPhishingSignal = !isWhitelisted && !isApkSite &&
                 (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
 
-            if (blocklistListed) {
+            if (blocklistListedForRisk) {
                 riskScore = 100;
             } else if (hasOfficialAlertUrlMatch) {
                 riskScore = 100;
             } else if (isApkSite) {
                 riskScore = 100; // 👈 誘騙下載 APK 強制判死刑 (100分)
 
-            } else if (isGoogleFlagged && !isWhitelisted) {
+            } else if (isGoogleFlaggedForRisk) {
                 // 👇 加入 Google 的防護邏輯 (如果是白名單被 Google 誤判，則尊重白名單)
                 riskScore = 100;
             } else {
@@ -1669,10 +1671,10 @@
                 }
             } // 👈 關閉最外層的 if (!blocklistListed) else 區塊
 
-            const hasStrongRiskSignal = blocklistListed ||
+            const hasStrongRiskSignal = blocklistListedForRisk ||
                 hasOfficialAlert ||
                 isApkSite ||
-                (isGoogleFlagged && !isWhitelisted) ||
+                isGoogleFlaggedForRisk ||
                 isVeryHighRiskTLD ||
                 isFinalVeryHighRiskTLD ||
                 isFakeGov ||
@@ -1876,7 +1878,7 @@
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListed, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -1886,9 +1888,9 @@
                 checks: {
                     // 👇 新增這行：Google 官方的標記卡片
                     googleSafeBrowsing: { 
-                        status: isGoogleFlagged ? 'danger' : 'safe', 
+                        status: isGoogleFlaggedForRisk ? 'danger' : 'safe', 
                         label: 'Google 官方安全庫', 
-                        details: isGoogleFlagged ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : 'Google Safe Browsing 未發現威脅' 
+                        details: isGoogleFlaggedForRisk ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : (isOfficialTaiwanGov && isGoogleFlagged ? '台灣政府官方網域，忽略外部安全庫誤判' : 'Google Safe Browsing 未發現威脅')
                     },
                     officialAlerts: {
                         status: hasOfficialAlert ? 'danger' : 'safe',

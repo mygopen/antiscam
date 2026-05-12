@@ -32,6 +32,22 @@ function shouldSkipAiBrandAnalysis(hostname) {
     return isOfficialTaiwanGovDomain(hostname);
 }
 
+function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {
+    const isGov = isOfficialTaiwanGovDomain(hostname);
+    const blocklistListedForRisk = blocklistListed && !isGov;
+    const googleFlaggedForRisk = googleUnsafe && !isGov;
+    let riskScore = initialRiskScore;
+
+    if (blocklistListedForRisk || googleFlaggedForRisk) riskScore = 100;
+    if (isGov) riskScore = 0;
+
+    return {
+        riskScore,
+        blocklistListedForRisk,
+        googleFlaggedForRisk
+    };
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -848,6 +864,28 @@ test('台灣 gov.tw 官方網域應跳過 AI 品牌覆寫，避免被誤改成�
 
     assert.equal(shouldSkipAiBrandAnalysis(domain), true);
     assert.equal(riskScore, 0);
+});
+
+test('台灣 gov.tw 官方網域應忽略外部黑名單或安全庫誤判', () => {
+    const govResult = applyOfficialGovRiskOverride({
+        hostname: '500.gov.tw',
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 100
+    });
+    const fakeGovResult = applyOfficialGovRiskOverride({
+        hostname: 'gov-tw-login.shop',
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 0
+    });
+
+    assert.equal(govResult.blocklistListedForRisk, false);
+    assert.equal(govResult.googleFlaggedForRisk, false);
+    assert.equal(govResult.riskScore, 0);
+    assert.equal(fakeGovResult.blocklistListedForRisk, true);
+    assert.equal(fakeGovResult.googleFlaggedForRisk, true);
+    assert.equal(fakeGovResult.riskScore, 100);
 });
 
 test('社群平台使用設定檔清單做完全符合與子網域符合', () => {
