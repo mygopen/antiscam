@@ -706,7 +706,7 @@ function hasDeepSubdomainPhishingPattern({
 
 function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
     isWhitelisted = false,
-    isUnknownTraffic = true,
+    isUnknownTraffic = false,
     isLowTraffic = false,
     isVeryNewDomain = false,
     hasSuspiciousTempDomain = false
@@ -735,7 +735,6 @@ function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
             isSuspiciousLandingRootLabel ||
             suspiciousSubdomain.matched ||
             isVeryNewDomain ||
-            isUnknownTraffic ||
             isLowTraffic ||
             hasSuspiciousTempDomain
         );
@@ -1222,6 +1221,18 @@ test('一頁式購物廣告落地頁可只靠亂碼 root 與 landing 參數升�
     });
 
     assert.equal(hasRisk, true);
+});
+
+test('Tranco 查詢暫時無法取得不應單獨造成購物落地頁高風險', () => {
+    const url = 'https://example.com/product?utm_source=ad';
+    const hasRisk = hasSuspiciousShoppingLandingUrlRisk(url, {
+        isUnknownTraffic: true,
+        isLowTraffic: false,
+        isVeryNewDomain: false,
+        hasSuspiciousTempDomain: false
+    });
+
+    assert.equal(hasRisk, false);
 });
 
 test('一頁式購物頁要求加入 LINE 聯絡應提高為高風險', () => {

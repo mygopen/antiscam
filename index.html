@@ -915,14 +915,19 @@
 
         const checkTrancoRank = async (domain) => {
             try {
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://tranco-list.eu/api/ranks/domain/${domain}`)}`;
-                const res = await fetch(proxyUrl);
+                const res = await fetch(`/api/tranco-rank?domain=${encodeURIComponent(domain)}`);
                 if (!res.ok) return { status: 'unavailable', rank: null };
                 const data = await res.json();
-                if (data.ranks && data.ranks.length > 0) {
-                    return { status: 'ranked', rank: data.ranks[0].rank };
-                }
-                return { status: 'unranked', rank: null };
+                const rank = Number(data.rank);
+                return {
+                    status: data.status || 'unavailable',
+                    rank: Number.isFinite(rank) ? rank : null,
+                    date: data.date || null,
+                    queriedDomain: data.queriedDomain || domain,
+                    source: data.source || null,
+                    reason: data.reason || null,
+                    attempts: Array.isArray(data.attempts) ? data.attempts : []
+                };
             } catch (e) { return { status: 'unavailable', rank: null }; }
         };
 
@@ -1202,6 +1207,8 @@
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
             const trancoRank = trancoData?.rank || null;
             const trancoStatus = trancoData?.status || 'unavailable';
+            const trancoQueriedDomain = trancoData?.queriedDomain || domain;
+            const trancoDateText = trancoData?.date ? ` (${trancoData.date})` : '';
 
             // Tranco 查詢失敗不等於低信任；只有明確查無排名才視為低流量。
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
@@ -1213,7 +1220,7 @@
             let trafficDetails = isUnknownTraffic ? 'Tranco 排名查詢暫時無法取得，不以低流量扣分' : '未進入 Tranco 全球熱門排名 (流量較低)';
             if (trancoRank && !isFreeHosting) {
                 trafficStatus = 'safe';
-                trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名 (高流量網站)`;
+                trafficDetails = `Tranco 全球排名第 ${trancoRank.toLocaleString()} 名${trancoQueriedDomain !== domain ? `（以 ${trancoQueriedDomain} 查詢）` : ''}${trancoDateText} (高流量網站)`;
             } else if (isWhitelisted || isTrustedTLD) {
                 trafficStatus = 'safe';
                 if (safeShorteners.some(s => domain.endsWith(s))) {
@@ -1410,7 +1417,6 @@
                     isSuspiciousLandingRootLabel ||
                     suspiciousSubdomain.matched ||
                     isVeryNewDomain ||
-                    isUnknownTraffic ||
                     isLowTraffic ||
                     hasSuspiciousTempDomain
                 );
@@ -1425,7 +1431,6 @@
                 shoppingScamSignals.matched &&
                 (
                     isLowTraffic ||
-                    isUnknownTraffic ||
                     isHighEntropy ||
                     isSuspiciousRootLabel ||
                     hasSuspiciousTempDomain ||
