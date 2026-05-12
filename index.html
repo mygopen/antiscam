@@ -2374,14 +2374,15 @@
                         if (primaryTarget) {
                             setLoadingMessage('已從截圖找到網址，正在進行網址風險檢測...');
                             setUrl(primaryTarget);
-                            setScreenshotSource({
+                            const ocrScreenshotSource = {
                                 imageUrl: imagePreviewUrl,
                                 detectedUrl: primaryTarget,
                                 source: 'ocr'
-                            });
+                            };
+                            setScreenshotSource(ocrScreenshotSource);
                             if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'success', 'target_type': primaryTarget.includes('@') ? 'email' : 'url' });
                             setIsImageAnalyzing(false);
-                            await handleScan(null, primaryTarget);
+                            await handleScan(null, primaryTarget, ocrScreenshotSource);
                             return;
                         }
 
@@ -2508,7 +2509,7 @@
 
 
 
-                const handleScan = async (e, directUrl = null) => {
+                const handleScan = async (e, directUrl = null, sourceContext = null) => {
                 if (e) e.preventDefault(); // 讓 e 變成選填
                 const inputUrl = directUrl || url.trim(); // 優先使用傳入的網址
                 if (!inputUrl) { setError('請輸入網址'); return; }
@@ -2527,7 +2528,9 @@
                     setResult(null);
                     setCopyStatus('idle');
                     setAiReport(null);
-                    if (!screenshotSource || screenshotSource.detectedUrl !== inputUrl) setScreenshotSource(null);
+                    const matchedScreenshotSource = sourceContext ||
+                        (screenshotSource && screenshotSource.detectedUrl === inputUrl ? screenshotSource : null);
+                    setScreenshotSource(matchedScreenshotSource);
                     setIsImageAnalyzing(false);
                     setBrandAnalysis(null);
                     setIsBrandAnalyzing(true);
