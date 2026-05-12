@@ -246,6 +246,8 @@
             return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
         };
 
+        const shouldSkipAiBrandAnalysis = (hostname) => isOfficialTaiwanGovDomain(hostname);
+
         const isSameRootDomain = (a, b) => {
             const cleanA = normalizeHostname(a);
             const cleanB = normalizeHostname(b);
@@ -2247,10 +2249,13 @@
 
             const scanUrlForBot = async (targetUrl, contextText = '') => {
                 const urlObj = new URL(/^https?:\/\//i.test(targetUrl) ? targetUrl : 'https://' + targetUrl);
+                const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname);
 
                 const [scanData, brandDataRes] = await Promise.all([
                     simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
-                    fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
+                    skipAiBrandAnalysis
+                        ? Promise.resolve(null)
+                        : fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
                 ]);
 
                 if (scanData.isInvalid) {
@@ -2269,7 +2274,7 @@
                     return;
                 }
 
-                if (brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
+                if (!skipAiBrandAnalysis && brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
                     scanData.riskScore = 100;
                 }
 
@@ -2722,6 +2727,10 @@
 
             const handleReport = async () => {
                 if (!result || isReporting) return;
+                if (isOfficialTaiwanGovDomain(result.domain)) {
+                    alert('這是台灣政府官方網域，不提供檢舉通報。');
+                    return;
+                }
                 setIsReporting(true);
                 try {
                     // 👇 彙整所有風險指標，產生更詳細的報告原因
@@ -2860,12 +2869,13 @@
 
                     // 👇 判斷輸入網址是否為社群平台
                     const isSocialInput = getRiskList('socialMediaDomains').some(s => urlObj.hostname === s || urlObj.hostname.endsWith('.' + s));
+                    const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname);
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
                         simulateScan(urlObj.hostname, urlObj.href, externalWhitelist), 
-                        // 👇 如果是社群網址，直接跳過後端 AI 品牌分析，省時又省錢
-                        isSocialInput 
+                        // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
+                        (isSocialInput || skipAiBrandAnalysis)
                             ? Promise.resolve(null) 
                             : fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`).then(res => res.json()).catch(() => null)
                     ]);
@@ -2873,7 +2883,7 @@
                     // 👇 新增防呆：如果網域已經掛掉或不存在 (isInvalid)，就不需要把 AI 結果塞進去，避免程式崩潰
                     if (!scanData.isInvalid) {
                         // 根據 AI 分析結果，動態更新 UI 卡片結論
-                        if (brandDataRes) {
+                        if (!skipAiBrandAnalysis && brandDataRes) {
                             if (brandDataRes.isGenericScam) {
                                 scanData.riskScore = 100;
                                 scanData.checks.domainAnalysis.status = 'danger';
@@ -2909,7 +2919,7 @@
                                 scanData.checks.siteContent.status = 'safe';
                                 scanData.checks.siteContent.details = 'AI 分析完畢，未發現冒用知名品牌之釣魚特徵';
                             }
-                        } else if (!isSocialInput) {
+                        } else if (!isSocialInput && !skipAiBrandAnalysis) {
                             // AI API 連線失敗時的備用文字 (排除社群網站)
                             scanData.checks.siteContent.status = 'info';
                             scanData.checks.siteContent.details = '網頁內容已讀取 (AI 引擎暫時無回應)';
@@ -3307,7 +3317,7 @@
                                 )}
 
                                 {/* ================= 新增：高風險專屬的檢舉通報區塊 ================= */}
-                                {result.riskScore >= 70 && !result.isSocialMedia && !url.includes('@') && (
+                                {result.riskScore >= 70 && !result.isSocialMedia && !isOfficialTaiwanGovDomain(result.domain) && !url.includes('@') && (
                                     <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
                                         <div className="flex items-center gap-3">
                                             <ShieldZap size={28} className="text-red-600 flex-shrink-0" />

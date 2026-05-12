@@ -28,6 +28,10 @@ function isOfficialTaiwanGovDomain(hostname) {
     return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
 }
 
+function shouldSkipAiBrandAnalysis(hostname) {
+    return isOfficialTaiwanGovDomain(hostname);
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -831,6 +835,19 @@ test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('gov.tw'), true);
     assert.equal(isOfficialTaiwanGovDomain('gov.tw.example.com'), false);
     assert.equal(isOfficialTaiwanGovDomain('gov-tw-login.shop'), false);
+});
+
+test('台灣 gov.tw 官方網域應跳過 AI 品牌覆寫，避免被誤改成詐騙', () => {
+    const domain = '500.gov.tw';
+    const aiResult = { isGenericScam: true, isFakeBrand: false };
+    let riskScore = 0;
+
+    if (!shouldSkipAiBrandAnalysis(domain) && (aiResult.isGenericScam || aiResult.isFakeBrand)) {
+        riskScore = 100;
+    }
+
+    assert.equal(shouldSkipAiBrandAnalysis(domain), true);
+    assert.equal(riskScore, 0);
 });
 
 test('社群平台使用設定檔清單做完全符合與子網域符合', () => {
