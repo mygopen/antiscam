@@ -1911,11 +1911,11 @@
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     serverLocation: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '伺服器所在國家', details: serverCountryDetails },
                     age: {
-                        status: (rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
+                        status: isWhitelisted ? 'safe' : ((rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
-                                (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'),
+                                (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown')),
                         label: '註冊時間',
-                        details: (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)'),
+                        details: isOfficialTaiwanGov ? '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' : (isWhitelisted ? '受信賴白名單網域，不以憑證日期判定新註冊風險' : (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)')),
                         link: `https://who.is/whois/${domain}`
                     },
                     certificate: {

@@ -48,6 +48,15 @@ function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googl
     };
 }
 
+function getAgeCheckStatus({ isWhitelisted = false, rdapDate = null, domainAgeDays = null }) {
+    if (isWhitelisted) return 'safe';
+    if (rdapDate && domainAgeDays !== null && domainAgeDays < 90) return 'danger';
+    if (!rdapDate) return 'unknown';
+    const ageMs = Math.abs(new Date() - new Date(rdapDate));
+    if (ageMs < 365 * 86400000) return 'warning';
+    return 'safe';
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -886,6 +895,26 @@ test('台灣 gov.tw 官方網域應忽略外部黑名單或安全庫誤判', () 
     assert.equal(fakeGovResult.blocklistListedForRisk, true);
     assert.equal(fakeGovResult.googleFlaggedForRisk, true);
     assert.equal(fakeGovResult.riskScore, 100);
+});
+
+test('台灣 gov.tw 憑證近期核發不應被註冊時間卡片拉高風險', () => {
+    const ageStatus = getAgeCheckStatus({
+        isWhitelisted: isOfficialTaiwanGovDomain('500.gov.tw'),
+        rdapDate: new Date().toISOString(),
+        domainAgeDays: 1
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: 0,
+        checks: {
+            age: { status: ageStatus, details: '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' },
+            siteContent: { status: 'safe', details: '受信賴的台灣政府官方網域' }
+        }
+    });
+
+    assert.equal(ageStatus, 'safe');
+    assert.equal(scanData.riskScore, 0);
+    assert.deepEqual(scanData.summaryReasons, []);
 });
 
 test('社群平台使用設定檔清單做完全符合與子網域符合', () => {
