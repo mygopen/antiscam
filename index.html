@@ -519,6 +519,42 @@
 
         const hasReadableVowelPattern = (text) => /[aeiou]/i.test(text) && !/[bcdfghjklmnpqrstvwxz]{4,}/i.test(text);
 
+        const analyzeDisposableRootLabel = (rootLabel) => {
+            const label = String(rootLabel || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+            const compact = label.replace(/-/g, '');
+            const safeRoots = new Set([
+                'example', 'google', 'facebook', 'instagram', 'youtube', 'twitter',
+                'shopline', 'myshopify', 'everypixel', 'infodemic'
+            ]);
+            if (!compact || compact.length < 9 || compact.length > 18 || safeRoots.has(compact)) {
+                return { matched: false, reasons: [], entropy: calculateEntropy(compact || '') };
+            }
+
+            const entropyValue = calculateEntropy(compact);
+            const hasDigitMix = /[a-z]/.test(compact) && /\d/.test(compact);
+            const lacksVowels = !/[aeiou]/.test(compact);
+            const qWithoutU = /q(?!u)/.test(compact);
+            const consonantTrigrams = compact.match(/[bcdfghjklmnpqrstvwxyz]{3,}/g) || [];
+            const rareBigrams = compact.match(/(?:qg|gq|kq|qk|xq|qx|zq|qz|vj|jv|kg|gk|mgq|rgm)/g) || [];
+            const lowVowelRatio = ((compact.match(/[aeiou]/g) || []).length / compact.length) < 0.25;
+            const looksMachineGenerated =
+                lacksVowels ||
+                hasDigitMix ||
+                (qWithoutU && (consonantTrigrams.length > 0 || entropyValue > 3.0)) ||
+                (rareBigrams.length > 0 && entropyValue > 2.8) ||
+                (consonantTrigrams.length >= 2 && entropyValue > 3.0 && lowVowelRatio);
+
+            const reasons = [];
+            if (qWithoutU) reasons.push('含少見 q 非 qu 組合');
+            if (rareBigrams.length > 0) reasons.push(`含少見字母組合 ${[...new Set(rareBigrams)].slice(0, 2).join('、')}`);
+            if (consonantTrigrams.length >= 2) reasons.push('多段連續子音');
+            if (hasDigitMix) reasons.push('英數混合隨機碼');
+            if (lacksVowels) reasons.push('缺少母音');
+            if (entropyValue > 3.0) reasons.push('主網域隨機度偏高');
+
+            return { matched: looksMachineGenerated, reasons, entropy: entropyValue };
+        };
+
         const analyzeSuspiciousSubdomain = (hostname) => {
             const { subdomainLabels, rootLabel } = getDomainParts(hostname);
             const safeLabels = getRiskList('safeSubdomainLabels');
@@ -1197,6 +1233,8 @@
             const isSuspiciousLandingRootLabel = rootLabel.length >= 10 &&
                 !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
                 (rootEntropy > 3.0 || /[qxzj]/i.test(rootLabel) || /[bcdfghjklmnpqrstvwxz]{3,}/i.test(rootLabel));
+            const disposableRoot = analyzeDisposableRootLabel(rootLabel);
+            const hasDisposableRootLabel = !isWhitelisted && disposableRoot.matched;
             
             const hyphenCount = (domain.match(/-/g) || []).length;
             const hasMultipleHyphens = hyphenCount >= 2;
@@ -1345,6 +1383,7 @@
             const hasShoppingLandingUrlRisk = !isWhitelisted &&
                 hasSuspiciousLandingParams &&
                 (
+                    hasDisposableRootLabel ||
                     isSuspiciousRootLabel ||
                     isSuspiciousLandingRootLabel ||
                     suspiciousSubdomain.matched ||
@@ -1353,6 +1392,13 @@
                     isLowTraffic ||
                     hasSuspiciousTempDomain
                 );
+            const hasDisposableShoppingLandingRisk = !isWhitelisted &&
+                hasDisposableRootLabel &&
+                hasSuspiciousLandingParams;
+            const hasDisposableUnreadablePageRisk = !isWhitelisted &&
+                hasDisposableRootLabel &&
+                !isHighTraffic &&
+                ['blank', 'error', 'unknown'].includes(siteStatusData.status);
             const hasShoppingScamSignal = !isWhitelisted &&
                 shoppingScamSignals.matched &&
                 (
@@ -1526,6 +1572,8 @@
                     if (hasBrandSimilarity) riskScore += 80;
                     if (isDownloadPhishingSignal) riskScore += 80;
                     if (hasShoppingLandingUrlRisk) riskScore += siteStatusData.status === 'ok' ? 50 : 75;
+                    if (hasDisposableShoppingLandingRisk) riskScore += 85;
+                    else if (hasDisposableUnreadablePageRisk) riskScore += 70;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
                     if (hasShoppingLineContactRisk) riskScore += hasShoppingLandingUrlRisk ? 50 : 40;
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
@@ -1622,6 +1670,8 @@
                 hasFinalSuspiciousTemp ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
+                hasDisposableShoppingLandingRisk ||
+                hasDisposableUnreadablePageRisk ||
                 hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
                 hasShoppingLineContactRisk ||
@@ -1651,6 +1701,8 @@
                     hasFinalSuspiciousTemp ||
                     hasSuspiciousEmailTrackingHost ||
                     hasDeepSubdomainPhishingPattern ||
+                    hasDisposableShoppingLandingRisk ||
+                    hasDisposableUnreadablePageRisk ||
                     hasShoppingLandingUrlRisk ||
                     hasShoppingScamSignal ||
                     hasShoppingLineContactRisk ||
@@ -1716,6 +1768,12 @@
             } else if (hasShoppingLineContactRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到一頁式購物/廣告落地頁要求加入 LINE 聯絡或下單，常見於詐騙導流。';
+            } else if (hasDisposableShoppingLandingRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到免洗亂碼購物落地頁：主網域「${rootLabel}」具有隨機生成特徵（${disposableRoot.reasons.slice(0, 3).join('、')}），且網址包含 ${matchedLandingParams.slice(0, 3).join('、')} 等廣告追蹤參數。`;
+            } else if (hasDisposableUnreadablePageRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到免洗亂碼網域且頁面內容未完整取得：主網域「${rootLabel}」具有隨機生成特徵（${disposableRoot.reasons.slice(0, 3).join('、')}），常見於可快速棄置與更換的新詐騙站。`;
             } else if (hasShoppingLandingUrlRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑購物/廣告落地頁網址：含 ${matchedLandingParams.slice(0, 3).join('、')} 等追蹤參數，且網域名稱隨機度高或缺乏信任訊號。`;
@@ -1845,6 +1903,7 @@
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
+                    disposableDomain: { status: hasDisposableShoppingLandingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe'), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${['blank', 'error', 'unknown'].includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}` : '未偵測到主網域亂碼免洗特徵' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
@@ -1859,7 +1918,7 @@
                     urgency: { status: hasUrgencyScamSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain) ? 'warning' : 'info') : 'safe', label: '限時/恐嚇話術', details: hasUrgencyScamSignal ? `偵測到限時、帳戶異常或立即驗證類話術：${urgencySignals.examples.slice(0, 3).join('、')}` : '未偵測到常見限時或恐嚇話術' },
                     homograph: { status: hasHomographSignal ? 'danger' : 'safe', label: '相似字元網域', details: hasHomographSignal ? '網域含 Punycode 或非 ASCII 字元，可能利用相似字元混淆官方網域' : '未偵測到 Punycode 或 Unicode 混淆網域' },
                     params: { status: (hasSuspiciousParams || hasNestedSuspiciousParams) ? 'danger' : 'safe', label: '網址參數檢查', details: (hasSuspiciousParams || hasNestedSuspiciousParams) ? '包含敏感參數 (token/auth/session/verify)，疑似釣魚或帳戶劫持連結' : '未發現敏感追蹤或認證參數' },
-                    entropy: { status: isHighEntropy ? (isExtremeGibberish ? 'danger' : 'warning') : 'safe', label: '亂碼/隨機網址', details: isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常' },
+                    entropy: { status: (isExtremeGibberish || hasDisposableShoppingLandingRisk || hasDisposableUnreadablePageRisk) ? 'danger' : (isHighEntropy || hasDisposableRootLabel ? 'warning' : 'safe'), label: '亂碼/隨機網址', details: hasDisposableRootLabel ? `主網域「${rootLabel}」疑似隨機生成：${disposableRoot.reasons.slice(0, 3).join('、')}` : (isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常') },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
                     apkCheck: { status: isApkSite || isDownloadPhishingSignal ? 'danger' : (suspiciousDownloadPath ? 'warning' : 'safe'), label: '可疑檔案下載', details: isApkSite ? `偵測到 ${apkUrlCount} 個不明 APK 檔下載，極高風險！` : (isDownloadPhishingSignal ? `偵測到可疑下載誘導：安裝關鍵字 ${installKeywordCount} 個、動態下載特徵 ${dynamicDownloadCount} 個、可疑路徑 ${suspiciousDownloadPathCount} 個` : (suspiciousDownloadPath ? `網址路徑含可疑下載片段：${downloadSignals.suspiciousPathFragments.join('、')}` : '未偵測到可疑 Android 應用程式')) }
                 }
@@ -1884,6 +1943,7 @@
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
             addReason(checks.lineContact?.status === 'danger', '要求加入 LINE 聯絡/下單');
             addReason(checks.shoppingLanding?.status === 'danger', '可疑購物/廣告落地頁網址');
+            addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
             addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
             addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
             addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
@@ -2845,6 +2905,7 @@
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
                 if (result.checks.apkCheck.status === 'danger') warnings.push(`⚠️ ${result.checks.apkCheck.details}`);
                 if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
+                if (result.checks.disposableDomain?.status === 'danger') warnings.push(`⚠️ ${result.checks.disposableDomain.details}`);
                 if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
                 if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
                 if (result.checks.whoisPrivacy.status !== 'safe' && !result.isSocialMedia) warnings.push('⚠️ WHOIS 身份已隱藏');

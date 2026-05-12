@@ -142,6 +142,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
+    addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
     addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
     addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
     addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
@@ -551,6 +552,42 @@ function hasReadableVowelPattern(text) {
     return /[aeiou]/i.test(text) && !/[bcdfghjklmnpqrstvwxz]{4,}/i.test(text);
 }
 
+function analyzeDisposableRootLabel(rootLabel) {
+    const label = String(rootLabel || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const compact = label.replace(/-/g, '');
+    const safeRoots = new Set([
+        'example', 'google', 'facebook', 'instagram', 'youtube', 'twitter',
+        'shopline', 'myshopify', 'everypixel', 'infodemic'
+    ]);
+    if (!compact || compact.length < 9 || compact.length > 18 || safeRoots.has(compact)) {
+        return { matched: false, reasons: [], entropy: calculateEntropy(compact || '') };
+    }
+
+    const entropyValue = calculateEntropy(compact);
+    const hasDigitMix = /[a-z]/.test(compact) && /\d/.test(compact);
+    const lacksVowels = !/[aeiou]/.test(compact);
+    const qWithoutU = /q(?!u)/.test(compact);
+    const consonantTrigrams = compact.match(/[bcdfghjklmnpqrstvwxyz]{3,}/g) || [];
+    const rareBigrams = compact.match(/(?:qg|gq|kq|qk|xq|qx|zq|qz|vj|jv|kg|gk|mgq|rgm)/g) || [];
+    const lowVowelRatio = ((compact.match(/[aeiou]/g) || []).length / compact.length) < 0.25;
+    const looksMachineGenerated =
+        lacksVowels ||
+        hasDigitMix ||
+        (qWithoutU && (consonantTrigrams.length > 0 || entropyValue > 3.0)) ||
+        (rareBigrams.length > 0 && entropyValue > 2.8) ||
+        (consonantTrigrams.length >= 2 && entropyValue > 3.0 && lowVowelRatio);
+
+    const reasons = [];
+    if (qWithoutU) reasons.push('含少見 q 非 qu 組合');
+    if (rareBigrams.length > 0) reasons.push(`含少見字母組合 ${[...new Set(rareBigrams)].slice(0, 2).join('、')}`);
+    if (consonantTrigrams.length >= 2) reasons.push('多段連續子音');
+    if (hasDigitMix) reasons.push('英數混合隨機碼');
+    if (lacksVowels) reasons.push('缺少母音');
+    if (entropyValue > 3.0) reasons.push('主網域隨機度偏高');
+
+    return { matched: looksMachineGenerated, reasons, entropy: entropyValue };
+}
+
 function analyzeSuspiciousSubdomain(hostname) {
     const { subdomainLabels, rootLabel } = getDomainParts(hostname);
     const rootTokens = rootLabel.split(/[-_]+/).filter(token => token.length >= 3);
@@ -631,6 +668,7 @@ function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
     const domain = parsed.hostname.toLowerCase();
     const { rootLabel } = getDomainParts(domain);
     const rootEntropy = calculateEntropy(rootLabel);
+    const disposableRoot = analyzeDisposableRootLabel(rootLabel);
     const isSuspiciousRootLabel = rootLabel.length >= 8 &&
         !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
         (!hasReadableVowelPattern(rootLabel) || rootEntropy > 3.2 || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(rootLabel));
@@ -645,6 +683,7 @@ function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
     return !isWhitelisted &&
         matchedLandingParams.length > 0 &&
         (
+            disposableRoot.matched ||
             isSuspiciousRootLabel ||
             isSuspiciousLandingRootLabel ||
             suspiciousSubdomain.matched ||
@@ -1244,4 +1283,43 @@ test('官方警示資料 root domain 命中應升為高風險並拉高 summary',
     assert.equal(matches[0].matchType, 'domain');
     assert.equal(scanData.riskScore, 70);
     assert.deepEqual(scanData.summaryReasons, ['官方機關已公告警示']);
+});
+
+test('免洗 root 亂碼偵測會命中 kforgmamgeq 並避開常見可讀品牌字串', () => {
+    const suspicious = analyzeDisposableRootLabel('kforgmamgeq');
+    const normalBrand = analyzeDisposableRootLabel('everypixel');
+    const knownSafe = analyzeDisposableRootLabel('infodemic');
+
+    assert.equal(suspicious.matched, true);
+    assert.ok(suspicious.reasons.some(reason => reason.includes('q') || reason.includes('少見字母組合')));
+    assert.equal(normalBrand.matched, false);
+    assert.equal(knownSafe.matched, false);
+});
+
+test('亂碼 root 搭配廣告追蹤參數應視為可疑購物落地頁高風險', () => {
+    const url = 'https://ako.kforgmamgeq.com/?ldtag_cl=X5wRd8EWSDuCPfRkaiUG7AAA&lt_r=126';
+    const hasRisk = hasSuspiciousShoppingLandingUrlRisk(url, {
+        isUnknownTraffic: false,
+        isLowTraffic: false
+    });
+    const riskScore = hasRisk ? 85 : 0;
+
+    assert.equal(hasRisk, true);
+    assert.equal(riskScore >= 70, true);
+});
+
+test('亂碼 root 且頁面內容不可讀時應拉高 summary，避免落入低風險', () => {
+    const disposableRoot = analyzeDisposableRootLabel('kforgmamgeq');
+    const hasDisposableUnreadablePageRisk = disposableRoot.matched && ['unknown', 'blank', 'error'].includes('unknown');
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasDisposableUnreadablePageRisk ? 70 : 0,
+        checks: {
+            disposableDomain: { status: hasDisposableUnreadablePageRisk ? 'danger' : 'safe', details: '主網域具有免洗亂碼特徵，且頁面內容未完整取得' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(hasDisposableUnreadablePageRisk, true);
+    assert.equal(scanData.riskScore >= 70, true);
+    assert.deepEqual(scanData.summaryReasons, ['免洗亂碼網域特徵']);
 });
