@@ -2253,6 +2253,81 @@
         // =========================================================================
         // 🛡️ 主程式 App 元件
         // =========================================================================
+        const TESSERACT_CDN_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        let tesseractLoadPromise = null;
+
+        const loadTesseract = () => {
+            if (window.Tesseract) return Promise.resolve(window.Tesseract);
+            if (tesseractLoadPromise) return tesseractLoadPromise;
+
+            tesseractLoadPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = TESSERACT_CDN_URL;
+                script.async = true;
+                script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('Tesseract.js 載入失敗'));
+                script.onerror = () => reject(new Error('Tesseract.js 載入失敗'));
+                document.head.appendChild(script);
+            });
+
+            return tesseractLoadPromise;
+        };
+
+        const normalizeOcrUrlText = (text) => String(text || '')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/[：]/g, ':')
+            .replace(/[／]/g, '/')
+            .replace(/[．。]/g, '.')
+            .replace(/[–—−]/g, '-')
+            .replace(/https?:\s*\/\s*\//gi, match => match.toLowerCase().startsWith('https') ? 'https://' : 'http://')
+            .replace(/([A-Za-z0-9])-\s*\n\s*([A-Za-z0-9])/g, '$1-$2')
+            .replace(/([A-Za-z0-9./?&_=:%#-])\s*\n\s*([A-Za-z0-9])/g, '$1$2');
+
+        const stripOcrTargetPunctuation = (value) => String(value || '')
+            .trim()
+            .replace(/^[<([{「『【]+/, '')
+            .replace(/[>),.，。；;:」』】\]]+$/g, '');
+
+        const dedupeOcrTargets = (items) => {
+            const seen = new Set();
+            return items
+                .map(stripOcrTargetPunctuation)
+                .filter(Boolean)
+                .filter(item => {
+                    const key = item.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+        };
+
+        const extractOcrTargets = (text) => {
+            const normalized = normalizeOcrUrlText(text);
+            const targets = [];
+            const add = (value) => {
+                const cleaned = stripOcrTargetPunctuation(value);
+                if (!cleaned || cleaned.length < 4 || /^(無|none|null)$/i.test(cleaned)) return;
+                if (!targets.includes(cleaned)) targets.push(cleaned);
+            };
+
+            (normalized.match(/https?:\/\/[^\s<>"'，。；、）)]+/gi) || []).forEach(add);
+            (normalized.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) || []).forEach(add);
+            const domainPattern = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi;
+            for (const match of normalized.matchAll(domainPattern)) {
+                const value = match[0];
+                const start = match.index || 0;
+                const end = start + value.length;
+                if (normalized[start - 1] === '@' || normalized[end] === '@') continue;
+                add(value);
+            }
+
+            return dedupeOcrTargets(targets);
+        };
+
+        const pickPrimaryOcrTarget = (targets) => {
+            if (!targets.length) return '';
+            return targets.find(item => /^https?:\/\//i.test(item)) || targets.find(item => !item.includes('@')) || '';
+        };
+
         const App = () => {
             const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
             const [aiReport, setAiReport] = useState(null);
@@ -2278,11 +2353,39 @@
                 if (!file) return;
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
-                setResult(null); setAiReport(null); setError(''); setIsImageAnalyzing(true); setLoadingMessage('AI 正在仔細辨識截圖內容...');
+                setResult(null); setAiReport(null); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在先用本機 OCR 尋找截圖中的網址...');
                 if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
                 setUploadedImageUrl(URL.createObjectURL(file));
-                const formData = new FormData(); formData.append('image', file);
                 try {
+                    try {
+                        const Tesseract = await loadTesseract();
+                        const ocrResult = await Tesseract.recognize(file, 'eng', {
+                            logger: (m) => {
+                                if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+                                    setLoadingMessage(`正在辨識截圖網址... ${Math.round(m.progress * 100)}%`);
+                                }
+                            }
+                        });
+                        const ocrTargets = extractOcrTargets(ocrResult?.data?.text || '');
+                        const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
+
+                        if (primaryTarget) {
+                            setLoadingMessage('已從截圖找到網址，正在進行網址風險檢測...');
+                            setUrl(primaryTarget);
+                            if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'success', 'target_type': primaryTarget.includes('@') ? 'email' : 'url' });
+                            setIsImageAnalyzing(false);
+                            await handleScan(null, primaryTarget);
+                            return;
+                        }
+
+                        if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'not_found' });
+                    } catch (ocrErr) {
+                        console.log('本機 OCR 未能完成，改用 AI 截圖分析', ocrErr);
+                        if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'fallback' });
+                    }
+
+                    setLoadingMessage('OCR 未找到明確網址，改用 AI 辨識截圖內容...');
+                    const formData = new FormData(); formData.append('image', file);
                     const response = await fetch('/api/cf-vision', { method: 'POST', body: formData });
                     const data = await response.json();
                     if (!response.ok || data.error) throw new Error(data.details || data.error || '伺服器發生錯誤');

@@ -62,8 +62,14 @@ const extractVisualTargets = (text) => {
     const emailMatches = normalized.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) || [];
     emailMatches.forEach(add);
 
-    const domainMatches = normalized.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi) || [];
-    domainMatches.forEach(add);
+    const domainPattern = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi;
+    for (const match of normalized.matchAll(domainPattern)) {
+        const value = match[0];
+        const start = match.index || 0;
+        const end = start + value.length;
+        if (normalized[start - 1] === '@' || normalized[end] === '@') continue;
+        add(value);
+    }
 
     return dedupeTargets(targets);
 };

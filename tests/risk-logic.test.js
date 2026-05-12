@@ -294,7 +294,14 @@ function extractVisualTargets(text) {
 
     (normalized.match(/https?:\/\/[^\s<>"'，。；、）)]+/gi) || []).forEach(add);
     (normalized.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) || []).forEach(add);
-    (normalized.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi) || []).forEach(add);
+    const domainPattern = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"'，。；、）)]*)?/gi;
+    for (const match of normalized.matchAll(domainPattern)) {
+        const value = match[0];
+        const start = match.index || 0;
+        const end = start + value.length;
+        if (normalized[start - 1] === '@' || normalized[end] === '@') continue;
+        add(value);
+    }
 
     return dedupeTargets(targets);
 }
@@ -341,6 +348,11 @@ function buildCleanScreenshotReport(rawText) {
     }
 
     return { report: '', targets };
+}
+
+function pickPrimaryOcrTarget(targets) {
+    if (!targets.length) return '';
+    return targets.find(item => /^https?:\/\//i.test(item)) || targets.find(item => !item.includes('@')) || '';
 }
 
 function isSensitiveFormField(attrs) {
@@ -696,6 +708,14 @@ express.sfxpuerse.top/t/NAt0rR
     const targets = extractVisualTargets(text);
 
     assert.equal(targets[0], 'https://sf-express.sfxpuerse.top/t/NAt0rR');
+    assert.equal(pickPrimaryOcrTarget(targets), 'https://sf-express.sfxpuerse.top/t/NAt0rR');
+});
+
+test('截圖 OCR 只抓到 Email 時不直接送進網址掃描流程', () => {
+    const targets = extractVisualTargets('客服信箱 service.example@gmail.com');
+
+    assert.deepEqual(targets, ['service.example@gmail.com']);
+    assert.equal(pickPrimaryOcrTarget(targets), '');
 });
 
 test('截圖 JSON 分析會保留主要網址並輸出四行報告', () => {
