@@ -3210,6 +3210,31 @@
                                     </div>
                                 </div>
 
+                                {result.checks.officialAlerts?.status === 'danger' && (
+                                    <div className="mb-6 p-4 md:p-5 bg-red-50 border-2 border-red-300 rounded-2xl shadow-sm animate-fade-in">
+                                        <div className="flex items-start gap-3">
+                                            <ShieldAlert size={28} className="text-red-600 flex-shrink-0 mt-0.5" />
+                                            <div className="min-w-0">
+                                                <h4 className="font-extrabold text-red-800 text-lg md:text-xl mb-2">官方警示資料命中</h4>
+                                                <p className="text-sm md:text-base text-red-800 leading-relaxed font-semibold">
+                                                    {result.checks.officialAlerts.details}
+                                                </p>
+                                                {result.checks.officialAlerts.link && (
+                                                    <a
+                                                        href={result.checks.officialAlerts.link}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 mt-3 text-sm font-bold text-red-700 hover:text-red-900 hover:underline break-all"
+                                                    >
+                                                        查看官方公告來源
+                                                        <ExternalLink size={14} />
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* ================= 新增：高風險專屬的檢舉通報區塊 ================= */}
                                 {result.riskScore >= 70 && !result.isSocialMedia && !url.includes('@') && (
                                     <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
