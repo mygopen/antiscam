@@ -586,13 +586,19 @@ function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
     const isSuspiciousRootLabel = rootLabel.length >= 8 &&
         !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
         (!hasReadableVowelPattern(rootLabel) || rootEntropy > 3.2 || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(rootLabel));
+    const isSuspiciousLandingRootLabel = rootLabel.length >= 10 &&
+        !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
+        (rootEntropy > 3.0 || /[qxzj]/i.test(rootLabel) || /[bcdfghjklmnpqrstvwxz]{3,}/i.test(rootLabel));
     const suspiciousSubdomain = analyzeSuspiciousSubdomain(domain);
-    const matchedLandingParams = riskConfig.suspiciousLandingParams.filter(key => rawUrl.toLowerCase().includes(key));
+    const defaultLandingParams = ['ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=', 'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='];
+    const landingParamList = [...new Set([...riskConfig.suspiciousLandingParams, ...defaultLandingParams])];
+    const matchedLandingParams = landingParamList.filter(key => rawUrl.toLowerCase().includes(key));
 
     return !isWhitelisted &&
         matchedLandingParams.length > 0 &&
         (
             isSuspiciousRootLabel ||
+            isSuspiciousLandingRootLabel ||
             suspiciousSubdomain.matched ||
             isVeryNewDomain ||
             isUnknownTraffic ||
@@ -999,6 +1005,17 @@ test('一頁式購物廣告落地頁即使抓不到 HTML 也應由 URL-only 訊�
 
     assert.equal(hasRisk, true);
     assert.equal(riskScore >= 70, true);
+});
+
+test('一頁式購物廣告落地頁可只靠亂碼 root 與 landing 參數升高風險', () => {
+    const url = 'https://ako.kforgmamgeq.com/?ldtag_cl=X5wRd8EWSDuCPfRkaiUG7AAA&lt_r=126';
+    const hasRisk = hasSuspiciousShoppingLandingUrlRisk(url, {
+        isUnknownTraffic: false,
+        isLowTraffic: false,
+        isVeryNewDomain: false
+    });
+
+    assert.equal(hasRisk, true);
 });
 
 test('一頁式購物頁要求加入 LINE 聯絡應提高為高風險', () => {
