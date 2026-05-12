@@ -609,7 +609,8 @@
                 shopping: ['立即購買', '馬上訂購', '立即訂購', '立即搶購', '加入購物車', '結帳', '下單', '訂單', '購買', '特價', '優惠價', '原價', '折扣', '限時', '限量', '最後', '免運', '貨到付款', '宅配', '超商取貨', '七天鑑賞', '全台配送'],
                 fields: ['姓名', '收件人', '手機', '電話', '地址', '宅配地址', '配送地址', '規格', '數量', '備註', '付款方式'],
                 socialProof: ['顧客好評', '客戶評價', '五星', '已售出', '熱銷', '回購', '見證', '買家', '評價'],
-                tracking: ['ldtag_cl', 'lt_r', 'fbclid', 'gclid', 'utm_', 'click_id', 'campaign', 'ad_id']
+                tracking: ['ldtag_cl', 'lt_r', 'fbclid', 'gclid', 'utm_', 'click_id', 'campaign', 'ad_id'],
+                lineContact: ['加入line', '加line', 'line客服', '官方line', 'line id', 'lineid', 'line帳號', 'line好友', '私訊客服', '聯繫客服下單', '截圖傳給客服', '客服確認訂單', 'lin.ee', 'line.me/r/ti/p', 'line://']
             };
             const matchedKeywords = Object.values(keywordGroups)
                 .flat()
@@ -631,6 +632,9 @@
             const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageCount >= 6 || hasOrderForm);
             const hasCodSalesPitch = keywordGroups.shopping.some(keyword => ['貨到付款', '免運', '限時', '限量', '立即搶購', '馬上訂購'].includes(keyword) && haystack.includes(keyword.toLowerCase()));
             const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
+            const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const hasLineContactSignal = lineContactMatches.length > 0;
+            const hasLineOrderContext = /(下單|訂單|訂購|購買|立即搶購|馬上訂購|貨到付款|限時|限量|截圖傳給客服|客服確認訂單)/i.test(haystack);
             const imageHeavy = imageCount >= 6 && linkCount <= 3;
 
             const reasons = [];
@@ -640,6 +644,7 @@
             if (!hasMerchantInfo && matchedKeywords.length >= 4) reasons.push('缺少明確商家資訊或退換貨政策');
             if (imageHeavy) reasons.push('商品圖片比例高且正常站內連結偏少');
             if (hasTrackingLandingParam) reasons.push('含廣告落地頁追蹤參數');
+            if (hasLineContactSignal && hasLineOrderContext && (hasOnePageStructure || hasOrderForm || hasCodSalesPitch || hasTrackingLandingParam)) reasons.push('要求加入 LINE 聯絡或下單');
 
             return {
                 score: Math.min(100, reasons.length * 18 + Math.min(30, matchedKeywords.length * 3)),
@@ -651,7 +656,10 @@
                 imageCount,
                 linkCount,
                 hasOrderForm,
-                hasMerchantInfo
+                hasMerchantInfo,
+                hasLineContactSignal,
+                hasLineOrderContext,
+                lineContactExamples: lineContactMatches.slice(0, 3)
             };
         };
 
@@ -1334,6 +1342,10 @@
                     externalFormActionCount > 0 ||
                     suspiciousSubdomain.matched
                 );
+            const hasShoppingLineContactRisk = !isWhitelisted &&
+                !!shoppingScamSignals.hasLineContactSignal &&
+                !!shoppingScamSignals.hasLineOrderContext &&
+                (hasShoppingScamSignal || hasShoppingLandingUrlRisk);
             const hasSuspiciousEmailTrackingHost = !isWhitelisted &&
                 isEmailTrackingDomain &&
                 !hasNestedUrl &&
@@ -1487,6 +1499,7 @@
                     if (isDownloadPhishingSignal) riskScore += 80;
                     if (hasShoppingLandingUrlRisk) riskScore += siteStatusData.status === 'ok' ? 50 : 75;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
+                    if (hasShoppingLineContactRisk) riskScore += hasShoppingLandingUrlRisk ? 50 : 40;
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
                     else if (lowRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += 10;
                     if (externalFormActionCount > 0) riskScore += 60;
@@ -1582,6 +1595,7 @@
                 hasDeepSubdomainPhishingPattern ||
                 hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
+                hasShoppingLineContactRisk ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform);
 
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
@@ -1609,6 +1623,7 @@
                     hasDeepSubdomainPhishingPattern ||
                     hasShoppingLandingUrlRisk ||
                     hasShoppingScamSignal ||
+                    hasShoppingLineContactRisk ||
                     isDownloadPhishingSignal ||
                     isApkSite;
                 if (hasDangerDetail && riskScore < 70) riskScore = 70;
@@ -1664,6 +1679,9 @@
             } else if (hasShoppingScamSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到一頁式購物詐騙特徵：${shoppingScamSignals.reasons.slice(0, 3).join('、')}。`;
+            } else if (hasShoppingLineContactRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 偵測到一頁式購物/廣告落地頁要求加入 LINE 聯絡或下單，常見於詐騙導流。';
             } else if (hasShoppingLandingUrlRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑購物/廣告落地頁網址：含 ${matchedLandingParams.slice(0, 3).join('、')} 等追蹤參數，且網域名稱隨機度高或缺乏信任訊號。`;
@@ -1790,7 +1808,8 @@
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
-                    shoppingScam: { status: hasShoppingScamSignal ? 'danger' : (shoppingScamSignals.matched ? 'warning' : 'safe'), label: '一頁式購物詐騙', details: shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : '未偵測到一頁式購物詐騙結構' },
+                    shoppingScam: { status: (hasShoppingScamSignal || hasShoppingLineContactRisk) ? 'danger' : (shoppingScamSignals.matched ? 'warning' : 'safe'), label: '一頁式購物詐騙', details: shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : '未偵測到一頁式購物詐騙結構' },
+                    lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? 'warning' : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : '未偵測到 LINE 聯絡導流' },
                     shoppingLanding: { status: hasShoppingLandingUrlRisk ? 'danger' : (hasSuspiciousLandingParams ? 'warning' : 'safe'), label: '購物/廣告落地頁網址', details: hasSuspiciousLandingParams ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${isSuspiciousRootLabel ? '；主網域名稱隨機度偏高' : ''}` : '未偵測到可疑購物落地頁參數' },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
@@ -1820,6 +1839,7 @@
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
+            addReason(checks.lineContact?.status === 'danger', '要求加入 LINE 聯絡/下單');
             addReason(checks.shoppingLanding?.status === 'danger', '可疑購物/廣告落地頁網址');
             addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
             addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
