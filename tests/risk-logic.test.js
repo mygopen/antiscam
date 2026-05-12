@@ -23,6 +23,11 @@ function matchesDomainList(domain, list) {
     });
 }
 
+function isOfficialTaiwanGovDomain(hostname) {
+    const cleanHostname = String(hostname || '').toLowerCase().replace(/^www\./, '');
+    return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -818,6 +823,14 @@ test('白名單支援完全符合與子網域符合', () => {
     assert.equal(matchesDomainList('fake-example.com', whitelist), false);
     assert.equal(matchesDomainList('trusted.org.tw', whitelist), true);
     assert.equal(matchesDomainList('service.trusted.org.tw', whitelist), true);
+});
+
+test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
+    assert.equal(isOfficialTaiwanGovDomain('500.gov.tw'), true);
+    assert.equal(isOfficialTaiwanGovDomain('www.gsp.gov.tw'), true);
+    assert.equal(isOfficialTaiwanGovDomain('gov.tw'), true);
+    assert.equal(isOfficialTaiwanGovDomain('gov.tw.example.com'), false);
+    assert.equal(isOfficialTaiwanGovDomain('gov-tw-login.shop'), false);
 });
 
 test('社群平台使用設定檔清單做完全符合與子網域符合', () => {

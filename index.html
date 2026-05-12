@@ -2191,7 +2191,7 @@
                     if (data.success) {
                         const newReported = [...reportedUrls, targetUrl];
                         setReportedUrls(newReported);
-                        localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
                         
                         let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
                         if (data.isDuplicate) {
@@ -2717,7 +2717,7 @@
 
             const [isReporting, setIsReporting] = useState(false);
             const [reportedUrls, setReportedUrls] = useState(() => {
-                try { return JSON.parse(localStorage.getItem('reportedUrls')) || []; } catch { return []; }
+                try { return JSON.parse(localStorage.getItem('userReportedUrls')) || []; } catch { return []; }
             });
 
             const handleReport = async () => {
@@ -2752,7 +2752,7 @@
                     
                     const data = await res.json();
                     if (data.success) {
-                        const newReported = [...reportedUrls, result.scannedUrl]; setReportedUrls(newReported); localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        const newReported = [...reportedUrls, result.scannedUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
                         if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
                     } else {
                         let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
@@ -2768,7 +2768,7 @@
                     const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: targetUrl, riskScore: 100, aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址" }) });
                     const data = await res.json();
                     if (data.success) {
-                        const newReported = [...reportedUrls, targetUrl]; setReportedUrls(newReported); localStorage.setItem('reportedUrls', JSON.stringify(newReported));
+                        const newReported = [...reportedUrls, targetUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
                         if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
                     } else {
                         let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
