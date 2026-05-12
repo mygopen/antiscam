@@ -623,6 +623,50 @@ function isDownloadPhishingSignal(signals) {
         (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
 }
 
+function analyzeShoppingScamSignals({ html = '', url }) {
+    const haystack = decodeSignalText(`${html}\n${url}`);
+    const keywordGroups = {
+        shopping: ['立即購買', '馬上訂購', '立即訂購', '立即搶購', '加入購物車', '結帳', '下單', '訂單', '購買', '特價', '優惠價', '原價', '折扣', '限時', '限量', '最後', '免運', '貨到付款', '宅配', '超商取貨', '七天鑑賞', '全台配送'],
+        fields: ['姓名', '收件人', '手機', '電話', '地址', '宅配地址', '配送地址', '規格', '數量', '備註', '付款方式'],
+        socialProof: ['顧客好評', '客戶評價', '五星', '已售出', '熱銷', '回購', '見證', '買家', '評價'],
+        tracking: ['ldtag_cl', 'lt_r', 'fbclid', 'gclid', 'utm_', 'click_id', 'campaign', 'ad_id']
+    };
+    const matchedKeywords = Object.values(keywordGroups)
+        .flat()
+        .filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const formFieldCount = (html.match(/<(input|textarea|select)\b/gi) || []).length;
+    const formCount = (html.match(/<form\b/gi) || []).length;
+    const imageCount = (html.match(/<img\b/gi) || []).length;
+    const linkCount = (html.match(/<a\b[^>]*href=/gi) || []).length;
+    const hasOrderForm = formCount > 0 && formFieldCount >= 2;
+    const merchantInfoKeywords = ['統一編號', '公司名稱', '有限公司', '股份有限公司', '客服電話', '退換貨', '退貨政策', '隱私權政策', '服務條款', '聯絡地址'];
+    const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+    const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageCount >= 6 || hasOrderForm);
+    const hasCodSalesPitch = ['貨到付款', '免運', '限時', '限量', '立即搶購', '馬上訂購'].some(keyword => haystack.includes(keyword.toLowerCase()));
+    const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
+    const imageHeavy = imageCount >= 6 && linkCount <= 3;
+
+    const reasons = [];
+    if (hasOnePageStructure) reasons.push('一頁式購物頁結構');
+    if (hasOrderForm) reasons.push('頁面直接要求收件或訂購資料');
+    if (hasCodSalesPitch) reasons.push('貨到付款/限時優惠等銷售話術');
+    if (!hasMerchantInfo && matchedKeywords.length >= 4) reasons.push('缺少明確商家資訊或退換貨政策');
+    if (imageHeavy) reasons.push('商品圖片比例高且正常站內連結偏少');
+    if (hasTrackingLandingParam) reasons.push('含廣告落地頁追蹤參數');
+
+    return {
+        matched: reasons.length >= 2,
+        reasonCount: reasons.length,
+        reasons,
+        keywordCount: matchedKeywords.length,
+        formFieldCount,
+        imageCount,
+        linkCount,
+        hasOrderForm,
+        hasMerchantInfo
+    };
+}
+
 test('白名單支援完全符合與子網域符合', () => {
     const whitelist = ['example.com', 'trusted.org.tw'];
 
@@ -883,6 +927,32 @@ test('一般 index.html 不應只因路徑被判成下載釣魚', () => {
     });
     assert.equal(normalPage.suspiciousPath, true);
     assert.equal(isDownloadPhishingSignal(normalPage), false);
+});
+
+test('一頁式購物詐騙頁會抓到訂購表單、貨到付款話術與追蹤參數', () => {
+    const html = `
+        <main>
+            <h1>今日限定優惠 免運 貨到付款</h1>
+            <img src="1.jpg"><img src="2.jpg"><img src="3.jpg"><img src="4.jpg"><img src="5.jpg"><img src="6.jpg">
+            <p>原價 3990，特價 990，最後 20 件，立即搶購，七天鑑賞，全台配送</p>
+            <form action="/order">
+                <input name="name" placeholder="姓名">
+                <input name="phone" placeholder="手機">
+                <textarea name="address" placeholder="地址"></textarea>
+                <select name="quantity"><option>1</option></select>
+                <button>馬上訂購</button>
+            </form>
+        </main>`;
+    const signals = analyzeShoppingScamSignals({
+        html,
+        url: 'https://ako.kforgmamgeq.com/?ldtag_cl=X5wRd8EWSDuCPfRkaiUG7AAA&lt_r=126'
+    });
+
+    assert.equal(signals.matched, true);
+    assert.ok(signals.reasons.includes('一頁式購物頁結構'));
+    assert.ok(signals.reasons.includes('頁面直接要求收件或訂購資料'));
+    assert.ok(signals.reasons.includes('貨到付款/限時優惠等銷售話術'));
+    assert.ok(signals.reasons.includes('含廣告落地頁追蹤參數'));
 });
 
 test('郵件追蹤跳板會解析 encoded 目的地並升為強風險', () => {
