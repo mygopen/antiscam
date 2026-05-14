@@ -1,7 +1,7 @@
 {
   "description": "麥擱騙網址白名單 - 包含官方網域、熱門服務及銀行官網",
-  "version": "1.0.2",
-  "updatedAt": "2026-02-12",
+  "version": "1.0.3",
+  "updatedAt": "2026-05-14",
   "domains": [
     "google.com", "facebook.com", "yahoo.com", "youtube.com", "wikipedia.org", 
     "instagram.com", "twitter.com", "x.com", "linkedin.com", "amazon.com", 
@@ -21,6 +21,6 @@
     "cathay-ins.com.tw","cathayins.tw","cathay.insure","cathaylife.tw","taiwanriceaward2026.com.tw",
     "ctbc.tw","ximalaya.com","chatgpt.com", "openai.com", "chat.openai.com","go.jp","fubonlife.tw","donuni.com.tw",
     "tssco.com.tw","eventgo.tw","famiport.com.tw","fsit.com.tw","165dashboard.tw","chiayistay.com.tw","stdfoods.cc",
-    "mygopen.tw","gov.taipei","fjb100.com","kufu.tw","nslife.com.tw","tttravel.tw","infodemic.cc","everypixel.com"
+    "mygopen.tw","gov.taipei","fjb100.com","kufu.tw","nslife.com.tw","tttravel.tw","infodemic.cc","everypixel.com","crudo-leather.com"
   ]
 }
