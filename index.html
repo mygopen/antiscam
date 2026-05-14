@@ -1232,7 +1232,11 @@
                 }
             } else if (isFreeHosting) {
                 trafficStatus = 'warning';
-                trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
+                if (domain.endsWith('zeabur.app')) {
+                    trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
+                } else {
+                    trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
+                }
             } else if (isUnknownTraffic) {
                 trafficStatus = 'unknown';
             }
@@ -1857,7 +1861,11 @@
                 domainAnalysisDetails = '網域(或轉址目標)包含多個連字號 (-)，請稍加留意';
             } else if (isFreeHosting) {
                 domainAnalysisStatus = 'warning';
-                domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
+                if (domain.endsWith('zeabur.app')) {
+                    domainAnalysisDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
+                } else {
+                    domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
+                }
             }
 
             let redirectStatus = 'safe';

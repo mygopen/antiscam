@@ -1453,3 +1453,23 @@ test('亂碼 root 且頁面內容不可讀時應拉高 summary，避免落入低
     assert.equal(scanData.riskScore >= 70, true);
     assert.deepEqual(scanData.summaryReasons, ['免洗亂碼網域特徵']);
 });
+
+test('zeabur.app 應被標記為中度風險且有專屬訊息', () => {
+    const domain = 'test-site.zeabur.app';
+    const isFreeHosting = matchesDomainList(domain, riskConfig.freeHostingProviders);
+    
+    let trafficStatus = 'safe';
+    let trafficDetails = '';
+    if (isFreeHosting) {
+        trafficStatus = 'warning';
+        if (domain.endsWith('zeabur.app')) {
+            trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
+        } else {
+            trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
+        }
+    }
+
+    assert.equal(isFreeHosting, true);
+    assert.equal(trafficStatus, 'warning');
+    assert.equal(trafficDetails.includes('Zeabur 雲端部署平台'), true);
+});

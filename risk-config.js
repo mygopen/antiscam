@@ -33,7 +33,7 @@ window.RISK_CONFIG = {
         'sendinblue.com', 'brevo.com', 'hubspotemail.net', 'hs-sites.com'
     ],
     freeHostingProviders: [
-        'dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com',
+        'zeabur.app', 'dudaone.com', 'wixsite.com', 'blogspot.com', 'wordpress.com',
         'weebly.com', 'github.io', 'vercel.app', 'netlify.app',
         'herokuapp.com', 'onrender.com', 'glitch.me', 'firebaseapp.com',
         'pages.dev', 'myshopify.com', 'surge.sh', 'cloudfront.net',
