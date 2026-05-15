@@ -593,20 +593,28 @@ function analyzeDisposableRootLabel(rootLabel) {
         'example', 'google', 'facebook', 'instagram', 'youtube', 'twitter',
         'shopline', 'myshopify', 'everypixel', 'infodemic'
     ]);
-    if (!compact || compact.length < 9 || compact.length > 18 || safeRoots.has(compact)) {
+    if (!compact || compact.length < 5 || compact.length > 18 || safeRoots.has(compact)) {
         return { matched: false, reasons: [], entropy: calculateEntropy(compact || '') };
     }
 
     const entropyValue = calculateEntropy(compact);
+    const isShortRoot = compact.length >= 5 && compact.length <= 8;
     const hasDigitMix = /[a-z]/.test(compact) && /\d/.test(compact);
     const lacksVowels = !/[aeiou]/.test(compact);
     const qWithoutU = /q(?!u)/.test(compact);
     const consonantTrigrams = compact.match(/[bcdfghjklmnpqrstvwxyz]{3,}/g) || [];
-    const rareBigrams = compact.match(/(?:qg|gq|kq|qk|xq|qx|zq|qz|vj|jv|kg|gk|mgq|rgm)/g) || [];
+    const rareBigrams = compact.match(/(?:qg|gq|kq|qk|xq|qx|zq|qz|vj|jv|yj|jy|kg|gk|mgq|rgm)/g) || [];
     const lowVowelRatio = ((compact.match(/[aeiou]/g) || []).length / compact.length) < 0.25;
+    const hasAwkwardShortFlow = isShortRoot &&
+        (
+            (rareBigrams.length > 0 && (consonantTrigrams.length > 0 || entropyValue > 2.1)) ||
+            /[aeiou]{2}[bcdfghjklmnpqrstvwxyz]{3,}$/i.test(compact) ||
+            /^[bcdfghjklmnpqrstvwxyz]{3,}[aeiou]{2}/i.test(compact)
+        );
     const looksMachineGenerated =
         lacksVowels ||
         hasDigitMix ||
+        hasAwkwardShortFlow ||
         (qWithoutU && (consonantTrigrams.length > 0 || entropyValue > 3.0)) ||
         (rareBigrams.length > 0 && entropyValue > 2.8) ||
         (consonantTrigrams.length >= 2 && entropyValue > 3.0 && lowVowelRatio);
@@ -614,7 +622,7 @@ function analyzeDisposableRootLabel(rootLabel) {
     const reasons = [];
     if (qWithoutU) reasons.push('含少見 q 非 qu 組合');
     if (rareBigrams.length > 0) reasons.push(`含少見字母組合 ${[...new Set(rareBigrams)].slice(0, 2).join('、')}`);
-    if (consonantTrigrams.length >= 2) reasons.push('多段連續子音');
+    if (consonantTrigrams.length >= 2 || hasAwkwardShortFlow) reasons.push('短網域含不自然字母排列');
     if (hasDigitMix) reasons.push('英數混合隨機碼');
     if (lacksVowels) reasons.push('缺少母音');
     if (entropyValue > 3.0) reasons.push('主網域隨機度偏高');
@@ -1417,13 +1425,36 @@ test('官方警示資料 root domain 命中應升為高風險並拉高 summary',
 
 test('免洗 root 亂碼偵測會命中 kforgmamgeq 並避開常見可讀品牌字串', () => {
     const suspicious = analyzeDisposableRootLabel('kforgmamgeq');
+    const shortSuspicious = analyzeDisposableRootLabel('ouyjs');
     const normalBrand = analyzeDisposableRootLabel('everypixel');
     const knownSafe = analyzeDisposableRootLabel('infodemic');
+    const shortReadable = analyzeDisposableRootLabel('yahoo');
 
     assert.equal(suspicious.matched, true);
     assert.ok(suspicious.reasons.some(reason => reason.includes('q') || reason.includes('少見字母組合')));
+    assert.equal(shortSuspicious.matched, true);
+    assert.ok(shortSuspicious.reasons.some(reason => reason.includes('短網域') || reason.includes('少見字母組合')));
     assert.equal(normalBrand.matched, false);
     assert.equal(knownSafe.matched, false);
+    assert.equal(shortReadable.matched, false);
+});
+
+test('短亂碼 root 搭配可疑子網域應升高風險，避免 std.ouyjs.com 落入低風險', () => {
+    const disposableRoot = analyzeDisposableRootLabel('ouyjs');
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain('std.ouyjs.com');
+    const hasDisposableRootPhishingRisk = disposableRoot.matched && suspiciousSubdomain.matched;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasDisposableRootPhishingRisk ? 70 : 0,
+        checks: {
+            disposableDomain: { status: hasDisposableRootPhishingRisk ? 'danger' : 'safe', details: '主網域具有短亂碼免洗特徵，且搭配可疑子網域命名' },
+            subdomainPattern: { status: suspiciousSubdomain.matched ? 'warning' : 'safe', details: suspiciousSubdomain.reasons.join('、') }
+        }
+    });
+
+    assert.equal(disposableRoot.matched, true);
+    assert.equal(suspiciousSubdomain.matched, true);
+    assert.equal(scanData.riskScore >= 70, true);
+    assert.deepEqual(scanData.summaryReasons, ['免洗亂碼網域特徵']);
 });
 
 test('亂碼 root 搭配廣告追蹤參數應視為可疑購物落地頁高風險', () => {
