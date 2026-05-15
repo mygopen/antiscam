@@ -1,18 +1,158 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>麥擱騙｜詐騙網址幫你查</title>
-    <meta name="description" content="MyGoPen 麥擱騙詐騙網址檢測工具">
-    <link rel="canonical" href="https://check.mygopen.com/app">
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-H2BBLS3D8L"></script>
     <script>
-        window.location.replace('/app');
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'G-H2BBLS3D8L');
     </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>麥擱騙｜詐騙網址幫你查 - 線上即時檢測工具</title>
+    <meta name="description" content="輸入網址，快速檢查是否為詐騙網站、惡意連結或釣魚網頁。支援手機與電腦瀏覽。">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://check.mygopen.com/">
+    <meta property="og:title" content="麥擱騙｜詐騙網址幫你查 - 線上即時檢測工具">
+    <meta property="og:description" content="收到可疑網址？阿麥幫你秒拆穿！快速檢查詐騙網站、惡意連結或釣魚網頁。">
+    <meta property="og:image" content="https://ik.imagekit.io/mygopen/1200.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    
+    <link rel="icon" href="https://ik.imagekit.io/mygopen/check_ico.png">
+    <link rel="apple-touch-icon" href="https://ik.imagekit.io/mygopen/check_ico.png">
+    <link rel="manifest" href="/manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/risk-config.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            red: '#d93025',
+                            darkRed: '#b92b1b',
+                            light: '#fff1f0',
+                            green: '#188038',
+                            darkGreen: '#12662d'
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.6s ease-out forwards',
+                        'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 40px -10px rgba(0,0,0,0.08)',
+                        'glow': '0 0 20px rgba(217, 48, 37, 0.3)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #f8fafc;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(217, 48, 37, 0.03) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(37, 99, 235, 0.03) 0px, transparent 50%);
+            background-attachment: fixed;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 當輸入框獲得焦點時，確保頁面底部有緩衝空間 */
+        body.keyboard-open {
+            padding-bottom: 40vh;
+            /* 預留 40% 螢幕高度給鍵盤 */
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        /* 檔案路徑：index.html (滑到 style 區塊最下方) */
+
+        /* Define bubble bounce animation keyframes */
+        @keyframes bubble-bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.95;
+            }
+
+            50% {
+                transform: translateY(-8px);
+                /* 輕柔向上彈跳 8px */
+                opacity: 1;
+                /* 彈到頂點時完全不透明 */
+            }
+        }
+
+        /* Define the class that uses the animation */
+        .animate-bubble-bounce {
+            animation: bubble-bounce 3s ease-in-out infinite;
+            /* 持續 3秒的循環彈跳 */
+        }
+    </style>
 </head>
-<body>
-    <noscript>
-        <p>請前往 <a href="/app">詐騙網址檢測工具</a>。</p>
-    </noscript>
+
+<body class="text-gray-700 antialiased min-h-screen flex flex-col">
+
+    <div id="root" class="flex-grow flex flex-col"></div>
+
+    <script type="text/babel" src="/app.js"></script>
 </body>
 </html>
