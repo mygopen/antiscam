@@ -37,7 +37,8 @@ export async function onRequest(context) {
         "discover-news.tokyo/",
         "planeta-info.com",
         "spp.it.com",
-        "lam810522.com"
+        "lam810522.com",
+        "ouyjs.com"
     ];
 
     // 檢查邏輯：完全符合，或是其子網域
