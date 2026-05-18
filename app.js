@@ -1816,7 +1816,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
