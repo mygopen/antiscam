@@ -34,30 +34,51 @@ async function resolveDns(domain) {
 
   for (const resolver of resolvers) {
     try {
-      const [aData, aaaaData] = await Promise.all([
+      const [aData, aaaaData, mxData] = await Promise.all([
         resolveDoh(domain, 'A', resolver.url),
-        resolveDoh(domain, 'AAAA', resolver.url)
+        resolveDoh(domain, 'AAAA', resolver.url),
+        resolveDoh(domain, 'MX', resolver.url).catch(err => ({ Status: -1, Answer: [], error: err.message }))
       ]);
 
       const answers = [...(aData.Answer || []), ...(aaaaData.Answer || [])];
+      const mxAnswers = (mxData.Answer || []).filter(record => record.type === 15);
+      const mxRecords = mxAnswers
+        .map(record => String(record.data || '').trim())
+        .filter(Boolean);
+      const hasNullMx = mxRecords.some(record => /^0\s+\.$/.test(record));
+      const mx = {
+        status: (mxData.Status === 0 && mxRecords.length > 0 && !hasNullMx) ? 'ok' :
+          ((mxData.Status === 0 || mxData.Status === 3 || hasNullMx) ? 'missing' : 'unavailable'),
+        hasMx: mxData.Status === 0 && mxRecords.length > 0 && !hasNullMx,
+        records: mxRecords,
+        nullMx: hasNullMx,
+        source: resolver.name
+      };
       const addresses = answers
         .filter(record => record.type === 1 || record.type === 28)
         .map(record => record.data)
         .filter(Boolean);
 
       if (addresses.length > 0) {
-        return { status: 'ok', source: resolver.name, answers, addresses: [...new Set(addresses)] };
+        return { status: 'ok', source: resolver.name, answers, addresses: [...new Set(addresses)], mx };
       }
 
       if (aData.Status === 3 && aaaaData.Status === 3) {
-        return { status: 'nxdomain', source: resolver.name, answers: [], addresses: [] };
+        return { status: 'nxdomain', source: resolver.name, answers: [], addresses: [], mx };
       }
     } catch (err) {
       errors.push(err.message);
     }
   }
 
-  return { status: 'unavailable', source: null, answers: [], addresses: [], error: errors.join('; ') };
+  return {
+    status: 'unavailable',
+    source: null,
+    answers: [],
+    addresses: [],
+    mx: { status: 'unavailable', hasMx: false, records: [], nullMx: false, source: null },
+    error: errors.join('; ')
+  };
 }
 
 async function fetchGeo(ip) {

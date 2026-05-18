@@ -669,6 +669,16 @@ const { useState, useEffect, useRef } = React;
             } catch (err) { return null; }
         };
 
+        const fetchSecurityHeaders = async (fullUrl) => {
+            try {
+                const res = await fetch(`/api/security-headers?url=${encodeURIComponent(fullUrl)}`);
+                if (!res.ok) return { status: 'unavailable', missingAll: false, missing: [] };
+                return await res.json();
+            } catch (err) {
+                return { status: 'unavailable', missingAll: false, missing: [] };
+            }
+        };
+
         const checkSiteAvailability = async (fullUrl) => {
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
             try {
@@ -1048,9 +1058,10 @@ const { useState, useEffect, useRef } = React;
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, networkInfoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
+            const [geoLocationData, networkInfoData, securityHeadersData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
+                withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
@@ -1072,6 +1083,12 @@ const { useState, useEffect, useRef } = React;
             const serverCountryDetails = serverInfo?.isReal
                 ? `所在國家: ${serverInfo.country}${serverIp ? `；IP: ${serverIp}` : ''}${serverInfo.org ? `；服務商: ${serverInfo.org}` : ''}${serverInfo.asn ? `；ASN: ${serverInfo.asn}` : ''}`
                 : '無法自動判定伺服器所在國家';
+            const mxInfo = networkInfoData?.dns?.mx || { status: 'unavailable', hasMx: false, records: [] };
+            const hasMissingMxRecords = !isWhitelisted && !isSocialMedia && mxInfo.status === 'missing';
+            const hasMissingAllSecurityHeaders = !isWhitelisted &&
+                !isSocialMedia &&
+                securityHeadersData?.status === 'ok' &&
+                !!securityHeadersData.missingAll;
             const traceChain = traceData ? traceData.chain : [];
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
@@ -1431,6 +1448,8 @@ const { useState, useEffect, useRef } = React;
                     }
                 }
                 if (hasNewOneYearRegistrationRisk) riskScore += 45;
+                if (hasMissingAllSecurityHeaders) riskScore += 70;
+                if (hasMissingMxRecords) riskScore += 70;
 
                 // 3. 其他特徵分析 (僅在非白名單時計算)
                 if (!isWhitelisted) {
@@ -1589,6 +1608,8 @@ const { useState, useEffect, useRef } = React;
                 hasHomographSignal ||
                 isNewDomainWithNewCertificate ||
                 hasNewOneYearRegistrationRisk ||
+                hasMissingAllSecurityHeaders ||
+                hasMissingMxRecords ||
                 isVeryNewDomain ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
@@ -1711,6 +1732,12 @@ const { useState, useEffect, useRef } = React;
             } else if (hasNewOneYearRegistrationRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 網域註冊未滿 6 個月，且註冊週期約 1 年，符合短期棄置型詐騙網域常見模式。';
+            } else if (hasMissingAllSecurityHeaders) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 網站缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項現代安全標頭，常見於低成本臨時詐騙站。';
+            } else if (hasMissingMxRecords) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 網域未設定 MX 郵件紀錄，可能是無法收信的免洗或短期詐騙網域。';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
@@ -1821,6 +1848,22 @@ const { useState, useEffect, useRef } = React;
 
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     serverLocation: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '伺服器所在國家', details: serverCountryDetails },
+                    securityHeaders: {
+                        status: hasMissingAllSecurityHeaders ? 'danger' : (securityHeadersData?.status === 'ok' ? 'safe' : 'unknown'),
+                        label: 'HTTP 安全標頭',
+                        details: securityHeadersData?.status === 'ok'
+                            ? (hasMissingAllSecurityHeaders
+                                ? '缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭'
+                                : `已檢查安全標頭${securityHeadersData.missing?.length ? `；缺少：${securityHeadersData.missing.join('、')}` : '，未發現三項皆缺失'}`)
+                            : '無法自動檢查 HTTP 安全標頭'
+                    },
+                    mxRecords: {
+                        status: hasMissingMxRecords ? 'danger' : (mxInfo.status === 'ok' ? 'safe' : 'unknown'),
+                        label: 'MX 郵件紀錄',
+                        details: hasMissingMxRecords
+                            ? (mxInfo.nullMx ? '網域設定 Null MX，明確表示不接收 Email' : '未偵測到 MX 郵件紀錄，可能是免洗或短期用途網域')
+                            : (mxInfo.status === 'ok' ? `已偵測到 MX 紀錄：${mxInfo.records.slice(0, 3).join('、')}` : '無法自動判定 MX 郵件紀錄')
+                    },
                     age: {
                         status: isWhitelisted ? 'safe' : ((hasNewOneYearRegistrationRisk || (rdapDate && domainAgeDays !== null && domainAgeDays < 90)) ? 'danger' :
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
@@ -1891,6 +1934,8 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
             addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
             addReason(checks.registrationPeriod?.status === 'danger', '新網域搭配 1 年短期註冊');
+            addReason(checks.securityHeaders?.status === 'danger', '缺少全部現代 HTTP 安全標頭');
+            addReason(checks.mxRecords?.status === 'danger', '網域未設定 MX 郵件紀錄');
             addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
             addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
 
@@ -2906,6 +2951,8 @@ const { useState, useEffect, useRef } = React;
                 if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
                 if (result.checks.apkCheck.status === 'danger') warnings.push(`⚠️ ${result.checks.apkCheck.details}`);
+                if (result.checks.securityHeaders?.status === 'danger') warnings.push('⚠️ 缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭');
+                if (result.checks.mxRecords?.status === 'danger') warnings.push('⚠️ 網域未設定 MX 郵件紀錄');
                 if (result.checks.registrationPeriod?.status === 'danger') warnings.push('⚠️ 新網域且註冊週期約 1 年，具備短期棄置風險');
                 else if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
                 if (result.checks.disposableDomain?.status === 'danger') warnings.push(`⚠️ ${result.checks.disposableDomain.details}`);

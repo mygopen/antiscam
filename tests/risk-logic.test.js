@@ -84,6 +84,27 @@ function hasNewOneYearRegistrationRisk({
         isOneYearRegistrationPeriod(registrationPeriodDays);
 }
 
+function hasMissingAllSecurityHeadersRisk({
+    isWhitelisted = false,
+    isSocialMedia = false,
+    securityHeadersData = {}
+}) {
+    return !isWhitelisted &&
+        !isSocialMedia &&
+        securityHeadersData.status === 'ok' &&
+        securityHeadersData.missingAll === true;
+}
+
+function hasMissingMxRecordsRisk({
+    isWhitelisted = false,
+    isSocialMedia = false,
+    mxInfo = {}
+}) {
+    return !isWhitelisted &&
+        !isSocialMedia &&
+        mxInfo.status === 'missing';
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -209,6 +230,8 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
     addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
     addReason(checks.registrationPeriod?.status === 'danger', '新網域搭配 1 年短期註冊');
+    addReason(checks.securityHeaders?.status === 'danger', '缺少全部現代 HTTP 安全標頭');
+    addReason(checks.mxRecords?.status === 'danger', '網域未設定 MX 郵件紀錄');
     addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
     addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
 
@@ -1453,6 +1476,62 @@ test('超過 6 個月或非 1 年註冊週期不應命中新規則', () => {
         isWhitelisted: true,
         domainAgeDays: 120,
         registrationPeriodDays: 365
+    }), false);
+});
+
+test('缺少全部現代 HTTP 安全標頭應視為高風險訊號', () => {
+    const hasRisk = hasMissingAllSecurityHeadersRisk({
+        securityHeadersData: {
+            status: 'ok',
+            missingAll: true,
+            missing: ['Content-Security-Policy', 'X-Frame-Options', 'X-Content-Type-Options']
+        }
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasRisk ? 70 : 0,
+        checks: {
+            securityHeaders: { status: hasRisk ? 'danger' : 'safe', details: '缺少全部現代 HTTP 安全標頭' }
+        }
+    });
+
+    assert.equal(hasRisk, true);
+    assert.equal(scanData.riskScore >= 70, true);
+    assert.deepEqual(scanData.summaryReasons, ['缺少全部現代 HTTP 安全標頭']);
+});
+
+test('只缺部分安全標頭或白名單網域不應命中全部缺失規則', () => {
+    assert.equal(hasMissingAllSecurityHeadersRisk({
+        securityHeadersData: { status: 'ok', missingAll: false, missing: ['Content-Security-Policy'] }
+    }), false);
+    assert.equal(hasMissingAllSecurityHeadersRisk({
+        isWhitelisted: true,
+        securityHeadersData: { status: 'ok', missingAll: true }
+    }), false);
+});
+
+test('缺少 MX 紀錄應視為高風險訊號', () => {
+    const hasRisk = hasMissingMxRecordsRisk({
+        mxInfo: { status: 'missing', hasMx: false, records: [] }
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasRisk ? 70 : 0,
+        checks: {
+            mxRecords: { status: hasRisk ? 'danger' : 'safe', details: '未偵測到 MX 郵件紀錄' }
+        }
+    });
+
+    assert.equal(hasRisk, true);
+    assert.equal(scanData.riskScore >= 70, true);
+    assert.deepEqual(scanData.summaryReasons, ['網域未設定 MX 郵件紀錄']);
+});
+
+test('有 MX 或白名單網域不應命中缺少 MX 規則', () => {
+    assert.equal(hasMissingMxRecordsRisk({
+        mxInfo: { status: 'ok', hasMx: true, records: ['10 mail.example.com.'] }
+    }), false);
+    assert.equal(hasMissingMxRecordsRisk({
+        isWhitelisted: true,
+        mxInfo: { status: 'missing', hasMx: false, records: [] }
     }), false);
 });
 
