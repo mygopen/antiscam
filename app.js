@@ -783,11 +783,23 @@ const { useState, useEffect, useRef } = React;
             } catch (e) { return { status: 'unavailable', rank: null }; }
         };
 
+        const getDaysBetweenDates = (startDate, endDate) => {
+            if (!startDate || !endDate) return null;
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+            return Math.round((end - start) / (1000 * 60 * 60 * 24));
+        };
+
+        const isOneYearRegistrationPeriod = (periodDays) => {
+            return periodDays !== null && periodDays >= 330 && periodDays <= 400;
+        };
+
         const fetchRDAPData = async (domain) => {
             try {
                 const apiUrl = `/api/rdap?domain=${domain}`;
                 const res = await fetch(apiUrl);
-                if (!res.ok) return { date: null, privacyDetected: false, registrarName: null };
+                if (!res.ok) return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null };
                 const data = await res.json();
                 const events = data.events || [];
                 let regEvent =
@@ -795,9 +807,14 @@ const { useState, useEffect, useRef } = React;
                     events.find(e => e.eventAction === 'created') ||
                     events.find(e => /registration|created|creation/i.test(e.eventAction || '')) ||
                     events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                const expirationEvent = events.find(e => /expiration|expiry|expires|renewal/i.test(e.eventAction || ''));
                 const date = (regEvent && regEvent.eventDate)
                     ? regEvent.eventDate
                     : (data.registrationDate || data.createdDate || data.creationDate || data.created || data.registered || null);
+                const expirationDate = (expirationEvent && expirationEvent.eventDate)
+                    ? expirationEvent.eventDate
+                    : (data.expirationDate || data.expiryDate || data.expires || data.registryExpiryDate || data.paidTill || data.renewalDate || null);
+                const registrationPeriodDays = getDaysBetweenDates(date, expirationDate);
                 let privacyDetected = false;
                 const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
                 let registrarName = data.registrarName || data.registrar || data.sponsoringRegistrar || data.sponsor || data.registrationServiceProvider || null;
@@ -849,8 +866,8 @@ const { useState, useEffect, useRef } = React;
                     }
                 };
                 searchEntities(data.entities);
-                return { date, privacyDetected, registrarName };
-            } catch (e) { return { date: null, privacyDetected: false, registrarName: null }; }
+                return { date, expirationDate, registrationPeriodDays, privacyDetected, registrarName };
+            } catch (e) { return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null }; }
         };
 
         const fetchCertificateData = async (domain) => {
@@ -1037,7 +1054,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
-                withTimeout(fetchRDAPData(domain), 6000, { date: null, privacyDetected: false, registrarName: null }),
+                withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null }),
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
@@ -1047,6 +1064,7 @@ const { useState, useEffect, useRef } = React;
 
             const isRegistrationDateFromCertificate = !rdapData.date && !!certData?.notBefore;
             const rdapDate = rdapData.date || certData?.notBefore || null;
+            const rdapExpirationDate = rdapData.expirationDate || null;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
             const serverInfo = geoLocationData || networkInfoData;
@@ -1235,6 +1253,16 @@ const { useState, useEffect, useRef } = React;
                 domainAgeDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
             }
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
+            const isNewDomainUnderSixMonths = domainAgeDays !== null && domainAgeDays < 183;
+            const registrationPeriodDays = rdapData.registrationPeriodDays !== null && rdapData.registrationPeriodDays !== undefined
+                ? rdapData.registrationPeriodDays
+                : getDaysBetweenDates(rdapData.date, rdapExpirationDate);
+            const hasOneYearRegistrationPeriod = isOneYearRegistrationPeriod(registrationPeriodDays);
+            const hasNewOneYearRegistrationRisk = !isWhitelisted &&
+                !isOfficialTaiwanGov &&
+                !isRegistrationDateFromCertificate &&
+                isNewDomainUnderSixMonths &&
+                hasOneYearRegistrationPeriod;
             let certAgeDays = null;
             if (certData?.notBefore) {
                 const certDate = new Date(certData.notBefore);
@@ -1402,6 +1430,7 @@ const { useState, useEffect, useRef } = React;
                         riskScore += 10; 
                     }
                 }
+                if (hasNewOneYearRegistrationRisk) riskScore += 45;
 
                 // 3. 其他特徵分析 (僅在非白名單時計算)
                 if (!isWhitelisted) {
@@ -1559,6 +1588,7 @@ const { useState, useEffect, useRef } = React;
                 hasPageBrandMismatch ||
                 hasHomographSignal ||
                 isNewDomainWithNewCertificate ||
+                hasNewOneYearRegistrationRisk ||
                 isVeryNewDomain ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
@@ -1678,6 +1708,9 @@ const { useState, useEffect, useRef } = React;
             } else if (isNewDomainWithNewCertificate) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 網域與 HTTPS 憑證都在 3 個月內建立，常見於短期釣魚或免洗網站。';
+            } else if (hasNewOneYearRegistrationRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 網域註冊未滿 6 個月，且註冊週期約 1 年，符合短期棄置型詐騙網域常見模式。';
             } else if (isSocialMedia) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
@@ -1756,7 +1789,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -1789,12 +1822,19 @@ const { useState, useEffect, useRef } = React;
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     serverLocation: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '伺服器所在國家', details: serverCountryDetails },
                     age: {
-                        status: isWhitelisted ? 'safe' : ((rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
+                        status: isWhitelisted ? 'safe' : ((hasNewOneYearRegistrationRisk || (rdapDate && domainAgeDays !== null && domainAgeDays < 90)) ? 'danger' :
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
                                 (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown')),
                         label: '註冊時間',
-                        details: isOfficialTaiwanGov ? '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' : (isWhitelisted ? '受信賴白名單網域，不以憑證日期判定新註冊風險' : (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)')),
+                        details: isOfficialTaiwanGov ? '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' : (isWhitelisted ? '受信賴白名單網域，不以憑證日期判定新註冊風險' : (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)')),
                         link: `https://who.is/whois/${domain}`
+                    },
+                    registrationPeriod: {
+                        status: hasNewOneYearRegistrationRisk ? 'danger' : (registrationPeriodDays !== null ? 'info' : 'unknown'),
+                        label: '註冊週期',
+                        details: registrationPeriodDays !== null
+                            ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}`
+                            : '無法自動判定註冊週期'
                     },
                     certificate: {
                         status: isNewDomainWithNewCertificate ? 'danger' : (isVeryNewCertificate ? 'warning' : (certData?.notBefore ? 'safe' : 'unknown')),
@@ -1850,7 +1890,8 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
             addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
             addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
-            addReason(checks.age?.status === 'danger', '3 個月內新註冊網域');
+            addReason(checks.registrationPeriod?.status === 'danger', '新網域搭配 1 年短期註冊');
+            addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
             addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
 
             return reasons.slice(0, 3);
@@ -2865,7 +2906,8 @@ const { useState, useEffect, useRef } = React;
                 if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
                 if (result.checks.apkCheck.status === 'danger') warnings.push(`⚠️ ${result.checks.apkCheck.details}`);
-                if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
+                if (result.checks.registrationPeriod?.status === 'danger') warnings.push('⚠️ 新網域且註冊週期約 1 年，具備短期棄置風險');
+                else if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
                 if (result.checks.disposableDomain?.status === 'danger') warnings.push(`⚠️ ${result.checks.disposableDomain.details}`);
                 if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
                 if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);

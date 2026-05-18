@@ -67,6 +67,26 @@ function parseDateFromText(text) {
     return null;
 }
 
+function parseExpirationDateFromText(text) {
+    const regexes = [
+        /(?:Registry Expiry Date|Registrar Registration Expiration Date|Expiration Date|Expiry Date|Expires On|Paid-till|Renewal Date):?\s*(\d{4}-\d{2}-\d{2})/i,
+        /(?:Registry Expiry Date|Registrar Registration Expiration Date|Expiration Date|Expiry Date|Expires On|Paid-till|Renewal Date):?\s*(\d{4})\/(\d{2})\/(\d{2})/i,
+        /(?:Registry Expiry Date|Registrar Registration Expiration Date|Expiration Date|Expiry Date|Expires On|Paid-till|Renewal Date):?\s*(\d{4})\.(\d{2})\.(\d{2})/i,
+        /(?:到期日|到期日期|有效期限|有效期至|过期时间|到期时间):?\s*(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})/
+    ];
+
+    for (const regex of regexes) {
+        const match = String(text || '').match(regex);
+        if (match) {
+            if (match.length >= 4) {
+                return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+            }
+            return match[1];
+        }
+    }
+    return null;
+}
+
 function cleanRegistrarName(value) {
     const cleaned = String(value || '')
         .replace(/<[^>]+>/g, ' ')
@@ -144,6 +164,25 @@ function getRegistrationDate(data) {
     return null;
 }
 
+function getExpirationDate(data) {
+    if (!data || typeof data !== 'object') return null;
+
+    const directDate =
+        data.expirationDate ||
+        data.expiryDate ||
+        data.expires ||
+        data.registryExpiryDate ||
+        data.paidTill ||
+        data.renewalDate;
+    if (directDate) return directDate;
+
+    const events = Array.isArray(data.events) ? data.events : [];
+    const expirationEvent = events.find(e => /expiration|expiry|expires|renewal/i.test(e.eventAction || ''));
+    if (expirationEvent?.eventDate) return expirationEvent.eventDate;
+
+    return null;
+}
+
 function withRegistrarName(data, registrarName) {
     if (!registrarName) return data;
     const output = data && typeof data === 'object' ? { ...data } : {};
@@ -161,6 +200,10 @@ function mergeDomainData(primary, fallback) {
     const fallbackDate = getRegistrationDate(fallback);
     if (fallbackDate && !getRegistrationDate(output)) {
         output = withRegistrationEvent(output, fallbackDate, fallback?.source || 'fallback');
+    }
+    const fallbackExpirationDate = getExpirationDate(fallback);
+    if (fallbackExpirationDate && !getExpirationDate(output)) {
+        output = withExpirationEvent(output, fallbackExpirationDate, fallback?.source || 'fallback');
     }
     const fallbackRegistrar = getRegistrarName(fallback);
     if (fallbackRegistrar && !getRegistrarName(output)) {
@@ -181,6 +224,18 @@ function withRegistrationEvent(data, date, source) {
         events.unshift({ eventAction: 'registration', eventDate: date });
     }
     output.events = events;
+    output.source = output.source || source;
+    return output;
+}
+
+function withExpirationEvent(data, date, source) {
+    const output = data && typeof data === 'object' ? { ...data } : {};
+    const events = Array.isArray(output.events) ? [...output.events] : [];
+    if (!events.some(event => /expiration|expiry|expires|renewal/i.test(event.eventAction || '') && event.eventDate)) {
+        events.push({ eventAction: 'expiration', eventDate: date });
+    }
+    output.events = events;
+    output.expirationDate = output.expirationDate || date;
     output.source = output.source || source;
     return output;
 }
@@ -248,15 +303,13 @@ async function fetchWhoisSocket(domain, tld) {
         }
         
         const date = parseDateFromText(responseText);
+        const expirationDate = parseExpirationDateFromText(responseText);
         const registrarName = parseRegistrarFromText(responseText);
-        if (date) {
-            return withRegistrarName({
-                events: [{ eventAction: "registration", eventDate: date }],
-                source: "tcp-socket"
-            }, registrarName);
-        }
-        if (registrarName) {
-            return withRegistrarName({ events: [], source: "tcp-socket" }, registrarName);
+        if (date || expirationDate || registrarName) {
+            let output = { events: [], source: "tcp-socket" };
+            if (date) output = withRegistrationEvent(output, date, "tcp-socket");
+            if (expirationDate) output = withExpirationEvent(output, expirationDate, "tcp-socket");
+            return withRegistrarName(output, registrarName);
         }
         return null;
     } catch (e) { return null; }
@@ -290,15 +343,13 @@ async function fetchTwnicWeb(domain) {
         const html = await res.text();
         // TWNIC 網頁通常顯示 "Record created on yyyy-mm-dd"
         const date = parseDateFromText(html);
+        const expirationDate = parseExpirationDateFromText(html);
         const registrarName = parseRegistrarFromText(html);
-        if (date) {
-            return withRegistrarName({
-                events: [{ eventAction: "registration", eventDate: date }],
-                source: "twnic-web"
-            }, registrarName);
-        }
-        if (registrarName) {
-            return withRegistrarName({ events: [], source: "twnic-web" }, registrarName);
+        if (date || expirationDate || registrarName) {
+            let output = { events: [], source: "twnic-web" };
+            if (date) output = withRegistrationEvent(output, date, "twnic-web");
+            if (expirationDate) output = withExpirationEvent(output, expirationDate, "twnic-web");
+            return withRegistrarName(output, registrarName);
         }
     }
     return null;
@@ -313,15 +364,13 @@ async function fetchWhoIsWeb(domain) {
         const html = await res.text();
         // who.is 結構通常是 class="queryResponseBody" 或直接在 pre tag 裡
         const date = parseDateFromText(html);
+        const expirationDate = parseExpirationDateFromText(html);
         const registrarName = parseRegistrarFromText(html);
-        if (date) {
-            return withRegistrarName({
-                events: [{ eventAction: "registration", eventDate: date }],
-                source: "whois-web"
-            }, registrarName);
-        }
-        if (registrarName) {
-            return withRegistrarName({ events: [], source: "whois-web" }, registrarName);
+        if (date || expirationDate || registrarName) {
+            let output = { events: [], source: "whois-web" };
+            if (date) output = withRegistrationEvent(output, date, "whois-web");
+            if (expirationDate) output = withExpirationEvent(output, expirationDate, "whois-web");
+            return withRegistrarName(output, registrarName);
         }
     }
     return null;
@@ -406,6 +455,11 @@ export async function onRequest(context) {
 	    const directDate = getRegistrationDate(data);
 	    if (directDate) {
 	      let output = withRegistrationEvent(data, directDate, "rdap");
+	      const directExpirationDate = getExpirationDate(output);
+	      if (!directExpirationDate) {
+	        const fallbackData = await fetchFallbackRegistrationData(rootDomain, tld);
+	        if (fallbackData) output = mergeDomainData(output, fallbackData);
+	      }
 	      if (!getRegistrarName(output)) {
 	        const registrarFallback = await fetchFallbackRegistrarData(rootDomain, tld);
 	        const registrarName = getRegistrarName(registrarFallback);

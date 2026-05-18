@@ -57,6 +57,33 @@ function getAgeCheckStatus({ isWhitelisted = false, rdapDate = null, domainAgeDa
     return 'safe';
 }
 
+function getDaysBetweenDates(startDate, endDate) {
+    if (!startDate || !endDate) return null;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    return Math.round((end - start) / (1000 * 60 * 60 * 24));
+}
+
+function isOneYearRegistrationPeriod(periodDays) {
+    return periodDays !== null && periodDays >= 330 && periodDays <= 400;
+}
+
+function hasNewOneYearRegistrationRisk({
+    isWhitelisted = false,
+    isOfficialTaiwanGov = false,
+    isRegistrationDateFromCertificate = false,
+    domainAgeDays = null,
+    registrationPeriodDays = null
+}) {
+    return !isWhitelisted &&
+        !isOfficialTaiwanGov &&
+        !isRegistrationDateFromCertificate &&
+        domainAgeDays !== null &&
+        domainAgeDays < 183 &&
+        isOneYearRegistrationPeriod(registrationPeriodDays);
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -181,7 +208,8 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
     addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
     addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
-    addReason(checks.age?.status === 'danger', '3 個月內新註冊網域');
+    addReason(checks.registrationPeriod?.status === 'danger', '新網域搭配 1 年短期註冊');
+    addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
     addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
 
     return reasons.slice(0, 3);
@@ -1388,6 +1416,44 @@ test('3 個月內新註冊網域應視為強風險訊號', () => {
 
     assert.equal(isVeryNewDomain, true);
     assert.equal(riskScore >= 70, true);
+});
+
+test('6 個月內新網域且註冊週期 1 年應設定風險旗標', () => {
+    const registrationDate = '2026-01-15T00:00:00Z';
+    const expirationDate = '2027-01-15T00:00:00Z';
+    const registrationPeriodDays = getDaysBetweenDates(registrationDate, expirationDate);
+    const riskFlag = hasNewOneYearRegistrationRisk({
+        domainAgeDays: 120,
+        registrationPeriodDays
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: riskFlag ? 50 : 0,
+        checks: {
+            registrationPeriod: { status: riskFlag ? 'danger' : 'safe', details: '新網域搭配 1 年短期註冊' },
+            age: { status: riskFlag ? 'danger' : 'safe', details: '未滿 6 個月且註冊週期約 1 年' }
+        }
+    });
+
+    assert.equal(registrationPeriodDays, 365);
+    assert.equal(riskFlag, true);
+    assert.equal(scanData.riskScore >= 70, true);
+    assert.deepEqual(scanData.summaryReasons, ['新網域搭配 1 年短期註冊']);
+});
+
+test('超過 6 個月或非 1 年註冊週期不應命中新規則', () => {
+    assert.equal(hasNewOneYearRegistrationRisk({
+        domainAgeDays: 220,
+        registrationPeriodDays: 365
+    }), false);
+    assert.equal(hasNewOneYearRegistrationRisk({
+        domainAgeDays: 120,
+        registrationPeriodDays: 730
+    }), false);
+    assert.equal(hasNewOneYearRegistrationRisk({
+        isWhitelisted: true,
+        domainAgeDays: 120,
+        registrationPeriodDays: 365
+    }), false);
 });
 
 test('官方警示資料完整網址命中應直接升為最高風險', () => {
