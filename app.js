@@ -217,6 +217,7 @@ const { useState, useEffect, useRef } = React;
             downloadSignals: { apkUrlCount: 0, installKeywordCount: 0, dynamicDownloadCount: 0, suspiciousPath: false, suspiciousPathFragments: [], examples: [] },
             pageBrandSignals: { matched: false, brandName: null, keyword: null, source: null },
             urgencySignals: { count: 0, examples: [] },
+            trustSignals: { score: 0, matched: false, reasons: [] },
             shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasMerchantInfo: false }
         });
 
@@ -504,6 +505,48 @@ const { useState, useEffect, useRef } = React;
             return { count: examples.length, examples };
         };
 
+        const analyzeTrustSignals = (doc, rawText = '', fullUrl = '') => {
+            let domainHostname = '';
+            try { domainHostname = new URL(fullUrl).hostname.toLowerCase(); } catch (e) { }
+
+            const textParts = [rawText || '', doc?.title || '', doc?.body?.textContent || ''];
+            if (doc) {
+                doc.querySelectorAll('meta[name="description"], meta[property="og:title"], meta[property="og:site_name"], link[rel="canonical"]').forEach(el => {
+                    ['content', 'href'].forEach(attr => textParts.push(el.getAttribute(attr) || ''));
+                });
+            }
+
+            const haystack = decodeSignalText(textParts.join('\n'));
+            const { rootLabel } = getDomainParts(domainHostname);
+            const compactRoot = String(rootLabel || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const reasons = [];
+
+            if (compactRoot.length >= 5 && haystack.includes(compactRoot)) {
+                reasons.push('頁面標題或內容與主網域名稱相符');
+            }
+
+            const taiwanOfficialTerms = [
+                'ministry of foreign affairs',
+                'mofa',
+                'republic of china (taiwan)',
+                'taiwan today',
+                '中華民國外交部',
+                '外交部'
+            ];
+            const hasTaiwanOfficialSemantic = domainHostname.endsWith('.tw') &&
+                taiwanOfficialTerms.some(term => haystack.includes(term.toLowerCase()));
+            if (hasTaiwanOfficialSemantic) {
+                reasons.push('頁面內容出現台灣官方或外交部相關語意');
+            }
+
+            const score = Math.min(40, reasons.length * 20);
+            return {
+                score,
+                matched: score >= 20,
+                reasons: [...new Set(reasons)]
+            };
+        };
+
         const analyzeShoppingScamSignals = (doc, rawText = '', fullUrl = '') => {
             const textParts = [rawText || '', doc?.title || '', doc?.body?.textContent || '', fullUrl || ''];
             if (doc) {
@@ -643,6 +686,7 @@ const { useState, useEffect, useRef } = React;
                 downloadSignals: analyzeDownloadSignals(doc, rawText, fullUrl),
                 pageBrandSignals: analyzePageBrandSignals(doc, fullUrl, rawText),
                 urgencySignals: analyzeUrgencySignals(doc, rawText),
+                trustSignals: analyzeTrustSignals(doc, rawText, fullUrl),
                 shoppingScamSignals: analyzeShoppingScamSignals(doc, rawText, fullUrl)
             };
         };
@@ -809,7 +853,7 @@ const { useState, useEffect, useRef } = React;
             try {
                 const apiUrl = `/api/rdap?domain=${domain}`;
                 const res = await fetch(apiUrl);
-                if (!res.ok) return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null };
+                if (!res.ok) return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null };
                 const data = await res.json();
                 const events = data.events || [];
                 let regEvent =
@@ -828,6 +872,20 @@ const { useState, useEffect, useRef } = React;
                 let privacyDetected = false;
                 const privacyKeywords = ['Privacy', 'Proxy', 'Guard', 'Protect', 'Redacted', 'Whois', 'Masked', 'Contact', 'Private'];
                 let registrarName = data.registrarName || data.registrar || data.sponsoringRegistrar || data.sponsor || data.registrationServiceProvider || null;
+                const getVcardValue = (entity, field) => {
+                    if (!entity?.vcardArray || !Array.isArray(entity.vcardArray) || entity.vcardArray.length < 2) return null;
+                    const entry = entity.vcardArray[1]?.find(item => item[0] === field);
+                    return typeof entry?.[3] === 'string' ? entry[3] : null;
+                };
+                let registrantName = data.registrantName || data.registrant || null;
+                let registrantOrganization = data.registrantOrganization || data.registrantOrg || data.organization || null;
+                const registrantEntity = data.entities?.find(e =>
+                    e.roles && e.roles.some(role => /registrant|holder|owner/i.test(role))
+                );
+                if (registrantEntity) {
+                    registrantName = registrantName || getVcardValue(registrantEntity, 'fn') || registrantEntity.name || null;
+                    registrantOrganization = registrantOrganization || getVcardValue(registrantEntity, 'org') || null;
+                }
                 const registrarEntity = data.entities?.find(e =>
                     e.roles && e.roles.some(role => /registrar|sponsor|reseller/i.test(role))
                 );
@@ -876,8 +934,8 @@ const { useState, useEffect, useRef } = React;
                     }
                 };
                 searchEntities(data.entities);
-                return { date, expirationDate, registrationPeriodDays, privacyDetected, registrarName };
-            } catch (e) { return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null }; }
+                return { date, expirationDate, registrationPeriodDays, privacyDetected, registrarName, registrantName, registrantOrganization };
+            } catch (e) { return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }; }
         };
 
         const fetchCertificateData = async (domain) => {
@@ -1065,7 +1123,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
-                withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null }),
+                withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }),
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
@@ -1084,8 +1142,8 @@ const { useState, useEffect, useRef } = React;
                 ? `所在國家: ${serverInfo.country}${serverIp ? `；IP: ${serverIp}` : ''}${serverInfo.org ? `；服務商: ${serverInfo.org}` : ''}${serverInfo.asn ? `；ASN: ${serverInfo.asn}` : ''}`
                 : '無法自動判定伺服器所在國家';
             const mxInfo = networkInfoData?.dns?.mx || { status: 'unavailable', hasMx: false, records: [] };
-            const hasMissingMxRecords = !isWhitelisted && !isSocialMedia && mxInfo.status === 'missing';
-            const hasMissingAllSecurityHeaders = !isWhitelisted &&
+            const hasMissingMxRecordsRaw = !isWhitelisted && !isSocialMedia && mxInfo.status === 'missing';
+            const hasMissingAllSecurityHeadersRaw = !isWhitelisted &&
                 !isSocialMedia &&
                 securityHeadersData?.status === 'ok' &&
                 !!securityHeadersData.missingAll;
@@ -1374,19 +1432,107 @@ const { useState, useEffect, useRef } = React;
                     isLowTraffic
                 );
 
-            // --- [優化版] 精確風險權重判定 ---
-            let riskScore = 0;
-            
-            // 👇 新增：如果 Google 官方標記危險，直接給 100 分滿分死刑
             const isGoogleFlagged = safeBrowsingData && safeBrowsingData.isUnsafe;
             const blocklistListedForRisk = blocklistListed && !isOfficialTaiwanGov;
             const isGoogleFlaggedForRisk = isGoogleFlagged && !isWhitelisted;
-
-            
-            // 👇 如果網頁有 APK 且不在白名單內，視為極度危險
             const isApkSite = (siteStatusData.hasApk || apkUrlCount > 0) && !isWhitelisted;
             const isDownloadPhishingSignal = !isWhitelisted && !isApkSite &&
                 (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
+
+            const pageTrustSignals = pageSignals.trustSignals || createEmptyPageSignals().trustSignals;
+            const normalizedRegistrantText = [
+                rdapData.registrantName,
+                rdapData.registrantOrganization,
+                registrarName
+            ].filter(Boolean).join(' ').toLowerCase();
+            const compactRootLabel = rootLabel.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const hasRegistrantDomainMatch = compactRootLabel.length >= 5 &&
+                normalizedRegistrantText.replace(/[^a-z0-9]/g, '').includes(compactRootLabel);
+            const hasTaiwanOfficialRegistrant = domain.endsWith('.tw') &&
+                /(ministry of foreign affairs|mofa|外交部|government|gov|taiwan|中華民國)/i.test(normalizedRegistrantText);
+            const trustedCertificateIssuers = [
+                'digicert',
+                'globalsign',
+                'sectigo',
+                'entrust',
+                'google trust services',
+                'cloudflare',
+                'amazon',
+                'let\'s encrypt',
+                'zerossl'
+            ];
+            const certIssuerName = String(certData?.issuerName || '').toLowerCase();
+            const hasRecognizedCertificateIssuer = certIssuerName &&
+                trustedCertificateIssuers.some(issuer => certIssuerName.includes(issuer));
+            const hasStableHttpsCertificate = hasRecognizedCertificateIssuer &&
+                certAgeDays !== null &&
+                certAgeDays >= 30 &&
+                certAgeDays < 730;
+
+            const trustValidationSignals = [];
+            const addTrustSignal = (condition, score, reason) => {
+                if (condition) trustValidationSignals.push({ score, reason });
+            };
+            addTrustSignal(isOfficialTaiwanGov, 100, '台灣政府官方網域');
+            addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
+            addTrustSignal((isTrustedTLD || domain.endsWith('.tw')) && domainAgeDays !== null && domainAgeDays >= 365, 25, '台灣常見網域且註冊已超過 1 年');
+            addTrustSignal(pageTrustSignals.matched, pageTrustSignals.score || 20, pageTrustSignals.reasons?.slice(0, 2).join('、') || '頁面語意與網域相符');
+            addTrustSignal(hasRegistrantDomainMatch || hasTaiwanOfficialRegistrant, 35, 'WHOIS/RDAP 註冊資料與網域或官方語意相符');
+            addTrustSignal(hasStableHttpsCertificate, 15, `HTTPS 憑證由可信 CA 簽發${certData?.issuerName ? ` (${certData.issuerName})` : ''}`);
+            addTrustSignal(mxInfo.status === 'ok', 10, '已設定 MX 郵件紀錄');
+            addTrustSignal(securityHeadersData?.status === 'ok' && !hasMissingAllSecurityHeadersRaw, 10, '未缺少全部核心安全標頭');
+
+            const trustValidationScore = Math.min(100, trustValidationSignals.reduce((sum, item) => sum + item.score, 0));
+            const hasTrustedValidation = trustValidationScore >= 45 ||
+                trustValidationSignals.some(item => item.score >= 35);
+
+            const hasConfirmedThreatSignal = blocklistListedForRisk ||
+                hasOfficialAlert ||
+                isApkSite ||
+                isGoogleFlaggedForRisk ||
+                hasEmailTrackingPhishingPattern ||
+                hasFinancialPhishingSignal ||
+                (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
+                hasLogisticsBrandPhishing ||
+                hasPageBrandMismatch ||
+                hasHomographSignal ||
+                isDownloadPhishingSignal ||
+                hasShoppingScamSignal ||
+                hasShoppingLineContactRisk;
+
+            const hasSecondaryFraudEvidence = hasConfirmedThreatSignal ||
+                hasNewOneYearRegistrationRisk ||
+                isVeryNewDomain ||
+                isNewDomainWithNewCertificate ||
+                isVeryHighRiskTLD ||
+                isFinalVeryHighRiskTLD ||
+                isFakeGov ||
+                isFinalFakeGov ||
+                isFakeService ||
+                hasBrandSimilarity ||
+                hasSuspiciousTempDomain ||
+                hasFinalSuspiciousTemp ||
+                hasSuspiciousEmailTrackingHost ||
+                hasDeepSubdomainPhishingPattern ||
+                hasDisposableShoppingLandingRisk ||
+                hasDisposableRootPhishingRisk ||
+                hasDisposableUnreadablePageRisk ||
+                hasShoppingLandingUrlRisk ||
+                suspiciousSubdomain.matched ||
+                hasEncodedRedirectRisk ||
+                hasSuspiciousParams ||
+                hasNestedSuspiciousParams ||
+                ((siteStatusData.status === 'blank' || siteStatusData.status === 'error') && !isHighTraffic && !isTrustedTLD);
+
+            const hasMissingAllSecurityHeaders = hasMissingAllSecurityHeadersRaw &&
+                hasSecondaryFraudEvidence &&
+                !hasTrustedValidation;
+            const hasMissingMxRecords = hasMissingMxRecordsRaw &&
+                hasSecondaryFraudEvidence &&
+                !hasTrustedValidation;
+
+            // --- [優化版] 精確風險權重判定 ---
+            let riskScore = 0;
 
             if (blocklistListedForRisk) {
                 riskScore = 100;
@@ -1448,8 +1594,8 @@ const { useState, useEffect, useRef } = React;
                     }
                 }
                 if (hasNewOneYearRegistrationRisk) riskScore += 45;
-                if (hasMissingAllSecurityHeaders) riskScore += 70;
-                if (hasMissingMxRecords) riskScore += 70;
+                if (hasMissingAllSecurityHeadersRaw) riskScore += hasMissingAllSecurityHeaders ? 45 : 15;
+                if (hasMissingMxRecordsRaw) riskScore += hasMissingMxRecords ? 45 : 15;
 
                 // 3. 其他特徵分析 (僅在非白名單時計算)
                 if (!isWhitelisted) {
@@ -1589,6 +1735,14 @@ const { useState, useEffect, useRef } = React;
                     riskScore = 30; // 強制轉為黃色警告燈號
                 }
             } // 👈 關閉最外層的 if (!blocklistListed) else 區塊
+
+            if (hasTrustedValidation && !hasConfirmedThreatSignal && !blocklistListedForRisk && !isGoogleFlaggedForRisk && !isApkSite && !isWhitelisted && !isSocialMedia) {
+                if (riskScore >= 70) {
+                    riskScore = Math.min(riskScore, 60);
+                } else if (riskScore >= 30) {
+                    riskScore = Math.max(20, riskScore - 15);
+                }
+            }
 
             const hasStrongRiskSignal = blocklistListedForRisk ||
                 hasOfficialAlert ||
@@ -1730,8 +1884,8 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 網域與 HTTPS 憑證都在 3 個月內建立，常見於短期釣魚或免洗網站。';
             } else if (hasNewOneYearRegistrationRisk) {
-                domainAnalysisStatus = 'danger';
-                domainAnalysisDetails = '🚨 網域註冊未滿 6 個月，且註冊週期約 1 年，符合短期棄置型詐騙網域常見模式。';
+                domainAnalysisStatus = riskScore >= 70 ? 'danger' : 'warning';
+                domainAnalysisDetails = `${riskScore >= 70 ? '🚨' : '⚠️'} 網域註冊未滿 6 個月，且註冊週期約 1 年，符合短期棄置型詐騙網域常見模式；需搭配其他訊號判斷。`;
             } else if (hasMissingAllSecurityHeaders) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 網站缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項現代安全標頭，常見於低成本臨時詐騙站。';
@@ -1816,7 +1970,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, missingAllSecurityHeadersRaw, missingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -1848,32 +2002,44 @@ const { useState, useEffect, useRef } = React;
 
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
                     serverLocation: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '伺服器所在國家', details: serverCountryDetails },
+                    validation: {
+                        status: hasTrustedValidation ? 'safe' : (trustValidationSignals.length > 0 ? 'info' : 'unknown'),
+                        label: '次要可信驗證',
+                        details: trustValidationSignals.length > 0
+                            ? `${trustValidationSignals.slice(0, 4).map(item => item.reason).join('；')}（可信佐證分數 ${trustValidationScore}）`
+                            : '未取得足夠 WHOIS、憑證、流量或內容語意佐證；需搭配其他風險指標判斷'
+                    },
                     securityHeaders: {
-                        status: hasMissingAllSecurityHeaders ? 'danger' : (securityHeadersData?.status === 'ok' ? 'safe' : 'unknown'),
+                        status: hasMissingAllSecurityHeaders ? 'danger' : (hasMissingAllSecurityHeadersRaw ? 'warning' : (securityHeadersData?.status === 'ok' ? 'safe' : 'unknown')),
                         label: 'HTTP 安全標頭',
                         details: securityHeadersData?.status === 'ok'
                             ? (hasMissingAllSecurityHeaders
                                 ? '缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭'
-                                : `已檢查安全標頭${securityHeadersData.missing?.length ? `；缺少：${securityHeadersData.missing.join('、')}` : '，未發現三項皆缺失'}`)
+                                : (hasMissingAllSecurityHeadersRaw
+                                    ? '缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭；但尚未搭配其他詐騙佐證，不單獨判為高風險'
+                                    : `已檢查安全標頭${securityHeadersData.missing?.length ? `；缺少：${securityHeadersData.missing.join('、')}` : '，未發現三項皆缺失'}`))
                             : '無法自動檢查 HTTP 安全標頭'
                     },
                     mxRecords: {
-                        status: hasMissingMxRecords ? 'danger' : (mxInfo.status === 'ok' ? 'safe' : 'unknown'),
+                        status: hasMissingMxRecords ? 'danger' : (hasMissingMxRecordsRaw ? 'warning' : (mxInfo.status === 'ok' ? 'safe' : 'unknown')),
                         label: 'MX 郵件紀錄',
                         details: hasMissingMxRecords
                             ? (mxInfo.nullMx ? '網域設定 Null MX，明確表示不接收 Email' : '未偵測到 MX 郵件紀錄，可能是免洗或短期用途網域')
+                            : (hasMissingMxRecordsRaw ? (mxInfo.nullMx ? '網域設定 Null MX，不接收 Email；但尚未搭配其他詐騙佐證，不單獨判為高風險' : '未偵測到 MX 郵件紀錄；但尚未搭配其他詐騙佐證，不單獨判為高風險')
                             : (mxInfo.status === 'ok' ? `已偵測到 MX 紀錄：${mxInfo.records.slice(0, 3).join('、')}` : '無法自動判定 MX 郵件紀錄')
+                            )
                     },
                     age: {
-                        status: isWhitelisted ? 'safe' : ((hasNewOneYearRegistrationRisk || (rdapDate && domainAgeDays !== null && domainAgeDays < 90)) ? 'danger' :
+                        status: isWhitelisted ? 'safe' : ((rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
+                            (hasNewOneYearRegistrationRisk ? (riskScore >= 70 ? 'danger' : 'warning') :
                             (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
-                                (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown')),
+                                (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'))),
                         label: '註冊時間',
                         details: isOfficialTaiwanGov ? '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' : (isWhitelisted ? '受信賴白名單網域，不以憑證日期判定新註冊風險' : (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)')),
                         link: `https://who.is/whois/${domain}`
                     },
                     registrationPeriod: {
-                        status: hasNewOneYearRegistrationRisk ? 'danger' : (registrationPeriodDays !== null ? 'info' : 'unknown'),
+                        status: hasNewOneYearRegistrationRisk ? (riskScore >= 70 ? 'danger' : 'warning') : (registrationPeriodDays !== null ? 'info' : 'unknown'),
                         label: '註冊週期',
                         details: registrationPeriodDays !== null
                             ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}`

@@ -87,22 +87,44 @@ function hasNewOneYearRegistrationRisk({
 function hasMissingAllSecurityHeadersRisk({
     isWhitelisted = false,
     isSocialMedia = false,
-    securityHeadersData = {}
+    securityHeadersData = {},
+    hasSecondaryFraudEvidence = false,
+    hasTrustedValidation = false
 }) {
     return !isWhitelisted &&
         !isSocialMedia &&
         securityHeadersData.status === 'ok' &&
-        securityHeadersData.missingAll === true;
+        securityHeadersData.missingAll === true &&
+        hasSecondaryFraudEvidence &&
+        !hasTrustedValidation;
 }
 
 function hasMissingMxRecordsRisk({
     isWhitelisted = false,
     isSocialMedia = false,
-    mxInfo = {}
+    mxInfo = {},
+    hasSecondaryFraudEvidence = false,
+    hasTrustedValidation = false
 }) {
     return !isWhitelisted &&
         !isSocialMedia &&
-        mxInfo.status === 'missing';
+        mxInfo.status === 'missing' &&
+        hasSecondaryFraudEvidence &&
+        !hasTrustedValidation;
+}
+
+function applyTrustedValidationCap({
+    riskScore,
+    hasTrustedValidation = false,
+    hasConfirmedThreatSignal = false,
+    isWhitelisted = false,
+    isSocialMedia = false
+}) {
+    if (hasTrustedValidation && !hasConfirmedThreatSignal && !isWhitelisted && !isSocialMedia) {
+        if (riskScore >= 70) return Math.min(riskScore, 60);
+        if (riskScore >= 30) return Math.max(20, riskScore - 15);
+    }
+    return riskScore;
 }
 
 function extractNestedUrls(rawUrl) {
@@ -1479,7 +1501,7 @@ test('超過 6 個月或非 1 年註冊週期不應命中新規則', () => {
     }), false);
 });
 
-test('缺少全部現代 HTTP 安全標頭應視為高風險訊號', () => {
+test('缺少全部現代 HTTP 安全標頭本身只作為弱訊號', () => {
     const hasRisk = hasMissingAllSecurityHeadersRisk({
         securityHeadersData: {
             status: 'ok',
@@ -1488,9 +1510,30 @@ test('缺少全部現代 HTTP 安全標頭應視為高風險訊號', () => {
         }
     });
     const scanData = enforceFinalRiskConsistency({
-        riskScore: hasRisk ? 70 : 0,
+        riskScore: hasRisk ? 70 : 15,
         checks: {
-            securityHeaders: { status: hasRisk ? 'danger' : 'safe', details: '缺少全部現代 HTTP 安全標頭' }
+            securityHeaders: { status: hasRisk ? 'danger' : 'warning', details: '缺少全部現代 HTTP 安全標頭' }
+        }
+    });
+
+    assert.equal(hasRisk, false);
+    assert.equal(scanData.riskScore < 70, true);
+    assert.deepEqual(scanData.summaryReasons, []);
+});
+
+test('缺少全部現代 HTTP 安全標頭搭配次要詐騙佐證才升為高風險', () => {
+    const hasRisk = hasMissingAllSecurityHeadersRisk({
+        securityHeadersData: {
+            status: 'ok',
+            missingAll: true,
+            missing: ['Content-Security-Policy', 'X-Frame-Options', 'X-Content-Type-Options']
+        },
+        hasSecondaryFraudEvidence: true
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasRisk ? 70 : 15,
+        checks: {
+            securityHeaders: { status: hasRisk ? 'danger' : 'warning', details: '缺少全部現代 HTTP 安全標頭' }
         }
     });
 
@@ -1501,22 +1544,46 @@ test('缺少全部現代 HTTP 安全標頭應視為高風險訊號', () => {
 
 test('只缺部分安全標頭或白名單網域不應命中全部缺失規則', () => {
     assert.equal(hasMissingAllSecurityHeadersRisk({
-        securityHeadersData: { status: 'ok', missingAll: false, missing: ['Content-Security-Policy'] }
+        securityHeadersData: { status: 'ok', missingAll: false, missing: ['Content-Security-Policy'] },
+        hasSecondaryFraudEvidence: true
     }), false);
     assert.equal(hasMissingAllSecurityHeadersRisk({
         isWhitelisted: true,
-        securityHeadersData: { status: 'ok', missingAll: true }
+        securityHeadersData: { status: 'ok', missingAll: true },
+        hasSecondaryFraudEvidence: true
+    }), false);
+    assert.equal(hasMissingAllSecurityHeadersRisk({
+        securityHeadersData: { status: 'ok', missingAll: true },
+        hasSecondaryFraudEvidence: true,
+        hasTrustedValidation: true
     }), false);
 });
 
-test('缺少 MX 紀錄應視為高風險訊號', () => {
+test('缺少 MX 紀錄本身只作為弱訊號', () => {
     const hasRisk = hasMissingMxRecordsRisk({
         mxInfo: { status: 'missing', hasMx: false, records: [] }
     });
     const scanData = enforceFinalRiskConsistency({
-        riskScore: hasRisk ? 70 : 0,
+        riskScore: hasRisk ? 70 : 15,
         checks: {
-            mxRecords: { status: hasRisk ? 'danger' : 'safe', details: '未偵測到 MX 郵件紀錄' }
+            mxRecords: { status: hasRisk ? 'danger' : 'warning', details: '未偵測到 MX 郵件紀錄' }
+        }
+    });
+
+    assert.equal(hasRisk, false);
+    assert.equal(scanData.riskScore < 70, true);
+    assert.deepEqual(scanData.summaryReasons, []);
+});
+
+test('缺少 MX 紀錄搭配次要詐騙佐證才升為高風險', () => {
+    const hasRisk = hasMissingMxRecordsRisk({
+        mxInfo: { status: 'missing', hasMx: false, records: [] },
+        hasSecondaryFraudEvidence: true
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasRisk ? 70 : 15,
+        checks: {
+            mxRecords: { status: hasRisk ? 'danger' : 'warning', details: '未偵測到 MX 郵件紀錄' }
         }
     });
 
@@ -1527,12 +1594,33 @@ test('缺少 MX 紀錄應視為高風險訊號', () => {
 
 test('有 MX 或白名單網域不應命中缺少 MX 規則', () => {
     assert.equal(hasMissingMxRecordsRisk({
-        mxInfo: { status: 'ok', hasMx: true, records: ['10 mail.example.com.'] }
+        mxInfo: { status: 'ok', hasMx: true, records: ['10 mail.example.com.'] },
+        hasSecondaryFraudEvidence: true
     }), false);
     assert.equal(hasMissingMxRecordsRisk({
         isWhitelisted: true,
-        mxInfo: { status: 'missing', hasMx: false, records: [] }
+        mxInfo: { status: 'missing', hasMx: false, records: [] },
+        hasSecondaryFraudEvidence: true
     }), false);
+    assert.equal(hasMissingMxRecordsRisk({
+        mxInfo: { status: 'missing', hasMx: false, records: [] },
+        hasSecondaryFraudEvidence: true,
+        hasTrustedValidation: true
+    }), false);
+});
+
+test('可信佐證會把未確認詐騙的高分結果壓回中風險', () => {
+    assert.equal(applyTrustedValidationCap({
+        riskScore: 85,
+        hasTrustedValidation: true,
+        hasConfirmedThreatSignal: false
+    }), 60);
+
+    assert.equal(applyTrustedValidationCap({
+        riskScore: 85,
+        hasTrustedValidation: true,
+        hasConfirmedThreatSignal: true
+    }), 85);
 });
 
 test('官方警示資料完整網址命中應直接升為最高風險', () => {

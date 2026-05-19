@@ -112,6 +112,36 @@ function parseRegistrarFromText(text) {
     return null;
 }
 
+function parseRegistrantFromText(text) {
+    const source = String(text || '');
+    const nameRegexes = [
+        /(?:Registrant Name|Domain Holder|Holder|Registrant):?\s*([^\r\n<]+)/i,
+        /(?:申請人|註冊人|注册人|網域名稱持有人|网域名称持有人):?\s*([^\r\n<]+)/i
+    ];
+    const orgRegexes = [
+        /(?:Registrant Organization|Registrant Org|Organization|Registrant Company):?\s*([^\r\n<]+)/i,
+        /(?:申請人組織|註冊人組織|注册人组织|組織名稱|组织名称):?\s*([^\r\n<]+)/i
+    ];
+
+    let registrantName = null;
+    let registrantOrganization = null;
+    for (const regex of nameRegexes) {
+        const value = cleanRegistrarName(source.match(regex)?.[1]);
+        if (value) {
+            registrantName = value;
+            break;
+        }
+    }
+    for (const regex of orgRegexes) {
+        const value = cleanRegistrarName(source.match(regex)?.[1]);
+        if (value) {
+            registrantOrganization = value;
+            break;
+        }
+    }
+    return { registrantName, registrantOrganization };
+}
+
 function getVcardName(entity) {
     if (!entity?.vcardArray || !Array.isArray(entity.vcardArray) || entity.vcardArray.length < 2) return null;
     const fnEntry = entity.vcardArray[1]?.find(item => item[0] === 'fn');
@@ -144,6 +174,30 @@ function getRegistrarName(data) {
     }
 
     return null;
+}
+
+function getRegistrantInfo(data) {
+    if (!data || typeof data !== 'object') return { registrantName: null, registrantOrganization: null };
+
+    let registrantName =
+        cleanRegistrarName(data.registrantName || data.registrant || data.domainHolder || data.holder);
+    let registrantOrganization =
+        cleanRegistrarName(data.registrantOrganization || data.registrantOrg || data.organization);
+
+    const entities = Array.isArray(data.entities) ? data.entities : [];
+    const registrantEntity = entities.find(entity =>
+        Array.isArray(entity.roles) &&
+        entity.roles.some(role => /registrant|holder|owner/i.test(role))
+    );
+    if (registrantEntity) {
+        registrantName = registrantName || getVcardName(registrantEntity) || cleanRegistrarName(registrantEntity?.name || registrantEntity?.handle);
+        if (registrantEntity?.vcardArray && Array.isArray(registrantEntity.vcardArray) && registrantEntity.vcardArray.length > 1) {
+            const orgEntry = registrantEntity.vcardArray[1]?.find(item => item[0] === 'org');
+            registrantOrganization = registrantOrganization || cleanRegistrarName(orgEntry?.[3]);
+        }
+    }
+
+    return { registrantName, registrantOrganization };
 }
 
 function getRegistrationDate(data) {
@@ -195,6 +249,16 @@ function withRegistrarName(data, registrarName) {
     return output;
 }
 
+function withRegistrantInfo(data, info = {}) {
+    const registrantName = cleanRegistrarName(info.registrantName);
+    const registrantOrganization = cleanRegistrarName(info.registrantOrganization);
+    if (!registrantName && !registrantOrganization) return data;
+    const output = data && typeof data === 'object' ? { ...data } : {};
+    if (registrantName && !output.registrantName) output.registrantName = registrantName;
+    if (registrantOrganization && !output.registrantOrganization) output.registrantOrganization = registrantOrganization;
+    return output;
+}
+
 function mergeDomainData(primary, fallback) {
     let output = primary && typeof primary === 'object' ? { ...primary } : {};
     const fallbackDate = getRegistrationDate(fallback);
@@ -208,6 +272,12 @@ function mergeDomainData(primary, fallback) {
     const fallbackRegistrar = getRegistrarName(fallback);
     if (fallbackRegistrar && !getRegistrarName(output)) {
         output = withRegistrarName(output, fallbackRegistrar);
+    }
+    const fallbackRegistrant = getRegistrantInfo(fallback);
+    const currentRegistrant = getRegistrantInfo(output);
+    if ((fallbackRegistrant.registrantName || fallbackRegistrant.registrantOrganization) &&
+        (!currentRegistrant.registrantName && !currentRegistrant.registrantOrganization)) {
+        output = withRegistrantInfo(output, fallbackRegistrant);
     }
     if (!output.source && fallback?.source) output.source = fallback.source;
     return output;
@@ -305,11 +375,13 @@ async function fetchWhoisSocket(domain, tld) {
         const date = parseDateFromText(responseText);
         const expirationDate = parseExpirationDateFromText(responseText);
         const registrarName = parseRegistrarFromText(responseText);
-        if (date || expirationDate || registrarName) {
+        const registrantInfo = parseRegistrantFromText(responseText);
+        if (date || expirationDate || registrarName || registrantInfo.registrantName || registrantInfo.registrantOrganization) {
             let output = { events: [], source: "tcp-socket" };
             if (date) output = withRegistrationEvent(output, date, "tcp-socket");
             if (expirationDate) output = withExpirationEvent(output, expirationDate, "tcp-socket");
-            return withRegistrarName(output, registrarName);
+            output = withRegistrarName(output, registrarName);
+            return withRegistrantInfo(output, registrantInfo);
         }
         return null;
     } catch (e) { return null; }
@@ -345,11 +417,13 @@ async function fetchTwnicWeb(domain) {
         const date = parseDateFromText(html);
         const expirationDate = parseExpirationDateFromText(html);
         const registrarName = parseRegistrarFromText(html);
-        if (date || expirationDate || registrarName) {
+        const registrantInfo = parseRegistrantFromText(html);
+        if (date || expirationDate || registrarName || registrantInfo.registrantName || registrantInfo.registrantOrganization) {
             let output = { events: [], source: "twnic-web" };
             if (date) output = withRegistrationEvent(output, date, "twnic-web");
             if (expirationDate) output = withExpirationEvent(output, expirationDate, "twnic-web");
-            return withRegistrarName(output, registrarName);
+            output = withRegistrarName(output, registrarName);
+            return withRegistrantInfo(output, registrantInfo);
         }
     }
     return null;
@@ -366,11 +440,13 @@ async function fetchWhoIsWeb(domain) {
         const date = parseDateFromText(html);
         const expirationDate = parseExpirationDateFromText(html);
         const registrarName = parseRegistrarFromText(html);
-        if (date || expirationDate || registrarName) {
+        const registrantInfo = parseRegistrantFromText(html);
+        if (date || expirationDate || registrarName || registrantInfo.registrantName || registrantInfo.registrantOrganization) {
             let output = { events: [], source: "whois-web" };
             if (date) output = withRegistrationEvent(output, date, "whois-web");
             if (expirationDate) output = withExpirationEvent(output, expirationDate, "whois-web");
-            return withRegistrarName(output, registrarName);
+            output = withRegistrarName(output, registrarName);
+            return withRegistrantInfo(output, registrantInfo);
         }
     }
     return null;
