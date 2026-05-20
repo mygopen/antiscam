@@ -129,7 +129,10 @@ window.RISK_CONFIG = {
         'jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com', 'bootstrapcdn.com',
         'jquery.com', 'facebook.net', 'youtube.com', 'stripe.com', 'sentry.io',
         'intercom.io', 'intercomcdn.com', 'cloudfront.net', 'imgix.net',
-        'cdnjs.com', 'hotjar.com', 'clarity.ms', 'yandex.ru'
+        'cdnjs.com', 'hotjar.com', 'clarity.ms', 'yandex.ru',
+        'ecpay.com.tw', 'newebpay.com', 'spgateway.com', 'opay.tw',
+        'payuni.com.tw', 'paypal.com', 'shoplineapp.com', 'myshopify.com',
+        'woocommerce.com'
     ],
     protectedBrands: [
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
