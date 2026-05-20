@@ -49,6 +49,10 @@ window.RISK_CONFIG = {
         'namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy',
         'gmo', 'reg.ru', 'dynadot', 'porkbun', 'tucows'
     ],
+    trustedTaiwanRegistrars: [
+        'net-chinese', 'net chinese', '網路中文', 'hinet', 'twnic',
+        'pchome', 'aptg', 'taiwan fixed network', 'chief telecom'
+    ],
     suspiciousDomainFragments: [
         '-tw', '-com', '-online'
     ],

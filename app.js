@@ -218,6 +218,10 @@ const { useState, useEffect, useRef } = React;
             pageBrandSignals: { matched: false, brandName: null, keyword: null, source: null },
             urgencySignals: { count: 0, examples: [] },
             trustSignals: { score: 0, matched: false, reasons: [] },
+            seoSignals: { score: 0, matched: false, reasons: [] },
+            languageSignals: { status: 'unknown', matched: false, details: '無法判定頁面語言一致性' },
+            businessIdentitySignals: { score: 0, matched: false, names: [], hasTaxId: false, reasons: [] },
+            lineOfficialSignals: { matched: false, urls: [], reason: '' },
             ecommerceTrustSignals: { score: 0, matched: false, reasons: [], categories: [] },
             shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasMerchantInfo: false }
         });
@@ -227,6 +231,24 @@ const { useState, useEffect, useRef } = React;
             const variants = [raw];
             try { variants.push(decodeURIComponent(raw)); } catch (e) { }
             return [...new Set(variants)].join('\n').toLowerCase();
+        };
+
+        const normalizeBusinessName = (value) => {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/公司名稱|營業人名稱|商店名稱|企業名稱|申請人|註冊人|注册人/g, '')
+                .replace(/[^\p{Script=Han}a-z0-9]/gu, '');
+        };
+
+        const extractBusinessNames = (text) => {
+            const source = String(text || '');
+            const matches = [];
+            const regex = /(?:公司名稱|營業人名稱|商店名稱|企業名稱)?[:：\s　]*([\u4e00-\u9fffA-Za-z0-9・]{2,32}(?:股份有限公司|有限公司|企業社|商行|工作室))/g;
+            let match;
+            while ((match = regex.exec(source)) !== null) {
+                matches.push(match[1].trim());
+            }
+            return [...new Set(matches)].slice(0, 6);
         };
 
         const analyzeSuspiciousDownloadPath = (fullUrl) => {
@@ -548,6 +570,97 @@ const { useState, useEffect, useRef } = React;
             };
         };
 
+        const analyzeSeoSignals = (doc, rawText = '') => {
+            const text = String(rawText || '');
+            const hasTitle = !!doc?.title && doc.title.trim().length >= 6;
+            const hasDescription = !!doc?.querySelector('meta[name="description"][content]');
+            const ogTags = doc ? doc.querySelectorAll('meta[property^="og:"][content]').length : 0;
+            const hasCanonical = !!doc?.querySelector('link[rel="canonical"][href]');
+            const hasStructuredData = !!doc?.querySelector('script[type="application/ld+json"]') || /schema\.org/i.test(text);
+            const reasons = [];
+            if (hasTitle && hasDescription) reasons.push('具備標題與 meta description');
+            if (ogTags >= 2) reasons.push('具備 Open Graph 社群分享 metadata');
+            if (hasCanonical) reasons.push('具備 canonical URL');
+            if (hasStructuredData) reasons.push('具備結構化資料或 schema.org 訊號');
+            const score =
+                (hasTitle ? 10 : 0) +
+                (hasDescription ? 15 : 0) +
+                (ogTags >= 2 ? 20 : 0) +
+                (hasCanonical ? 10 : 0) +
+                (hasStructuredData ? 10 : 0);
+            return {
+                score: Math.min(65, score),
+                matched: score >= 35,
+                reasons
+            };
+        };
+
+        const analyzeLanguageSignals = (doc, rawText = '', fullUrl = '') => {
+            let hostname = '';
+            try { hostname = new URL(fullUrl).hostname.toLowerCase(); } catch (e) { }
+            const htmlLang = (doc?.documentElement?.getAttribute('lang') || '').toLowerCase();
+            const visibleText = String(doc?.body?.textContent || rawText || '').replace(/\s+/g, '');
+            const zhCount = (visibleText.match(/[\u4e00-\u9fff]/g) || []).length;
+            const latinCount = (visibleText.match(/[a-z]/gi) || []).length;
+            const dominantLanguage = zhCount >= 30 && zhCount >= latinCount * 0.2 ? 'zh' : (latinCount >= 80 ? 'latin' : 'unknown');
+            const langDeclaresZh = /^zh|tw|hant/.test(htmlLang);
+            const langDeclaresForeign = /^(en|ja|ko|vi|th|id|ru|fr|de|es)/.test(htmlLang);
+            const isTaiwanDomain = hostname.endsWith('.tw');
+            const mismatch = (dominantLanguage === 'zh' && langDeclaresForeign) ||
+                (isTaiwanDomain && htmlLang && !langDeclaresZh && dominantLanguage === 'zh');
+            const matched = isTaiwanDomain && dominantLanguage === 'zh' && (!htmlLang || langDeclaresZh);
+            return {
+                status: mismatch ? 'warning' : (matched ? 'safe' : 'unknown'),
+                matched,
+                details: mismatch
+                    ? `頁面主要為中文，但 HTML lang="${htmlLang}"，需留意語言標記不一致`
+                    : (matched ? `台灣網域頁面語言與 HTML 語系一致${htmlLang ? ` (${htmlLang})` : ''}` : '未取得足夠語言一致性訊號'),
+                dominantLanguage,
+                htmlLang
+            };
+        };
+
+        const analyzeBusinessIdentitySignals = (doc, rawText = '') => {
+            const source = [rawText || '', doc?.body?.textContent || '', doc?.title || ''].join('\n');
+            const names = extractBusinessNames(source);
+            const hasTaxId = /(?:統一編號|統編|公司統編|營利事業統一編號)[:：\s　]*\d{8}/.test(source);
+            const reasons = [];
+            if (names.length > 0) reasons.push(`頁面揭露公司/商家名稱：${names.slice(0, 2).join('、')}`);
+            if (hasTaxId) reasons.push('頁面揭露統一編號');
+            const score = Math.min(45, (names.length > 0 ? 25 : 0) + (hasTaxId ? 20 : 0));
+            return {
+                score,
+                matched: score >= 25,
+                names,
+                hasTaxId,
+                reasons
+            };
+        };
+
+        const analyzeLineOfficialSignals = (doc, rawText = '', fullUrl = '') => {
+            const urls = [];
+            if (doc) {
+                doc.querySelectorAll('a[href]').forEach(el => {
+                    const href = el.getAttribute('href') || '';
+                    try {
+                        const parsed = new URL(href, fullUrl);
+                        if (/^(lin\.ee|line\.me)$/i.test(parsed.hostname.replace(/^www\./, ''))) {
+                            urls.push(parsed.href);
+                        }
+                    } catch (e) { }
+                });
+            }
+            const haystack = decodeSignalText(`${rawText}\n${urls.join('\n')}`);
+            const hasOfficialContext = /(官方line|line官方|官方帳號|官方賬號|line客服|客服line|@[\w.-]{3,})/i.test(haystack);
+            return {
+                matched: urls.length > 0 && hasOfficialContext,
+                urls: [...new Set(urls)].slice(0, 3),
+                reason: urls.length > 0
+                    ? (hasOfficialContext ? '偵測到 LINE 官方帳號或客服語境連結' : '偵測到 LINE 連結，但缺少官方帳號語境')
+                    : '未偵測到 LINE 官方帳號連結'
+            };
+        };
+
         const analyzeEcommerceTrustSignals = (doc, rawText = '', fullUrl = '') => {
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname.toLowerCase(); } catch (e) { }
@@ -773,6 +886,10 @@ const { useState, useEffect, useRef } = React;
                 pageBrandSignals: analyzePageBrandSignals(doc, fullUrl, rawText),
                 urgencySignals: analyzeUrgencySignals(doc, rawText),
                 trustSignals: analyzeTrustSignals(doc, rawText, fullUrl),
+                seoSignals: analyzeSeoSignals(doc, rawText),
+                languageSignals: analyzeLanguageSignals(doc, rawText, fullUrl),
+                businessIdentitySignals: analyzeBusinessIdentitySignals(doc, rawText),
+                lineOfficialSignals: analyzeLineOfficialSignals(doc, rawText, fullUrl),
                 ecommerceTrustSignals: analyzeEcommerceTrustSignals(doc, rawText, fullUrl),
                 shoppingScamSignals: analyzeShoppingScamSignals(doc, rawText, fullUrl)
             };
@@ -807,6 +924,16 @@ const { useState, useEffect, useRef } = React;
                 return await res.json();
             } catch (err) {
                 return { status: 'unavailable', missingAll: false, missing: [] };
+            }
+        };
+
+        const fetchSiteSeoData = async (fullUrl) => {
+            try {
+                const res = await fetch(`/api/site-seo?url=${encodeURIComponent(fullUrl)}`);
+                if (!res.ok) return { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} };
+                return await res.json();
+            } catch (err) {
+                return { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} };
             }
         };
 
@@ -1203,10 +1330,11 @@ const { useState, useEffect, useRef } = React;
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, networkInfoData, securityHeadersData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
+            const [geoLocationData, networkInfoData, securityHeadersData, siteSeoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
+                withTimeout(fetchSiteSeoData(fullUrl), 5000, { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} }),
                 withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
@@ -1244,7 +1372,7 @@ const { useState, useEffect, useRef } = React;
 
             // Tranco 查詢失敗不等於低信任；只有明確查無排名才視為低流量。
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
-            const isLowTraffic = trancoStatus === 'unranked' && !isHighTraffic;
+            let isLowTraffic = trancoStatus === 'unranked' && !isHighTraffic;
             const isUnknownTraffic = trancoStatus === 'unavailable' && !isHighTraffic;
             const safeShorteners = getRiskList('safeShorteners');
 
@@ -1397,6 +1525,10 @@ const { useState, useEffect, useRef } = React;
             const suspiciousDownloadPathCount = downloadSignals.suspiciousPathFragments?.length || 0;
             const shoppingScamSignals = pageSignals.shoppingScamSignals || createEmptyPageSignals().shoppingScamSignals;
             const ecommerceTrustSignals = pageSignals.ecommerceTrustSignals || createEmptyPageSignals().ecommerceTrustSignals;
+            const seoSignals = pageSignals.seoSignals || createEmptyPageSignals().seoSignals;
+            const languageSignals = pageSignals.languageSignals || createEmptyPageSignals().languageSignals;
+            const businessIdentitySignals = pageSignals.businessIdentitySignals || createEmptyPageSignals().businessIdentitySignals;
+            const lineOfficialSignals = pageSignals.lineOfficialSignals || createEmptyPageSignals().lineOfficialSignals;
             const officialAlertMatches = officialAlertData?.matches || [];
             const officialAlertMatch = officialAlertMatches[0] || null;
             const hasOfficialAlert = !isWhitelisted && !!officialAlertData?.matched;
@@ -1437,6 +1569,25 @@ const { useState, useEffect, useRef } = React;
             const certIssuerText = certData?.issuerName ? `；簽發者: ${certData.issuerName}` : '';
             const certExpiryText = certData?.notAfter ? `；有效至: ${new Date(certData.notAfter).toISOString().split('T')[0]}` : '';
             const isNewDomainWithNewCertificate = isVeryNewDomain && isVeryNewCertificate && !isWhitelisted;
+            const normalizedRegistrantTextForBusiness = normalizeBusinessName([
+                rdapData.registrantName,
+                rdapData.registrantOrganization
+            ].filter(Boolean).join(' '));
+            const matchedBusinessEntityName = (businessIdentitySignals.names || []).find(name => {
+                const normalizedName = normalizeBusinessName(name);
+                return normalizedName &&
+                    normalizedRegistrantTextForBusiness &&
+                    (normalizedRegistrantTextForBusiness.includes(normalizedName) ||
+                        normalizedName.includes(normalizedRegistrantTextForBusiness));
+            }) || '';
+            const hasVerifiedBusinessEntity = !!matchedBusinessEntityName ||
+                (!!normalizedRegistrantTextForBusiness && businessIdentitySignals.hasTaxId && businessIdentitySignals.names?.length > 0);
+            const trustedTaiwanRegistrars = getRiskList('trustedTaiwanRegistrars');
+            const isTrustedTaiwanRegistrar = domain.endsWith('.tw') &&
+                registrarName &&
+                trustedTaiwanRegistrars.some(r => registrarName.toLowerCase().includes(r));
+            const combinedSeoScore = Math.min(100, (seoSignals.score || 0) + Math.min(60, siteSeoData?.score || 0));
+            const hasMatureSeoSignals = combinedSeoScore >= 60 || (seoSignals.matched && siteSeoData?.matched);
             const hasPageBrandMismatch = !isWhitelisted && !hasBrandSimilarity && !!pageBrandSignals.matched;
             const hasOfficialFlowPathSignal = !isWhitelisted && hasOfficialFlowPath(fullUrl);
             const hasUrgencyScamSignal = !isWhitelisted && (urgencySignals.count || 0) > 0;
@@ -1467,6 +1618,16 @@ const { useState, useEffect, useRef } = React;
                 !isFakeService &&
                 !hasDisposableRootLabel &&
                 !hasSuspiciousTempDomain;
+            const hasSmallBusinessTrustContext = hasStrongEcommerceValidation ||
+                hasVerifiedBusinessEntity ||
+                isTrustedTaiwanRegistrar ||
+                hasMatureSeoSignals ||
+                ((isTrustedTLD || domain.endsWith('.tw')) && domainAgeDays !== null && domainAgeDays >= 365);
+            if (isLowTraffic && hasSmallBusinessTrustContext) {
+                isLowTraffic = false;
+                trafficStatus = 'info';
+                trafficDetails = '未進入 Tranco 全球熱門排名；但具備中小型商家/台灣網域可信佐證，不作為風險加權';
+            }
             const hasShoppingLandingUrlRisk = !isWhitelisted &&
                 !hasStrongEcommerceValidation &&
                 hasSuspiciousLandingParams &&
@@ -1577,9 +1738,19 @@ const { useState, useEffect, useRef } = React;
             };
             addTrustSignal(isOfficialTaiwanGov, 100, '台灣政府官方網域');
             addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
+            addTrustSignal(domain.endsWith('.com.tw'), 20, '.com.tw 商業網域具 TWNIC 註冊審核脈絡');
             addTrustSignal((isTrustedTLD || domain.endsWith('.tw')) && domainAgeDays !== null && domainAgeDays >= 365, 25, '台灣常見網域且註冊已超過 1 年');
+            addTrustSignal(hasMatureSeoSignals, 25, `成熟 SEO 訊號：${[
+                ...(seoSignals.reasons || []),
+                siteSeoData?.robots?.exists ? 'robots.txt 可讀' : '',
+                siteSeoData?.sitemap?.exists ? 'sitemap.xml 可讀' : ''
+            ].filter(Boolean).slice(0, 3).join('、') || '具備 metadata、robots 或 sitemap'}`);
+            addTrustSignal(languageSignals.matched, 15, languageSignals.details || '頁面語言與台灣網域一致');
             addTrustSignal(pageTrustSignals.matched, pageTrustSignals.score || 20, pageTrustSignals.reasons?.slice(0, 2).join('、') || '頁面語意與網域相符');
             addTrustSignal(hasStrongEcommerceValidation, 35, `正規電商佐證：${ecommerceTrustSignals.reasons?.slice(0, 2).join('、') || '購物車、聯絡資訊或平台足跡完整'}`);
+            addTrustSignal(hasVerifiedBusinessEntity, 40, matchedBusinessEntityName ? `頁面商家名稱與 WHOIS/RDAP 註冊者相符：${matchedBusinessEntityName}` : '頁面商家資訊與 WHOIS/RDAP 註冊資料具一致性');
+            addTrustSignal(isTrustedTaiwanRegistrar, 15, `台灣常見註冊商：${registrarName}`);
+            addTrustSignal(lineOfficialSignals.matched && (hasStrongEcommerceValidation || hasVerifiedBusinessEntity), 10, 'LINE 官方帳號/客服連結與商家脈絡一致');
             addTrustSignal(hasRegistrantDomainMatch || hasTaiwanOfficialRegistrant, 35, 'WHOIS/RDAP 註冊資料與網域或官方語意相符');
             addTrustSignal(hasStableHttpsCertificate, 15, `HTTPS 憑證由可信 CA 簽發${certData?.issuerName ? ` (${certData.issuerName})` : ''}`);
             addTrustSignal(mxInfo.status === 'ok', 10, '已設定 MX 郵件紀錄');
@@ -2119,6 +2290,40 @@ const { useState, useEffect, useRef } = React;
                             ? `${ecommerceTrustSignals.reasons.slice(0, 4).join('；')}（電商佐證分數 ${ecommerceTrustSignals.score}）${hasStrongEcommerceValidation ? '，不單獨以購物頁特徵判為高風險' : '，仍需搭配其他風險指標判斷'}`
                             : '未取得足夠購物車、電商平台、聯絡資訊或 CMS 足跡佐證'
                     },
+                    seoMaturity: {
+                        status: hasMatureSeoSignals ? 'safe' : (combinedSeoScore > 0 ? 'info' : 'unknown'),
+                        label: 'SEO 成熟度',
+                        details: [
+                            ...(seoSignals.reasons || []),
+                            siteSeoData?.robots?.exists ? `robots.txt 可讀${siteSeoData.robots.hasRules ? '且含標準規則' : ''}` : '',
+                            siteSeoData?.sitemap?.exists ? `sitemap.xml 可讀${siteSeoData.sitemap.locCount ? `，約 ${siteSeoData.sitemap.locCount} 筆 loc` : ''}` : ''
+                        ].filter(Boolean).length
+                            ? `${[
+                                ...(seoSignals.reasons || []),
+                                siteSeoData?.robots?.exists ? `robots.txt 可讀${siteSeoData.robots.hasRules ? '且含標準規則' : ''}` : '',
+                                siteSeoData?.sitemap?.exists ? `sitemap.xml 可讀${siteSeoData.sitemap.locCount ? `，約 ${siteSeoData.sitemap.locCount} 筆 loc` : ''}` : ''
+                            ].filter(Boolean).slice(0, 5).join('；')}（SEO 佐證分數 ${combinedSeoScore}）`
+                            : '未取得足夠 SEO metadata、robots.txt 或 sitemap.xml 佐證'
+                    },
+                    languageConsistency: {
+                        status: languageSignals.status,
+                        label: '語言一致性',
+                        details: languageSignals.details
+                    },
+                    businessIdentity: {
+                        status: hasVerifiedBusinessEntity ? 'safe' : (businessIdentitySignals.matched ? 'info' : 'unknown'),
+                        label: '商家實體一致性',
+                        details: hasVerifiedBusinessEntity
+                            ? (matchedBusinessEntityName ? `頁面商家名稱「${matchedBusinessEntityName}」與 WHOIS/RDAP 註冊者相符` : '頁面揭露商家資訊，且 WHOIS/RDAP 註冊資料具一致性')
+                            : (businessIdentitySignals.reasons?.length ? `${businessIdentitySignals.reasons.join('；')}；尚未能與 WHOIS/RDAP 註冊者明確比對` : '未取得足夠公司名稱、統一編號或 WHOIS/RDAP 註冊者比對資料')
+                    },
+                    lineOfficial: {
+                        status: lineOfficialSignals.matched ? (hasStrongEcommerceValidation || hasVerifiedBusinessEntity ? 'info' : 'warning') : 'safe',
+                        label: 'LINE 官方帳號脈絡',
+                        details: lineOfficialSignals.matched
+                            ? `${lineOfficialSignals.reason}${lineOfficialSignals.urls?.length ? `：${lineOfficialSignals.urls.join('、')}` : ''}${(hasStrongEcommerceValidation || hasVerifiedBusinessEntity) ? '；已搭配商家/電商佐證，不單獨視為高風險' : '；缺少商家佐證時仍需留意'}`
+                            : lineOfficialSignals.reason
+                    },
                     securityHeaders: {
                         status: hasMissingAllSecurityHeaders ? 'danger' : (hasMissingAllSecurityHeadersRaw ? 'warning' : (securityHeadersData?.status === 'ok' ? 'safe' : 'unknown')),
                         label: 'HTTP 安全標頭',
@@ -2160,7 +2365,7 @@ const { useState, useEffect, useRef } = React;
                         label: 'HTTPS 憑證時間',
                         details: certData?.notBefore ? `憑證最近核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${certExpiryText}${certIssuerText}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
                     },
-                    registrar: { status: isHighRiskRegistrar ? 'warning' : 'safe', label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : `註冊商: ${registrarName}`) : '無法辨識註冊商' },
+                    registrar: { status: isHighRiskRegistrar ? 'warning' : (isTrustedTaiwanRegistrar ? 'safe' : 'safe'), label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : (isTrustedTaiwanRegistrar ? `台灣常見註冊商: ${registrarName}` : `註冊商: ${registrarName}`)) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },

@@ -970,6 +970,83 @@ function analyzeEcommerceTrustSignals({ html = '', url }) {
     };
 }
 
+function analyzeSeoSignals({ html = '', siteSeoData = {} }) {
+    const hasTitle = /<title>[^<]{6,}<\/title>/i.test(html);
+    const hasDescription = /<meta[^>]+name=["']description["'][^>]+content=/i.test(html);
+    const ogTags = (html.match(/<meta[^>]+property=["']og:[^"']+["'][^>]+content=/gi) || []).length;
+    const hasCanonical = /<link[^>]+rel=["']canonical["'][^>]+href=/i.test(html);
+    const pageScore = (hasTitle ? 10 : 0) + (hasDescription ? 15 : 0) + (ogTags >= 2 ? 20 : 0) + (hasCanonical ? 10 : 0);
+    const combinedScore = Math.min(100, pageScore + Math.min(60, siteSeoData.score || 0));
+    return {
+        combinedScore,
+        matched: combinedScore >= 60 || (pageScore >= 35 && siteSeoData.matched)
+    };
+}
+
+function analyzeLanguageSignals({ html = '', url }) {
+    const hostname = new URL(url).hostname.toLowerCase();
+    const langMatch = html.match(/<html[^>]+lang=["']([^"']+)["']/i);
+    const htmlLang = (langMatch?.[1] || '').toLowerCase();
+    const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+    const zhCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+    const latinCount = (text.match(/[a-z]/gi) || []).length;
+    const dominantLanguage = zhCount >= 30 && zhCount >= latinCount * 0.2 ? 'zh' : (latinCount >= 80 ? 'latin' : 'unknown');
+    const langDeclaresZh = /^zh|tw|hant/.test(htmlLang);
+    const langDeclaresForeign = /^(en|ja|ko|vi|th|id|ru|fr|de|es)/.test(htmlLang);
+    const isTaiwanDomain = hostname.endsWith('.tw');
+    const mismatch = (dominantLanguage === 'zh' && langDeclaresForeign) ||
+        (isTaiwanDomain && htmlLang && !langDeclaresZh && dominantLanguage === 'zh');
+    return {
+        status: mismatch ? 'warning' : (isTaiwanDomain && dominantLanguage === 'zh' && (!htmlLang || langDeclaresZh) ? 'safe' : 'unknown'),
+        matched: isTaiwanDomain && dominantLanguage === 'zh' && (!htmlLang || langDeclaresZh)
+    };
+}
+
+function analyzeLineOfficialSignals({ html = '' }) {
+    const urls = [...html.matchAll(/href=["']([^"']*(?:lin\.ee|line\.me)[^"']*)["']/gi)].map(match => match[1]);
+    const haystack = decodeSignalText(`${html}\n${urls.join('\n')}`);
+    const hasOfficialContext = /(官方line|line官方|官方帳號|官方賬號|line客服|客服line|@[\w.-]{3,})/i.test(haystack);
+    return {
+        matched: urls.length > 0 && hasOfficialContext,
+        urls
+    };
+}
+
+function normalizeBusinessName(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/公司名稱|營業人名稱|商店名稱|企業名稱|申請人|註冊人|注册人/g, '')
+        .replace(/[^\u4e00-\u9fffa-z0-9]/g, '');
+}
+
+function analyzeBusinessIdentitySignals({ html = '', registrantName = '', registrantOrganization = '' }) {
+    const names = [];
+    const regex = /(?:公司名稱|營業人名稱|商店名稱|企業名稱)?[:：\s　]*([\u4e00-\u9fffA-Za-z0-9・]{2,32}(?:股份有限公司|有限公司|企業社|商行|工作室))/g;
+    let match;
+    while ((match = regex.exec(html)) !== null) names.push(match[1].trim());
+    const hasTaxId = /(?:統一編號|統編|公司統編|營利事業統一編號)[:：\s　]*\d{8}/.test(html);
+    const registrant = normalizeBusinessName(`${registrantName} ${registrantOrganization}`);
+    const matchedName = [...new Set(names)].find(name => {
+        const normalizedName = normalizeBusinessName(name);
+        return normalizedName && registrant && (registrant.includes(normalizedName) || normalizedName.includes(registrant));
+    });
+    return {
+        matched: !!matchedName || (!!registrant && hasTaxId && names.length > 0),
+        matchedName,
+        hasTaxId
+    };
+}
+
+function isTrustedTaiwanRegistrar({ domain, registrarName }) {
+    return domain.endsWith('.tw') &&
+        !!registrarName &&
+        riskConfig.trustedTaiwanRegistrars.some(item => registrarName.toLowerCase().includes(item));
+}
+
+function neutralizeLowTrafficForTrustedSme({ isLowTraffic, hasSmallBusinessTrustContext }) {
+    return isLowTraffic && hasSmallBusinessTrustContext ? false : isLowTraffic;
+}
+
 test('白名單支援完全符合與子網域符合', () => {
     const whitelist = ['example.com', 'trusted.org.tw'];
 
@@ -1439,6 +1516,80 @@ test('正規電商佐證會避免購物頁特徵直接升為高風險', () => {
     assert.ok(ecommerceSignals.categories.includes('platform'));
     assert.ok(ecommerceSignals.categories.includes('cart'));
     assert.equal(hasShoppingScamSignal, false);
+});
+
+test('成熟 SEO、robots 與 sitemap 可作為可信佐證', () => {
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>簡單生活家具官方商城</title>
+                <meta name="description" content="簡單生活官方商城">
+                <meta property="og:title" content="簡單生活家具">
+                <meta property="og:site_name" content="SIMPLITE">
+                <link rel="canonical" href="https://www.simplite.com.tw/">
+            </head>
+            <body>簡輕家居股份有限公司官方網站</body>
+        </html>`;
+    const seo = analyzeSeoSignals({
+        html,
+        siteSeoData: {
+            matched: true,
+            score: 60,
+            robots: { exists: true },
+            sitemap: { exists: true }
+        }
+    });
+
+    assert.equal(seo.matched, true);
+    assert.equal(seo.combinedScore >= 60, true);
+});
+
+test('台灣商家語言一致性可作為可信佐證，語言標記不一致則警示', () => {
+    const text = '簡輕家居股份有限公司官方商城，提供家具、燈飾、生活用品、配送服務、退換貨政策與客服資訊。';
+    const zhHtml = `<html lang="zh-TW"><body>${text}</body></html>`;
+    const mismatchHtml = `<html lang="en"><body>${text}</body></html>`;
+
+    assert.equal(analyzeLanguageSignals({ html: zhHtml, url: 'https://www.simplite.com.tw' }).matched, true);
+    assert.equal(analyzeLanguageSignals({ html: mismatchHtml, url: 'https://www.simplite.com.tw' }).status, 'warning');
+});
+
+test('頁面商家名稱與 WHOIS/RDAP 註冊者相符時應形成可信佐證', () => {
+    const result = analyzeBusinessIdentitySignals({
+        html: '<p>公司名稱：簡輕家居股份有限公司</p><p>統一編號：12345678</p>',
+        registrantOrganization: '簡輕家居股份有限公司'
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.matchedName, '簡輕家居股份有限公司');
+    assert.equal(result.hasTaxId, true);
+});
+
+test('NET-CHINESE 等台灣常見註冊商應被視為可信佐證而非高風險註冊商', () => {
+    assert.equal(isTrustedTaiwanRegistrar({
+        domain: 'simplite.com.tw',
+        registrarName: 'NET-CHINESE CO., LTD.'
+    }), true);
+    assert.equal(riskConfig.highRiskRegistrars.some(item => 'net-chinese co., ltd.'.includes(item)), false);
+});
+
+test('LINE 官方帳號連結搭配商家脈絡應是混合訊號而非單獨高風險', () => {
+    const line = analyzeLineOfficialSignals({
+        html: '<p>官方LINE客服提供售後服務</p><a href="https://lin.ee/example">加入官方LINE</a>'
+    });
+    const hasBusinessContext = true;
+    const isHighRiskByLineOnly = line.matched && !hasBusinessContext;
+
+    assert.equal(line.matched, true);
+    assert.equal(isHighRiskByLineOnly, false);
+});
+
+test('未進入 Tranco 全球排名但有台灣商家可信佐證時不應當成低流量風險', () => {
+    const isLowTraffic = neutralizeLowTrafficForTrustedSme({
+        isLowTraffic: true,
+        hasSmallBusinessTrustContext: true
+    });
+
+    assert.equal(isLowTraffic, false);
 });
 
 test('缺少電商佐證的一頁式購物頁仍會維持高風險', () => {
