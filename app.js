@@ -83,7 +83,62 @@ const { useState, useEffect, useRef } = React;
             return entropy;
         };
 
-        const normalizeHostname = (hostname) => hostname.toLowerCase().replace(/^www\./, '');
+        const normalizeHostname = (hostname) => String(hostname || '').toLowerCase().replace(/^www\./, '');
+
+        const sanitizeUrlInput = (value) => {
+            return String(value || '')
+                .normalize('NFKC')
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                .trim()
+                .replace(/^[\s<>"'`「」『』【】\[\]（）()]+/g, '')
+                .replace(/[\s<>"'`「」『』【】\[\]（）(),，.。;；!?！？]+$/g, '');
+        };
+
+        const normalizeInputHostname = (hostname) => {
+            return String(hostname || '').toLowerCase().replace(/\.+$/g, '');
+        };
+
+        const isValidHostname = (hostname) => {
+            const cleanHostname = normalizeInputHostname(hostname);
+            if (!cleanHostname || cleanHostname.length > 253) return false;
+
+            const labels = cleanHostname.split('.');
+            if (labels.length < 2) return false;
+
+            return labels.every(label => {
+                return label.length >= 1 &&
+                    label.length <= 63 &&
+                    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label);
+            }) && labels[labels.length - 1].length >= 2;
+        };
+
+        const parseUserUrl = (value) => {
+            const sanitized = sanitizeUrlInput(value);
+            if (!sanitized) return { ok: false, reason: 'empty' };
+
+            const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized)
+                ? sanitized
+                : `https://${sanitized}`;
+
+            let urlObj;
+            try {
+                urlObj = new URL(normalizedUrl);
+            } catch (e) {
+                return { ok: false, reason: 'parse' };
+            }
+
+            if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+                return { ok: false, reason: 'protocol' };
+            }
+
+            const hostname = normalizeInputHostname(urlObj.hostname);
+            if (!isValidHostname(hostname)) {
+                return { ok: false, reason: 'hostname', hostname };
+            }
+
+            try { urlObj.hostname = hostname; } catch (e) { }
+            return { ok: true, url: urlObj, hostname, href: urlObj.href };
+        };
 
         const isOfficialTaiwanGovDomain = (hostname) => {
             const cleanHostname = normalizeHostname(String(hostname || ''));
@@ -2695,7 +2750,14 @@ const { useState, useEffect, useRef } = React;
             };
 
             const scanUrlForBot = async (targetUrl, contextText = '') => {
-                const urlObj = new URL(/^https?:\/\//i.test(targetUrl) ? targetUrl : 'https://' + targetUrl);
+                const parsedInput = parseUserUrl(targetUrl);
+                if (!parsedInput.ok) {
+                    const error = new Error('Invalid URL');
+                    error.code = 'URL_VALIDATION_ERROR';
+                    throw error;
+                }
+
+                const urlObj = parsedInput.url;
                 const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname);
 
                 const [scanData, brandDataRes] = await Promise.all([
@@ -2756,7 +2818,11 @@ const { useState, useEffect, useRef } = React;
                     try {
                         await scanUrlForBot(targetUrl);
                     } catch (err) {
-                        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 抱歉，這個網址的格式怪怪的，阿麥看不懂，請重新貼一次。' }]);
+                        console.error('聊天室網址檢測異常:', err);
+                        const errorMessage = err?.code === 'URL_VALIDATION_ERROR'
+                            ? '❌ 抱歉，這個網址的格式怪怪的，阿麥看不懂，請重新貼一次。'
+                            : '❌ 這個網址格式看起來可以讀取，但檢測過程暫時失敗，請稍後再試一次。';
+                        setMessages(prev => [...prev, { role: 'assistant', content: errorMessage }]);
                     } finally {
                         setIsTyping(false);
                     }
@@ -3274,16 +3340,17 @@ const { useState, useEffect, useRef } = React;
                 if (e) e.preventDefault(); // 讓 e 變成選填
                 const inputUrl = directUrl || url.trim(); // 優先使用傳入的網址
                 if (!inputUrl) { setError('請輸入網址'); return; }
-                let urlToParse = /^https?:\/\//i.test(inputUrl) ? inputUrl : 'https://' + inputUrl;
+                const parsedInput = parseUserUrl(inputUrl);
+                if (!parsedInput.ok) {
+                    setError('請輸入有效網址，需包含正確網域（例如 example.com 或 hnjz.sqkszxt.online）');
+                    return;
+                }
+                const urlObj = parsedInput.url;
+                const urlToParse = parsedInput.href;
 
                 let loadingTimer = null;
 
                 try {
-                    const urlObj = new URL(urlToParse);
-                    if (!urlObj.hostname.includes('.') || !/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(urlObj.hostname)) {
-                        setError('請輸入有效的網域 (如 google.com)'); return;
-                    }
-
                     setError('');
                     setLoading(true);
                     setResult(null);
@@ -3394,8 +3461,8 @@ const { useState, useEffect, useRef } = React;
 
                 } catch (err) {
                     // 👇 修正：把真實的錯誤印在開發者 Console，並給予更精準的 UI 提示
-                    console.error("系統解析異常:", err);
-                    setError('網址格式錯誤 或 系統解析失敗 (請確認網址是否完整)');
+                    console.error("系統檢測異常:", err);
+                    setError('網址格式已通過檢查，但系統檢測暫時失敗，請稍後再試一次。');
                 } finally {
                     if (loadingTimer) clearInterval(loadingTimer);
                     setLoading(false);

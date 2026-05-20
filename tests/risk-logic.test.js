@@ -23,6 +23,61 @@ function matchesDomainList(domain, list) {
     });
 }
 
+function sanitizeUrlInput(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim()
+        .replace(/^[\s<>"'`「」『』【】\[\]（）()]+/g, '')
+        .replace(/[\s<>"'`「」『』【】\[\]（）(),，.。;；!?！？]+$/g, '');
+}
+
+function normalizeInputHostname(hostname) {
+    return String(hostname || '').toLowerCase().replace(/\.+$/g, '');
+}
+
+function isValidHostname(hostname) {
+    const cleanHostname = normalizeInputHostname(hostname);
+    if (!cleanHostname || cleanHostname.length > 253) return false;
+
+    const labels = cleanHostname.split('.');
+    if (labels.length < 2) return false;
+
+    return labels.every(label => {
+        return label.length >= 1 &&
+            label.length <= 63 &&
+            /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label);
+    }) && labels[labels.length - 1].length >= 2;
+}
+
+function parseUserUrl(value) {
+    const sanitized = sanitizeUrlInput(value);
+    if (!sanitized) return { ok: false, reason: 'empty' };
+
+    const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized)
+        ? sanitized
+        : `https://${sanitized}`;
+
+    let urlObj;
+    try {
+        urlObj = new URL(normalizedUrl);
+    } catch (e) {
+        return { ok: false, reason: 'parse' };
+    }
+
+    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+        return { ok: false, reason: 'protocol' };
+    }
+
+    const hostname = normalizeInputHostname(urlObj.hostname);
+    if (!isValidHostname(hostname)) {
+        return { ok: false, reason: 'hostname', hostname };
+    }
+
+    try { urlObj.hostname = hostname; } catch (e) { }
+    return { ok: true, url: urlObj, hostname, href: urlObj.href };
+}
+
 function isOfficialTaiwanGovDomain(hostname) {
     const cleanHostname = String(hostname || '').toLowerCase().replace(/^www\./, '');
     return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
@@ -31,6 +86,37 @@ function isOfficialTaiwanGovDomain(hostname) {
 function shouldSkipAiBrandAnalysis(hostname) {
     return isOfficialTaiwanGovDomain(hostname);
 }
+
+test('網址解析支援多層子網域與新版 TLD', () => {
+    const parsed = parseUserUrl('https://hnjz.sqkszxt.online/');
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.hostname, 'hnjz.sqkszxt.online');
+    assert.equal(parsed.href, 'https://hnjz.sqkszxt.online/');
+    assert.equal(isValidHostname('a.b.c.example.technology'), true);
+});
+
+test('網址解析會補上 protocol 並清理貼上時常見標點', () => {
+    const parsed = parseUserUrl('「hnjz.sqkszxt.online/path」。');
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.hostname, 'hnjz.sqkszxt.online');
+    assert.equal(parsed.href, 'https://hnjz.sqkszxt.online/path');
+});
+
+test('網址解析仍拒絕不合法 hostname', () => {
+    const invalidHosts = [
+        'online',
+        'bad..online',
+        '-bad.online',
+        'bad-.online',
+        'bad_hostname.online'
+    ];
+
+    invalidHosts.forEach(hostname => {
+        assert.equal(isValidHostname(hostname), false, hostname);
+    });
+});
 
 function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {
     const isGov = isOfficialTaiwanGovDomain(hostname);
