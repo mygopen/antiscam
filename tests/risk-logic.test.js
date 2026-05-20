@@ -217,6 +217,16 @@ test('trace API 會同時檢查 mobile 與 desktop UA 差異', () => {
     assert.match(source, /Promise\.all/);
 });
 
+test('前端會把 User-Agent cloaking 接入風險旗標與報告卡片', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    assert.match(source, /const hasUaCloakingRisk/);
+    assert.match(source, /riskScore \+= 90/);
+    assert.match(source, /uaCloaking: hasUaCloakingRisk/);
+    assert.match(source, /userAgentCloaking/);
+    assert.match(source, /裝置導向差異/);
+});
+
 function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {
     const isGov = isOfficialTaiwanGovDomain(hostname);
     const blocklistListedForRisk = blocklistListed && !isGov;

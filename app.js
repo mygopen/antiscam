@@ -1432,6 +1432,11 @@ const { useState, useEffect, useRef } = React;
                 securityHeadersData?.status === 'ok' &&
                 !!securityHeadersData.missingAll;
             const traceChain = traceData ? traceData.chain : [];
+            const hasUaDifference = !!traceData?.uaDifference;
+            const hasUaCloakingRisk = !isWhitelisted && hasUaDifference && !!traceData?.isHighRisk;
+            const uaCloakingDetails = hasUaDifference
+                ? `Mobile 最終網址: ${traceData.mobileFinalUrl || '無法判定'}；Desktop 最終網址: ${traceData.desktopFinalUrl || '無法判定'}`
+                : 'Mobile 與 Desktop 檢測路徑未發現明顯差異';
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
             const trancoRank = trancoData?.rank || null;
@@ -1839,6 +1844,7 @@ const { useState, useEffect, useRef } = React;
                 hasLogisticsBrandPhishing ||
                 hasPageBrandMismatch ||
                 hasHomographSignal ||
+                hasUaCloakingRisk ||
                 isDownloadPhishingSignal ||
                 hasShoppingScamSignal ||
                 hasShoppingLineContactRisk;
@@ -1857,6 +1863,7 @@ const { useState, useEffect, useRef } = React;
                 hasFinalSuspiciousTemp ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
+                hasUaCloakingRisk ||
                 hasDisposableShoppingLandingRisk ||
                 hasDisposableRootPhishingRisk ||
                 hasDisposableUnreadablePageRisk ||
@@ -1968,7 +1975,9 @@ const { useState, useEffect, useRef } = React;
                         riskScore = 100;
                     }
 
-                    if (traceData && traceData.isHighRisk) {
+                    if (hasUaCloakingRisk) {
+                        riskScore += 90;
+                    } else if (traceData && traceData.isHighRisk) {
                         const currentFinalDomain = finalDomain || domain;
                         const isSameRoot = currentFinalDomain.replace(/^www\./, '').endsWith(domain.replace(/^www\./, '')) || domain.replace(/^www\./, '').endsWith(currentFinalDomain.replace(/^www\./, ''));
 
@@ -2103,6 +2112,7 @@ const { useState, useEffect, useRef } = React;
                 hasLogisticsBrandPhishing ||
                 hasPageBrandMismatch ||
                 hasHomographSignal ||
+                hasUaCloakingRisk ||
                 isNewDomainWithNewCertificate ||
                 hasNewOneYearRegistrationRisk ||
                 hasMissingAllSecurityHeaders ||
@@ -2133,6 +2143,7 @@ const { useState, useEffect, useRef } = React;
                     hasLogisticsBrandPhishing ||
                     hasPageBrandMismatch ||
                     hasHomographSignal ||
+                    hasUaCloakingRisk ||
                     isNewDomainWithNewCertificate ||
                     isVeryNewDomain ||
                     isFakeGov ||
@@ -2205,6 +2216,9 @@ const { useState, useEffect, useRef } = React;
             } else if (hasHomographSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到 Punycode/Unicode 混淆網域，可能利用相似字元偽裝官方網站。';
+            } else if (hasUaCloakingRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到裝置導向差異：網站對 Mobile 與 Desktop 回傳不同最終路徑，可能是 User-Agent cloaking。${uaCloakingDetails}`;
             } else if (hasShoppingScamSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到一頁式購物詐騙特徵：${shoppingScamSignals.reasons.slice(0, 3).join('、')}。`;
@@ -2301,6 +2315,9 @@ const { useState, useEffect, useRef } = React;
             } else if (hasEncodedRedirectRisk) {
                 redirectStatus = 'warning';
                 redirectCheckDetails = `網址內嵌 ${nestedUrls.length} 個 encoded 目的地${nestedDomains.length ? ` (${nestedDomains.slice(0, 2).join('、')})` : ''}`;
+            } else if (hasUaCloakingRisk) {
+                redirectStatus = 'danger';
+                redirectCheckDetails = `偵測到 Mobile/Desktop User-Agent 導向差異。${uaCloakingDetails}`;
             } else if (traceData && traceData.redirectCount >= 3) {
                 redirectStatus = 'warning';
                 redirectCheckDetails = `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`;
@@ -2313,7 +2330,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -2439,6 +2456,7 @@ const { useState, useEffect, useRef } = React;
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
                     disposableDomain: { status: hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe'), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${['blank', 'error', 'unknown'].includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}` : '未偵測到主網域亂碼免洗特徵' },
+                    userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : 'Mobile 與 Desktop User-Agent 未發現不同最終導向' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : '無法識別網路來源' },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
