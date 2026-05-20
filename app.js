@@ -1409,7 +1409,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }),
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
-                withTimeout(fetchTraceData(fullUrl), 8000, null),
+                withTimeout(fetchTraceData(fullUrl), 11000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
                 withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { isUnsafe: false }), 4000, { isUnsafe: false }),
                 withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] })

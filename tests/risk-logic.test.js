@@ -101,6 +101,21 @@ async function readJsonSafelyForTest(res, fallbackValue) {
     }
 }
 
+function resolveNextUrlForTraceTest(rawValue, currentUrl) {
+    const raw = String(rawValue || '').replace(/&amp;/g, '&').trim();
+    if (!raw) return { ok: false, reason: 'empty_redirect', raw };
+
+    try {
+        const nextUrl = new URL(raw, currentUrl);
+        if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
+            return { ok: false, reason: 'non_http_redirect', raw, href: nextUrl.href };
+        }
+        return { ok: true, href: nextUrl.href };
+    } catch (err) {
+        return { ok: false, reason: 'invalid_redirect_url', raw };
+    }
+}
+
 function isOfficialTaiwanGovDomain(hostname) {
     const cleanHostname = String(hostname || '').toLowerCase().replace(/^www\./, '');
     return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
@@ -125,6 +140,14 @@ test('網址解析支援一般網域搭配路徑與 html 檔名', () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.hostname, 'einvgwejakc.com');
     assert.equal(parsed.href, 'https://einvgwejakc.com/tw/card.html');
+});
+
+test('網址解析支援 mobile 案例的大寫路徑', () => {
+    const parsed = parseUserUrl('https://king888.pro/SUPERS');
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.hostname, 'king888.pro');
+    assert.equal(parsed.href, 'https://king888.pro/SUPERS');
 });
 
 test('網址解析會補上 protocol 並清理貼上時常見標點', () => {
@@ -171,6 +194,27 @@ test('riskFlags raw 欄位應使用實際已定義的 raw 變數', () => {
     assert.match(source, /missingAllSecurityHeadersRaw:\s*hasMissingAllSecurityHeadersRaw/);
     assert.match(source, /missingMxRecordsRaw:\s*hasMissingMxRecordsRaw/);
     assert.doesNotMatch(source, /[,{]\s*missingAllSecurityHeadersRaw\s*,\s*missingMxRecordsRaw/);
+});
+
+test('mobile trace 解析遇到 app scheme 或壞轉址時不應丟例外', () => {
+    const appScheme = resolveNextUrlForTraceTest('intent://open#Intent;scheme=https;end', 'https://king888.pro/SUPERS');
+    const badUrl = resolveNextUrlForTraceTest('https://%', 'https://king888.pro/SUPERS');
+    const relativeUrl = resolveNextUrlForTraceTest('/next', 'https://king888.pro/SUPERS');
+
+    assert.equal(appScheme.ok, false);
+    assert.equal(appScheme.reason, 'non_http_redirect');
+    assert.equal(badUrl.ok, false);
+    assert.equal(badUrl.reason, 'invalid_redirect_url');
+    assert.deepEqual(relativeUrl, { ok: true, href: 'https://king888.pro/next' });
+});
+
+test('trace API 會同時檢查 mobile 與 desktop UA 差異', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'functions/api/trace.js'), 'utf8');
+
+    assert.match(source, /key:\s*'mobile'/);
+    assert.match(source, /key:\s*'desktop'/);
+    assert.match(source, /uaDifference/);
+    assert.match(source, /Promise\.all/);
 });
 
 function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {
