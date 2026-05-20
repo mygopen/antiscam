@@ -78,6 +78,29 @@ function parseUserUrl(value) {
     return { ok: true, url: urlObj, hostname, href: urlObj.href };
 }
 
+async function withTimeoutForTest(promise, ms, fallbackValue) {
+    let timeoutId = null;
+    return Promise.race([
+        Promise.resolve(promise).catch(() => fallbackValue),
+        new Promise(resolve => {
+            timeoutId = setTimeout(() => resolve(fallbackValue), ms);
+        })
+    ]).finally(() => {
+        if (timeoutId) clearTimeout(timeoutId);
+    });
+}
+
+async function readJsonSafelyForTest(res, fallbackValue) {
+    if (!res || !res.ok) return fallbackValue;
+    try {
+        const text = await res.text();
+        if (!text) return fallbackValue;
+        return JSON.parse(text);
+    } catch (err) {
+        return fallbackValue;
+    }
+}
+
 function isOfficialTaiwanGovDomain(hostname) {
     const cleanHostname = String(hostname || '').toLowerCase().replace(/^www\./, '');
     return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
@@ -94,6 +117,14 @@ test('網址解析支援多層子網域與新版 TLD', () => {
     assert.equal(parsed.hostname, 'hnjz.sqkszxt.online');
     assert.equal(parsed.href, 'https://hnjz.sqkszxt.online/');
     assert.equal(isValidHostname('a.b.c.example.technology'), true);
+});
+
+test('網址解析支援一般網域搭配路徑與 html 檔名', () => {
+    const parsed = parseUserUrl('https://einvgwejakc.com/tw/card.html');
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.hostname, 'einvgwejakc.com');
+    assert.equal(parsed.href, 'https://einvgwejakc.com/tw/card.html');
 });
 
 test('網址解析會補上 protocol 並清理貼上時常見標點', () => {
@@ -116,6 +147,30 @@ test('網址解析仍拒絕不合法 hostname', () => {
     invalidHosts.forEach(hostname => {
         assert.equal(isValidHostname(hostname), false, hostname);
     });
+});
+
+test('API timeout wrapper 會把 rejection 轉成備援結果', async () => {
+    const fallback = { status: 'unavailable' };
+    const result = await withTimeoutForTest(Promise.reject(new Error('api failed')), 50, fallback);
+
+    assert.deepEqual(result, fallback);
+});
+
+test('API JSON 讀取失敗或非 ok 回應會回傳備援結果', async () => {
+    const fallback = { status: 'unavailable' };
+    const htmlResult = await readJsonSafelyForTest(new Response('<html>error</html>', { status: 200 }), fallback);
+    const errorResult = await readJsonSafelyForTest(new Response(JSON.stringify({ ok: false }), { status: 502 }), fallback);
+
+    assert.deepEqual(htmlResult, fallback);
+    assert.deepEqual(errorResult, fallback);
+});
+
+test('riskFlags raw 欄位應使用實際已定義的 raw 變數', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    assert.match(source, /missingAllSecurityHeadersRaw:\s*hasMissingAllSecurityHeadersRaw/);
+    assert.match(source, /missingMxRecordsRaw:\s*hasMissingMxRecordsRaw/);
+    assert.doesNotMatch(source, /[,{]\s*missingAllSecurityHeadersRaw\s*,\s*missingMxRecordsRaw/);
 });
 
 function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {

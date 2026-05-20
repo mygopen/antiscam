@@ -62,10 +62,40 @@ const { useState, useEffect, useRef } = React;
         };
 
         const withTimeout = (promise, ms, fallbackValue) => {
+            let timeoutId = null;
             return Promise.race([
-                promise,
-                new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
-            ]);
+                Promise.resolve(promise).catch(err => {
+                    console.warn('檢測 API 回應失敗，改用備援結果', err);
+                    return fallbackValue;
+                }),
+                new Promise(resolve => {
+                    timeoutId = setTimeout(() => resolve(fallbackValue), ms);
+                })
+            ]).finally(() => {
+                if (timeoutId) clearTimeout(timeoutId);
+            });
+        };
+
+        const readJsonSafely = async (res, fallbackValue) => {
+            if (!res || !res.ok) return fallbackValue;
+            try {
+                const text = await res.text();
+                if (!text) return fallbackValue;
+                return JSON.parse(text);
+            } catch (err) {
+                console.warn('API 回傳非 JSON，改用備援結果', err);
+                return fallbackValue;
+            }
+        };
+
+        const fetchJsonSafely = async (url, fallbackValue, options = {}) => {
+            try {
+                const res = await fetch(url, options);
+                return await readJsonSafely(res, fallbackValue);
+            } catch (err) {
+                console.warn('API 連線失敗，改用備援結果', err);
+                return fallbackValue;
+            }
         };
 
         const calculateEntropy = (str) => {
@@ -965,31 +995,21 @@ const { useState, useEffect, useRef } = React;
         };
 
         const fetchNetworkInfo = async (domain) => {
-            try {
-                const res = await fetch(`/api/network-info?domain=${encodeURIComponent(domain)}`);
-                if (!res.ok) return null;
-                return await res.json();
-            } catch (err) { return null; }
+            return await fetchJsonSafely(`/api/network-info?domain=${encodeURIComponent(domain)}`, null);
         };
 
         const fetchSecurityHeaders = async (fullUrl) => {
-            try {
-                const res = await fetch(`/api/security-headers?url=${encodeURIComponent(fullUrl)}`);
-                if (!res.ok) return { status: 'unavailable', missingAll: false, missing: [] };
-                return await res.json();
-            } catch (err) {
-                return { status: 'unavailable', missingAll: false, missing: [] };
-            }
+            return await fetchJsonSafely(
+                `/api/security-headers?url=${encodeURIComponent(fullUrl)}`,
+                { status: 'unavailable', missingAll: false, missing: [] }
+            );
         };
 
         const fetchSiteSeoData = async (fullUrl) => {
-            try {
-                const res = await fetch(`/api/site-seo?url=${encodeURIComponent(fullUrl)}`);
-                if (!res.ok) return { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} };
-                return await res.json();
-            } catch (err) {
-                return { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} };
-            }
+            return await fetchJsonSafely(
+                `/api/site-seo?url=${encodeURIComponent(fullUrl)}`,
+                { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} }
+            );
         };
 
         const checkSiteAvailability = async (fullUrl) => {
@@ -997,7 +1017,8 @@ const { useState, useEffect, useRef } = React;
             try {
                 const res = await fetch(proxyUrl);
                 if (!res.ok) return { status: 'unknown', msg: '無法檢測網站狀態', hasIframe: false, finalUrl: null, hasApk: false, pageSignals: createEmptyPageSignals() };
-                const data = await res.json();
+                const data = await readJsonSafely(res, null);
+                if (!data) throw new Error('Primary content proxy returned non-json response');
                 if (data.status && data.status.http_code >= 400) {
                     return {
                         status: 'error',
@@ -1089,21 +1110,20 @@ const { useState, useEffect, useRef } = React;
         };
 
         const checkTrancoRank = async (domain) => {
-            try {
-                const res = await fetch(`/api/tranco-rank?domain=${encodeURIComponent(domain)}`);
-                if (!res.ok) return { status: 'unavailable', rank: null };
-                const data = await res.json();
-                const rank = Number(data.rank);
-                return {
-                    status: data.status || 'unavailable',
-                    rank: Number.isFinite(rank) ? rank : null,
-                    date: data.date || null,
-                    queriedDomain: data.queriedDomain || domain,
-                    source: data.source || null,
-                    reason: data.reason || null,
-                    attempts: Array.isArray(data.attempts) ? data.attempts : []
-                };
-            } catch (e) { return { status: 'unavailable', rank: null }; }
+            const data = await fetchJsonSafely(
+                `/api/tranco-rank?domain=${encodeURIComponent(domain)}`,
+                { status: 'unavailable', rank: null }
+            );
+            const rank = Number(data.rank);
+            return {
+                status: data.status || 'unavailable',
+                rank: Number.isFinite(rank) ? rank : null,
+                date: data.date || null,
+                queriedDomain: data.queriedDomain || domain,
+                source: data.source || null,
+                reason: data.reason || null,
+                attempts: Array.isArray(data.attempts) ? data.attempts : []
+            };
         };
 
         const getDaysBetweenDates = (startDate, endDate) => {
@@ -1121,9 +1141,8 @@ const { useState, useEffect, useRef } = React;
         const fetchRDAPData = async (domain) => {
             try {
                 const apiUrl = `/api/rdap?domain=${domain}`;
-                const res = await fetch(apiUrl);
-                if (!res.ok) return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null };
-                const data = await res.json();
+                const fallbackData = { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null };
+                const data = await fetchJsonSafely(apiUrl, fallbackData);
                 const events = data.events || [];
                 let regEvent =
                     events.find(e => e.eventAction === 'registration') ||
@@ -1208,19 +1227,14 @@ const { useState, useEffect, useRef } = React;
         };
 
         const fetchCertificateData = async (domain) => {
-            try {
-                const res = await fetch(`/api/cert-age?domain=${encodeURIComponent(domain)}`);
-                if (!res.ok) return { notBefore: null, source: null };
-                return await res.json();
-            } catch (e) { return { notBefore: null, source: null }; }
+            return await fetchJsonSafely(
+                `/api/cert-age?domain=${encodeURIComponent(domain)}`,
+                { notBefore: null, source: null }
+            );
         };
 
         const fetchTraceData = async (url) => {
-            try {
-                const res = await fetch(`/api/trace?url=${encodeURIComponent(url)}`);
-                if (!res.ok) return null;
-                return await res.json();
-            } catch (e) { return null; }
+            return await fetchJsonSafely(`/api/trace?url=${encodeURIComponent(url)}`, null);
         };
 
         const checkOfficialAlerts = async (domain, fullUrl) => {
@@ -1229,9 +1243,10 @@ const { useState, useEffect, useRef } = React;
                     domain,
                     url: fullUrl
                 });
-                const res = await fetch(`/api/check-official-alerts?${params.toString()}`);
-                if (!res.ok) return { matched: false, count: 0, matches: [] };
-                return await res.json();
+                return await fetchJsonSafely(
+                    `/api/check-official-alerts?${params.toString()}`,
+                    { matched: false, count: 0, matches: [] }
+                );
             } catch (e) {
                 return { matched: false, count: 0, matches: [] };
             }
@@ -1242,7 +1257,7 @@ const { useState, useEffect, useRef } = React;
             try {
                 const res = await fetch(`/api/check-blacklist?domain=${encodeURIComponent(lowerDomain)}`);
                 if (res.ok) {
-                    const data = await res.json();
+                    const data = await readJsonSafely(res, { isBlacklisted: false });
                     if (data.isBlacklisted) return true;
                 }
             } catch (e) { console.error("黑名單 API 連線失敗", e); }
@@ -1333,10 +1348,9 @@ const { useState, useEffect, useRef } = React;
         const simulateScan = async (targetDomain, fullUrl, currentWhitelist = []) => {
             let resolvedIp = null;
             try {
-                const dnsRes = await fetch(`https://dns.google/resolve?name=${targetDomain}&type=A`);
-                const dnsData = await dnsRes.json();
-                if (dnsData.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
-                if (dnsData.Answer && dnsData.Answer.length > 0) {
+                const dnsData = await fetchJsonSafely(`https://dns.google/resolve?name=${targetDomain}&type=A`, null);
+                if (dnsData?.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
+                if (dnsData?.Answer && dnsData.Answer.length > 0) {
                     const aRecord = dnsData.Answer.find(r => r.type === 1);
                     if (aRecord) resolvedIp = aRecord.data;
                 }
@@ -1376,8 +1390,8 @@ const { useState, useEffect, useRef } = React;
             const hasNestedUrl = nestedUrls.length > 0;
             const hasEmailTrackingRedirect = isEmailTrackingDomain && hasNestedUrl;
             const defaultSiteStatus = {
-                status: 'ok',
-                msg: '網頁原始碼讀取成功',
+                status: 'unknown',
+                msg: '頁面內容檢測逾時或 API 暫時無回應',
                 hasIframe: false,
                 finalUrl: null,
                 linkStats: { total: 0, internal: 0, external: 0 },
@@ -1397,7 +1411,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
                 withTimeout(fetchTraceData(fullUrl), 8000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
-                withTimeout(fetch(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`).then(r => r.ok ? r.json() : { isUnsafe: false }).catch(() => ({ isUnsafe: false })), 4000, { isUnsafe: false }),
+                withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { isUnsafe: false }), 4000, { isUnsafe: false }),
                 withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] })
             ]);
 
@@ -2299,7 +2313,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, missingAllSecurityHeadersRaw, missingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -2764,7 +2778,7 @@ const { useState, useEffect, useRef } = React;
                     simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
                     skipAiBrandAnalysis
                         ? Promise.resolve(null)
-                        : fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`).then(res => res.json()).catch(() => null)
+                        : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`, null), 7000, null)
                 ]);
 
                 if (scanData.isInvalid) {
@@ -3329,7 +3343,7 @@ const { useState, useEffect, useRef } = React;
 
             useEffect(() => {
                 fetch('./whitelist.json')
-                    .then(res => res.ok ? res.json() : { domains: [] })
+                    .then(res => readJsonSafely(res, { domains: [] }))
                     .then(data => setExternalWhitelist(data.domains || []))
                     .catch(() => setExternalWhitelist([]));
             }, []);
@@ -3391,7 +3405,7 @@ const { useState, useEffect, useRef } = React;
                         // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
                         (isSocialInput || skipAiBrandAnalysis)
                             ? Promise.resolve(null) 
-                            : fetch(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`).then(res => res.json()).catch(() => null)
+                            : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`, null), 7000, null)
                     ]);
 
                     // 👇 新增防呆：如果網域已經掛掉或不存在 (isInvalid)，就不需要把 AI 結果塞進去，避免程式崩潰
