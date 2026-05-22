@@ -339,6 +339,12 @@ function applyTrustedCommercialWeakSignalCap({
     return riskScore;
 }
 
+function getParamsCheckStatus({ hasSuspiciousParams = false, hasNestedSuspiciousParams = false, isWhitelisted = false }) {
+    if ((hasSuspiciousParams || hasNestedSuspiciousParams) && !isWhitelisted) return 'danger';
+    if (hasSuspiciousParams || hasNestedSuspiciousParams) return 'info';
+    return 'safe';
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -1342,6 +1348,13 @@ test('白名單包含 ONE BOY 官方網域並支援 www 子網域', () => {
     assert.equal(matchesDomainList('www.oneboy.com.tw', whitelist), true);
 });
 
+test('白名單包含 PayPal 官方網域並支援 www 子網域', () => {
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+
+    assert.equal(matchesDomainList('paypal.com', whitelist), true);
+    assert.equal(matchesDomainList('www.paypal.com', whitelist), true);
+});
+
 test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('500.gov.tw'), true);
     assert.equal(isOfficialTaiwanGovDomain('www.gsp.gov.tw'), true);
@@ -1443,6 +1456,18 @@ test('政府 JWT result 參數不應因參數值內容誤判為敏感參數', ()
     assert.equal(matchesDomainList('500.gov.tw', ['gov.tw']), true);
     assert.equal(hasSensitiveUrlParam(govUrl), false);
     assert.equal(hasSensitiveUrlParam(phishingUrl), true);
+});
+
+test('PayPal 官方 checkout token 在白名單網域上不應顯示為危險參數', () => {
+    const url = 'https://www.paypal.com/checkoutnow?token=36924238BB0240414';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const parsed = new URL(url);
+    const isWhitelisted = matchesDomainList(parsed.hostname, whitelist);
+
+    assert.equal(hasSensitiveUrlParam(url), true);
+    assert.equal(isWhitelisted, true);
+    assert.equal(getParamsCheckStatus({ hasSuspiciousParams: true, isWhitelisted }), 'info');
+    assert.equal(getParamsCheckStatus({ hasSuspiciousParams: true, isWhitelisted: false }), 'danger');
 });
 
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {
