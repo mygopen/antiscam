@@ -121,8 +121,18 @@ function isOfficialTaiwanGovDomain(hostname) {
     return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
 }
 
-function shouldSkipAiBrandAnalysis(hostname) {
-    return isOfficialTaiwanGovDomain(hostname);
+function isTrustedGlobalDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.trustedGlobalDomains);
+}
+
+function isVerifiedSafeRootDomain(hostname, whitelist = []) {
+    return isOfficialTaiwanGovDomain(hostname) ||
+        isTrustedGlobalDomain(hostname) ||
+        matchesDomainList(hostname, whitelist);
+}
+
+function shouldSkipAiBrandAnalysis(hostname, whitelist = []) {
+    return isVerifiedSafeRootDomain(hostname, whitelist);
 }
 
 test('網址解析支援多層子網域與新版 TLD', () => {
@@ -1355,6 +1365,14 @@ test('白名單包含 PayPal 官方網域並支援 www 子網域', () => {
     assert.equal(matchesDomainList('www.paypal.com', whitelist), true);
 });
 
+test('全球頂級可信根網域即使白名單載入失敗也應保留 root override', () => {
+    assert.equal(isVerifiedSafeRootDomain('www.paypal.com'), true);
+    assert.equal(isVerifiedSafeRootDomain('www.google.com'), true);
+    assert.equal(isVerifiedSafeRootDomain('apple.com'), true);
+    assert.equal(isVerifiedSafeRootDomain('paypal.com.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('evil-paypal.com'), false);
+});
+
 test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('500.gov.tw'), true);
     assert.equal(isOfficialTaiwanGovDomain('www.gsp.gov.tw'), true);
@@ -1468,6 +1486,22 @@ test('PayPal 官方 checkout token 在白名單網域上不應顯示為危險參
     assert.equal(isWhitelisted, true);
     assert.equal(getParamsCheckStatus({ hasSuspiciousParams: true, isWhitelisted }), 'info');
     assert.equal(getParamsCheckStatus({ hasSuspiciousParams: true, isWhitelisted: false }), 'danger');
+});
+
+test('PayPal 官方 checkout token 即使外部白名單不可用也不應觸發 path/query 高風險', () => {
+    const url = 'https://www.paypal.com/checkoutnow?token=36924238BB0240414';
+    const parsed = new URL(url);
+    const isVerifiedSafeRoot = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const hasPathRisk = !isVerifiedSafeRoot && hasOfficialFlowPath(url);
+    const paramsStatus = getParamsCheckStatus({
+        hasSuspiciousParams: hasSensitiveUrlParam(url),
+        isWhitelisted: isVerifiedSafeRoot
+    });
+
+    assert.equal(isVerifiedSafeRoot, true);
+    assert.equal(hasSensitiveUrlParam(url), true);
+    assert.equal(hasPathRisk, false);
+    assert.equal(paramsStatus, 'info');
 });
 
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {

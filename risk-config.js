@@ -16,6 +16,10 @@ window.RISK_CONFIG = {
         '.com', '.net', '.org', '.jp', '.kr', '.tw', '.hk', '.dev',
         '.io', '.ai', '.co', '.app'
     ],
+    trustedGlobalDomains: [
+        'paypal.com', 'google.com', 'apple.com', 'microsoft.com', 'amazon.com',
+        'youtube.com', 'netflix.com', 'openai.com', 'chatgpt.com'
+    ],
     urlShorteners: [
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',

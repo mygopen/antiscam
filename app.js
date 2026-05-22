@@ -175,13 +175,23 @@ const { useState, useEffect, useRef } = React;
             return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
         };
 
-        const shouldSkipAiBrandAnalysis = (hostname) => isOfficialTaiwanGovDomain(hostname);
-
         const isSameRootDomain = (a, b) => {
             const cleanA = normalizeHostname(a);
             const cleanB = normalizeHostname(b);
             return cleanA === cleanB || cleanA.endsWith('.' + cleanB) || cleanB.endsWith('.' + cleanA);
         };
+
+        const isTrustedGlobalDomain = (hostname) => {
+            return getRiskList('trustedGlobalDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
+        const isVerifiedSafeRootDomain = (hostname, whitelist = []) => {
+            return isOfficialTaiwanGovDomain(hostname) ||
+                isTrustedGlobalDomain(hostname) ||
+                whitelist.some(domain => isSameRootDomain(hostname, domain));
+        };
+
+        const shouldSkipAiBrandAnalysis = (hostname, whitelist = []) => isVerifiedSafeRootDomain(hostname, whitelist);
 
         const isTrustedResourceDomain = (hostname) => {
             const trustedDomains = getRiskList('trustedResourceDomains');
@@ -434,7 +444,7 @@ const { useState, useEffect, useRef } = React;
             for (const brand of protectedBrands) {
                 const officialDomains = brand.domains || [];
                 const isOfficialDomain = officialDomains.some(domain => isSameRootDomain(hostname, domain));
-                const isWhitelisted = currentWhitelist.some(domain => isSameRootDomain(hostname, domain));
+                const isWhitelisted = isVerifiedSafeRootDomain(hostname, currentWhitelist);
                 if (isOfficialDomain || isWhitelisted) continue;
 
                 for (const keyword of (brand.keywords || [])) {
@@ -1411,11 +1421,8 @@ const { useState, useEffect, useRef } = React;
             const domain = targetDomain.toLowerCase();
             const isOfficialTaiwanGov = isOfficialTaiwanGovDomain(domain);
 
-            // 修正 1：嚴謹的白名單判定 (完全匹配或子網域匹配)
-            const isWhitelisted = isOfficialTaiwanGov || currentWhitelist.some(w => {
-                const lowerW = w.toLowerCase();
-                return domain === lowerW || domain.endsWith('.' + lowerW);
-            });
+            // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
+            const isWhitelisted = isVerifiedSafeRootDomain(domain, currentWhitelist);
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -1604,10 +1611,7 @@ const { useState, useEffect, useRef } = React;
                         // 👇 檢查最終網域是否使用詐騙後綴
                         isFinalVeryHighRiskTLD = highRiskSuffixes.some(s => finalDomain.endsWith(s));
 
-                        isFinalWhitelisted = isOfficialTaiwanGovDomain(finalDomain) || currentWhitelist.some(w => {
-                            const lowerW = w.toLowerCase();
-                            return finalDomain === lowerW || finalDomain.endsWith('.' + lowerW);
-                        });
+                        isFinalWhitelisted = isVerifiedSafeRootDomain(finalDomain, currentWhitelist);
                         // 👇 2. 新增：判斷是否導向台灣常見的合法開店平台
                         const safePlatforms = getRiskList('safeCommercePlatforms');
                         isFinalSafePlatform = safePlatforms.some(p => finalDomain === p || finalDomain.endsWith('.' + p));
@@ -2858,7 +2862,7 @@ const { useState, useEffect, useRef } = React;
                 }
 
                 const urlObj = parsedInput.url;
-                const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname);
+                const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
 
                 const [scanData, brandDataRes] = await Promise.all([
                     simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
@@ -3483,7 +3487,7 @@ const { useState, useEffect, useRef } = React;
 
                     // 👇 判斷輸入網址是否為社群平台
                     const isSocialInput = getRiskList('socialMediaDomains').some(s => urlObj.hostname === s || urlObj.hostname.endsWith('.' + s));
-                    const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname);
+                    const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
