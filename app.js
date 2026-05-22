@@ -185,6 +185,10 @@ const { useState, useEffect, useRef } = React;
             return getRiskList('trustedGlobalDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const isGlobalPaymentGatewayDomain = (hostname) => {
+            return getRiskList('globalPaymentGatewayDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
         const isVerifiedSafeRootDomain = (hostname, whitelist = []) => {
             return isOfficialTaiwanGovDomain(hostname) ||
                 isTrustedGlobalDomain(hostname) ||
@@ -1420,9 +1424,11 @@ const { useState, useEffect, useRef } = React;
 
             const domain = targetDomain.toLowerCase();
             const isOfficialTaiwanGov = isOfficialTaiwanGovDomain(domain);
+            const isTrustedGlobalRootDomain = isTrustedGlobalDomain(domain);
+            const isConfiguredAllowlistDomain = currentWhitelist.some(allowedDomain => isSameRootDomain(domain, allowedDomain));
 
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
-            const isWhitelisted = isVerifiedSafeRootDomain(domain, currentWhitelist);
+            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isConfiguredAllowlistDomain;
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -1520,6 +1526,10 @@ const { useState, useEffect, useRef } = React;
                     trafficDetails = '此為常用縮網址服務，建議留意最終轉址後的網站。';
                 } else if (domain.endsWith('mgp.care')) {
                     trafficDetails = 'MyGoPen 官方服務，安全無虞';
+                } else if (isTrustedGlobalRootDomain) {
+                    trafficDetails = '全球頂級可信根網域，Tranco 暫時無法取得時不以低流量扣分';
+                } else if (isConfiguredAllowlistDomain) {
+                    trafficDetails = '受信賴白名單網域，流量排名不足不作為風險加權';
                 } else {
                     trafficDetails = '受信賴的台灣在地或政府教育網站';
                 }
@@ -1627,12 +1637,23 @@ const { useState, useEffect, useRef } = React;
                 `.${domain}.`.includes(`.${tld}.`) && !domain.endsWith(`.${tld}`)
             );
             const hasSuspiciousParams = hasSensitiveUrlParam(fullUrl);
+            const trustedEndpointPath = (() => {
+                try {
+                    return new URL(fullUrl).pathname.toLowerCase();
+                } catch (e) {
+                    return '';
+                }
+            })();
+            const hasPaymentOrApiPath = /\/(?:api|checkout|checkoutnow|payment|payments|pay|billing|token|session|oauth|auth)(?:\/|$)/i.test(trustedEndpointPath);
             const defaultLandingParams = ['ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=', 'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='];
             const landingParamList = [...new Set([...getRiskList('suspiciousLandingParams'), ...defaultLandingParams])];
             const matchedLandingParams = landingParamList.filter(key => fullUrl.toLowerCase().includes(key));
             const hasSuspiciousLandingParams = matchedLandingParams.length > 0;
             const hasNestedSuspiciousParams = nestedUrls.some(url => hasSensitiveUrlParam(url));
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
+            const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
+            const isTrustedPaymentGatewayOrApiEndpoint = hasTrustedAllowlistOverride &&
+                (isGlobalPaymentGatewayDomain(domain) || (isTrustedGlobalRootDomain && hasPaymentOrApiPath));
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
             const fakeServiceKeywords = getRiskList('fakeServiceKeywords');
             const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
@@ -1826,7 +1847,7 @@ const { useState, useEffect, useRef } = React;
                 );
 
             const isGoogleFlagged = safeBrowsingData && safeBrowsingData.isUnsafe;
-            const blocklistListedForRisk = blocklistListed && !isOfficialTaiwanGov;
+            const blocklistListedForRisk = blocklistListed && !hasTrustedAllowlistOverride;
             const isGoogleFlaggedForRisk = isGoogleFlagged && !isWhitelisted;
             const isApkSite = (siteStatusData.hasApk || apkUrlCount > 0) && !isWhitelisted;
             const isDownloadPhishingSignal = !isWhitelisted && !isApkSite &&
@@ -1867,6 +1888,8 @@ const { useState, useEffect, useRef } = React;
                 if (condition) trustValidationSignals.push({ score, reason });
             };
             addTrustSignal(isOfficialTaiwanGov, 100, '台灣政府官方網域');
+            addTrustSignal(isTrustedGlobalRootDomain, 80, '全球頂級可信根網域');
+            addTrustSignal(isConfiguredAllowlistDomain && !isOfficialTaiwanGov, 70, 'Trusted Allowlist Domain');
             addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
             addTrustSignal(domain.endsWith('.com.tw'), 20, '.com.tw 商業網域具 TWNIC 註冊審核脈絡');
             addTrustSignal((isTrustedTLD || domain.endsWith('.tw')) && domainAgeDays !== null && domainAgeDays >= 365, 25, '台灣常見網域且註冊已超過 1 年');
@@ -2134,7 +2157,7 @@ const { useState, useEffect, useRef } = React;
                     }
                 } // 👈 關閉 if (!isWhitelisted)
 
-                if (isWhitelisted && !isFakeGov && !isFinalFakeGov) {
+                if (hasTrustedAllowlistOverride) {
                     riskScore = 0;
                 }
 
@@ -2238,7 +2261,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
-            if (isWhitelisted && !isFakeGov && !isSocialMedia) riskScore = 0; // 修正白名單歸零邏輯
+            if (hasTrustedAllowlistOverride) riskScore = 0; // 修正白名單歸零邏輯
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
@@ -2402,7 +2425,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -2414,7 +2437,7 @@ const { useState, useEffect, useRef } = React;
                     googleSafeBrowsing: { 
                         status: isGoogleFlaggedForRisk ? 'danger' : 'safe', 
                         label: 'Google 官方安全庫', 
-                        details: isGoogleFlaggedForRisk ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : (isOfficialTaiwanGov && isGoogleFlagged ? '台灣政府官方網域，忽略外部安全庫誤判' : 'Google Safe Browsing 未發現威脅')
+                        details: isGoogleFlaggedForRisk ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : (isOfficialTaiwanGov && isGoogleFlagged ? '台灣政府官方網域，忽略外部安全庫誤判' : (isGoogleFlagged && hasTrustedAllowlistOverride ? 'Trusted Allowlist Domain，忽略外部安全庫誤判' : 'Google Safe Browsing 未發現威脅'))
                     },
                     officialAlerts: {
                         status: hasOfficialAlert ? 'danger' : 'safe',
@@ -2442,11 +2465,13 @@ const { useState, useEffect, useRef } = React;
                             : '未取得足夠 WHOIS、憑證、流量或內容語意佐證；需搭配其他風險指標判斷'
                     },
                     ecommerceValidation: {
-                        status: hasStrongEcommerceValidation ? 'safe' : (ecommerceTrustSignals.score > 0 ? 'info' : 'unknown'),
+                        status: isTrustedPaymentGatewayOrApiEndpoint ? 'safe' : (hasStrongEcommerceValidation ? 'safe' : (ecommerceTrustSignals.score > 0 ? 'info' : 'unknown')),
                         label: '正規電商佐證',
-                        details: ecommerceTrustSignals.score > 0
+                        details: isTrustedPaymentGatewayOrApiEndpoint
+                            ? '可信支付閘道/API/checkout 端點，不要求一般購物車、CMS 或電商平台足跡佐證'
+                            : (ecommerceTrustSignals.score > 0
                             ? `${ecommerceTrustSignals.reasons.slice(0, 4).join('；')}（電商佐證分數 ${ecommerceTrustSignals.score}）${hasStrongEcommerceValidation ? '，不單獨以購物頁特徵判為高風險' : '，仍需搭配其他風險指標判斷'}`
-                            : '未取得足夠購物車、電商平台、聯絡資訊或 CMS 足跡佐證'
+                            : '未取得足夠購物車、電商平台、聯絡資訊或 CMS 足跡佐證')
                     },
                     seoMaturity: {
                         status: hasMatureSeoSignals ? 'safe' : (combinedSeoScore > 0 ? 'info' : 'unknown'),
@@ -2469,11 +2494,13 @@ const { useState, useEffect, useRef } = React;
                         details: languageSignals.details
                     },
                     businessIdentity: {
-                        status: hasVerifiedBusinessEntity ? 'safe' : (businessIdentitySignals.matched ? 'info' : 'unknown'),
+                        status: isTrustedPaymentGatewayOrApiEndpoint ? 'safe' : (hasVerifiedBusinessEntity ? 'safe' : (businessIdentitySignals.matched ? 'info' : 'unknown')),
                         label: '商家實體一致性',
-                        details: hasVerifiedBusinessEntity
+                        details: isTrustedPaymentGatewayOrApiEndpoint
+                            ? '可信支付閘道/API/checkout 端點，不要求台灣在地商家實體或統編與 WHOIS/RDAP 註冊者比對'
+                            : (hasVerifiedBusinessEntity
                             ? (matchedBusinessEntityName ? `頁面商家名稱「${matchedBusinessEntityName}」與 WHOIS/RDAP 註冊者相符` : '頁面揭露商家資訊，且 WHOIS/RDAP 註冊資料具一致性')
-                            : (businessIdentitySignals.reasons?.length ? `${businessIdentitySignals.reasons.join('；')}；尚未能與 WHOIS/RDAP 註冊者明確比對` : '未取得足夠公司名稱、統一編號或 WHOIS/RDAP 註冊者比對資料')
+                            : (businessIdentitySignals.reasons?.length ? `${businessIdentitySignals.reasons.join('；')}；尚未能與 WHOIS/RDAP 註冊者明確比對` : '未取得足夠公司名稱、統一編號或 WHOIS/RDAP 註冊者比對資料'))
                     },
                     lineOfficial: {
                         status: lineOfficialSignals.matched ? (hasStrongEcommerceValidation || hasVerifiedBusinessEntity ? 'info' : 'warning') : 'safe',
@@ -2583,7 +2610,7 @@ const { useState, useEffect, useRef } = React;
         };
 
         const enforceFinalRiskConsistency = (scanData) => {
-            if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed) return scanData;
+            if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed || scanData.isTrustedAllowlist) return scanData;
 
             const reasons = getHighRiskSummaryReasons(scanData);
             if (reasons.length > 0 && scanData.riskScore < 70) {

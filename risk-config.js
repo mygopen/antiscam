@@ -20,6 +20,12 @@ window.RISK_CONFIG = {
         'paypal.com', 'google.com', 'apple.com', 'microsoft.com', 'amazon.com',
         'youtube.com', 'netflix.com', 'openai.com', 'chatgpt.com'
     ],
+    globalPaymentGatewayDomains: [
+        'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
+        'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',
+        'authorize.net', 'ecpay.com.tw', 'newebpay.com', 'spgateway.com',
+        'opay.tw', 'payuni.com.tw'
+    ],
     urlShorteners: [
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',

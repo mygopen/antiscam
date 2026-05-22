@@ -125,6 +125,10 @@ function isTrustedGlobalDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.trustedGlobalDomains);
 }
 
+function isGlobalPaymentGatewayDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
+}
+
 function isVerifiedSafeRootDomain(hostname, whitelist = []) {
     return isOfficialTaiwanGovDomain(hostname) ||
         isTrustedGlobalDomain(hostname) ||
@@ -133,6 +137,14 @@ function isVerifiedSafeRootDomain(hostname, whitelist = []) {
 
 function shouldSkipAiBrandAnalysis(hostname, whitelist = []) {
     return isVerifiedSafeRootDomain(hostname, whitelist);
+}
+
+function isTrustedPaymentGatewayOrApiEndpoint(rawUrl, whitelist = []) {
+    const parsed = new URL(rawUrl);
+    const isVerifiedSafeRoot = isVerifiedSafeRootDomain(parsed.hostname, whitelist);
+    const hasPaymentOrApiPath = /\/(?:api|checkout|checkoutnow|payment|payments|pay|billing|token|session|oauth|auth)(?:\/|$)/i.test(parsed.pathname);
+    return isVerifiedSafeRoot &&
+        (isGlobalPaymentGatewayDomain(parsed.hostname) || (isTrustedGlobalDomain(parsed.hostname) && hasPaymentOrApiPath));
 }
 
 test('網址解析支援多層子網域與新版 TLD', () => {
@@ -251,6 +263,48 @@ function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googl
         blocklistListedForRisk,
         googleFlaggedForRisk
     };
+}
+
+function applyTrustedAllowlistRiskOverride({
+    hostname,
+    whitelist = [],
+    blocklistListed = false,
+    googleUnsafe = false,
+    initialRiskScore = 0,
+    isSocialMedia = false,
+    isFakeGov = false,
+    isFinalFakeGov = false
+}) {
+    const isWhitelisted = isVerifiedSafeRootDomain(hostname, whitelist);
+    const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
+    const blocklistListedForRisk = blocklistListed && !hasTrustedAllowlistOverride;
+    const googleFlaggedForRisk = googleUnsafe && !isWhitelisted;
+    let riskScore = initialRiskScore;
+
+    if (blocklistListedForRisk || googleFlaggedForRisk) riskScore = 100;
+    if (hasTrustedAllowlistOverride) riskScore = 0;
+
+    return {
+        riskScore,
+        isWhitelisted,
+        hasTrustedAllowlistOverride,
+        blocklistListedForRisk,
+        googleFlaggedForRisk
+    };
+}
+
+function getEcommerceValidationStatus({ isTrustedPaymentGatewayOrApiEndpoint = false, hasStrongEcommerceValidation = false, ecommerceScore = 0 }) {
+    if (isTrustedPaymentGatewayOrApiEndpoint) return 'safe';
+    if (hasStrongEcommerceValidation) return 'safe';
+    if (ecommerceScore > 0) return 'info';
+    return 'unknown';
+}
+
+function getBusinessIdentityStatus({ isTrustedPaymentGatewayOrApiEndpoint = false, hasVerifiedBusinessEntity = false, businessMatched = false }) {
+    if (isTrustedPaymentGatewayOrApiEndpoint) return 'safe';
+    if (hasVerifiedBusinessEntity) return 'safe';
+    if (businessMatched) return 'info';
+    return 'unknown';
 }
 
 function getAgeCheckStatus({ isWhitelisted = false, rdapDate = null, domainAgeDays = null }) {
@@ -489,7 +543,7 @@ function getHighRiskSummaryReasons(scanData) {
 }
 
 function enforceFinalRiskConsistency(scanData) {
-    if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed) return scanData;
+    if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed || scanData.isTrustedAllowlist) return scanData;
 
     const reasons = getHighRiskSummaryReasons(scanData);
     if (reasons.length > 0 && scanData.riskScore < 70) {
@@ -1502,6 +1556,50 @@ test('PayPal 官方 checkout token 即使外部白名單不可用也不應觸發
     assert.equal(hasSensitiveUrlParam(url), true);
     assert.equal(hasPathRisk, false);
     assert.equal(paramsStatus, 'info');
+});
+
+test('Trusted Allowlist Domain 應覆寫外部黑名單與後段扣分', () => {
+    const result = applyTrustedAllowlistRiskOverride({
+        hostname: 'www.paypal.com',
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: result.riskScore,
+        isTrustedAllowlist: result.hasTrustedAllowlistOverride,
+        blocklistListed: result.blocklistListedForRisk,
+        checks: {
+            domainAnalysis: { status: 'danger', details: '後段弱訊號不應覆寫可信 allowlist' },
+            ecommerceValidation: { status: 'unknown', details: '未取得 CMS 足跡' },
+            businessIdentity: { status: 'unknown', details: '未取得商家實體資料' }
+        }
+    });
+
+    assert.equal(result.isWhitelisted, true);
+    assert.equal(result.hasTrustedAllowlistOverride, true);
+    assert.equal(result.blocklistListedForRisk, false);
+    assert.equal(result.googleFlaggedForRisk, false);
+    assert.equal(scanData.riskScore, 0);
+});
+
+test('可信支付閘道 checkout/API 端點不套用一般電商 CMS 與台灣商家實體檢查', () => {
+    const paypalCheckout = 'https://www.paypal.com/checkoutnow?token=36924238BB0240414';
+    const phishingLookalike = 'https://paypal.com.evil.shop/checkoutnow?token=36924238BB0240414';
+
+    assert.equal(isGlobalPaymentGatewayDomain('www.paypal.com'), true);
+    assert.equal(isTrustedPaymentGatewayOrApiEndpoint(paypalCheckout, []), true);
+    assert.equal(isTrustedPaymentGatewayOrApiEndpoint(phishingLookalike, []), false);
+    assert.equal(getEcommerceValidationStatus({
+        isTrustedPaymentGatewayOrApiEndpoint: isTrustedPaymentGatewayOrApiEndpoint(paypalCheckout, []),
+        hasStrongEcommerceValidation: false,
+        ecommerceScore: 0
+    }), 'safe');
+    assert.equal(getBusinessIdentityStatus({
+        isTrustedPaymentGatewayOrApiEndpoint: isTrustedPaymentGatewayOrApiEndpoint(paypalCheckout, []),
+        hasVerifiedBusinessEntity: false,
+        businessMatched: false
+    }), 'safe');
 });
 
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {
