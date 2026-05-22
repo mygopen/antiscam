@@ -322,6 +322,23 @@ function applyTrustedValidationCap({
     return riskScore;
 }
 
+function isStrongTraceRisk({ traceHighRisk = false, isFinalSafePlatform = false, isSameRoot = false }) {
+    return traceHighRisk && !isFinalSafePlatform && !isSameRoot;
+}
+
+function applyTrustedCommercialWeakSignalCap({
+    riskScore,
+    hasStrongRiskSignal = false,
+    isWhitelisted = false,
+    isSocialMedia = false,
+    hasTrustedCommercialWeakSignalContext = false
+}) {
+    if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
+        return Math.min(riskScore, 25);
+    }
+    return riskScore;
+}
+
 function extractNestedUrls(rawUrl) {
     const variants = [String(rawUrl || '')];
     for (let i = 0; i < 2; i++) {
@@ -1318,6 +1335,13 @@ test('白名單包含 simplite.com.tw 並支援 www 子網域', () => {
     assert.equal(matchesDomainList('www.simplite.com.tw', whitelist), true);
 });
 
+test('白名單包含 ONE BOY 官方網域並支援 www 子網域', () => {
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+
+    assert.equal(matchesDomainList('oneboy.com.tw', whitelist), true);
+    assert.equal(matchesDomainList('www.oneboy.com.tw', whitelist), true);
+});
+
 test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('500.gov.tw'), true);
     assert.equal(isOfficialTaiwanGovDomain('www.gsp.gov.tw'), true);
@@ -2197,6 +2221,30 @@ test('可信佐證會把未確認詐騙的高分結果壓回中風險', () => {
         hasTrustedValidation: true,
         hasConfirmedThreatSignal: true
     }), 85);
+});
+
+test('可信台灣商業網域只有弱訊號加總時應壓回低度風險', () => {
+    const weakScore = 40;
+    const cappedScore = applyTrustedCommercialWeakSignalCap({
+        riskScore: weakScore,
+        hasTrustedCommercialWeakSignalContext: true
+    });
+
+    assert.equal(cappedScore, 25);
+    assert.equal(cappedScore < 30, true);
+});
+
+test('可信台灣商業網域若有強風險訊號不應被弱訊號 cap 壓低', () => {
+    assert.equal(applyTrustedCommercialWeakSignalCap({
+        riskScore: 85,
+        hasStrongRiskSignal: true,
+        hasTrustedCommercialWeakSignalContext: true
+    }), 85);
+});
+
+test('同主網域追蹤異常只作弱訊號，跨網域高風險追蹤才算強訊號', () => {
+    assert.equal(isStrongTraceRisk({ traceHighRisk: true, isSameRoot: true }), false);
+    assert.equal(isStrongTraceRisk({ traceHighRisk: true, isSameRoot: false }), true);
 });
 
 test('官方警示資料完整網址命中應直接升為最高風險', () => {

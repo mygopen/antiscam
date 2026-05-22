@@ -2148,6 +2148,19 @@ const { useState, useEffect, useRef } = React;
                 }
             }
 
+            const traceFinalDomain = (finalDomain || domain).replace(/^www\./, '');
+            const traceInputDomain = domain.replace(/^www\./, '');
+            const isTraceHighRiskSameRoot = !!traceData?.isHighRisk &&
+                (traceFinalDomain.endsWith(traceInputDomain) || traceInputDomain.endsWith(traceFinalDomain));
+            const hasTrustedCommercialWeakSignalContext =
+                isTrustedTLD ||
+                domain.endsWith('.tw') ||
+                isTrustedTaiwanRegistrar ||
+                hasSmallBusinessTrustContext ||
+                trustValidationSignals.length > 0 ||
+                ecommerceTrustSignals.score > 0 ||
+                pageTrustSignals.matched;
+
             const hasStrongRiskSignal = blocklistListedForRisk ||
                 hasOfficialAlert ||
                 isApkSite ||
@@ -2180,10 +2193,13 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
                 hasShoppingLineContactRisk ||
-                (traceData && traceData.isHighRisk && !isFinalSafePlatform);
+                (traceData && traceData.isHighRisk && !isFinalSafePlatform && !isTraceHighRiskSameRoot);
 
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
                 riskScore = 60;
+            }
+            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
+                riskScore = Math.min(riskScore, 25);
             }
 
             if (!isWhitelisted && !isSocialMedia) {
@@ -2516,7 +2532,7 @@ const { useState, useEffect, useRef } = React;
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
                     shoppingScam: { status: hasStrongEcommerceValidation ? 'info' : ((hasShoppingScamSignal || hasShoppingLineContactRisk) ? 'danger' : (shoppingScamSignals.matched || hasShoppingLandingUrlRisk ? 'warning' : 'safe')), label: '一頁式購物詐騙', details: hasStrongEcommerceValidation ? '偵測到購物頁特徵，但同時具備正規電商佐證，未單獨判為一頁式購物詐騙' : (shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : (hasShoppingLandingUrlRisk ? '頁面內容未完整取得，無法確認購物頁結構；但網址本身已符合可疑購物落地頁特徵' : '未能從可讀 HTML 中確認一頁式購物結構')) },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
-                    shoppingLanding: { status: hasShoppingLandingUrlRisk ? 'danger' : (hasSuspiciousLandingParams ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? (hasStrongEcommerceValidation ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但頁面具備正規電商佐證，未單獨判為高風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數') },
+                    shoppingLanding: { status: hasShoppingLandingUrlRisk ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數') },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
                     officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },
