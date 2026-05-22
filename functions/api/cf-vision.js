@@ -91,6 +91,8 @@ const parseVisionJson = (rawText) => {
     return null;
 };
 
+const CLOUDFLARE_VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+
 const buildCleanReport = (rawText) => {
     const parsed = parseVisionJson(rawText);
     const parsedTargets = [];
@@ -109,7 +111,7 @@ const buildCleanReport = (rawText) => {
         const analysis = cleanAiLine(`🔍 分析：${parsed.analysis || '細節待查證'}`);
         const urlExtract = cleanAiLine(`🔗 網址：${primaryTarget}`);
         const advice = cleanAiLine(`🛡️ 建議：${parsed.advice || '請仔細查證，勿點擊可疑連結'}`);
-        return { report: `${risk}\n${analysis}\n${urlExtract}\n${advice}`, targets };
+        return { report: `${risk}\n${analysis}\n${urlExtract}\n${advice}`, targets, parsed };
     }
 
     const riskMatch = rawText.match(/⚠️.*?(?=\n|$)/);
@@ -123,7 +125,44 @@ const buildCleanReport = (rawText) => {
     const urlExtract = cleanAiLine(`🔗 網址：${targets[0] || urlFromLine || '無'}`);
     const advice = adviceMatch ? cleanAiLine(adviceMatch[0]) : "🛡️ 建議：請仔細查證，勿點擊可疑連結";
 
-    return { report: `${risk}\n${analysis}\n${urlExtract}\n${advice}`, targets };
+    return { report: `${risk}\n${analysis}\n${urlExtract}\n${advice}`, targets, parsed: null };
+};
+
+const hasMeaningfulValue = (value) => {
+    const text = String(value || '').trim();
+    return text && !/^(無|none|null|unknown|n\/a)$/i.test(text);
+};
+
+const isVisionReportSufficient = (builtReport) => {
+    if (!builtReport) return false;
+    if (builtReport.targets && builtReport.targets.length > 0) return true;
+
+    const parsed = builtReport.parsed;
+    if (!parsed || typeof parsed !== 'object') return false;
+
+    const hasStructuredJudgement = ['risk', 'riskLevel', 'analysis', 'advice', 'brand']
+        .some(key => hasMeaningfulValue(parsed[key]));
+    const hasExplicitEmptyUrls = Array.isArray(parsed.urls) && parsed.urls.length === 0;
+
+    return hasStructuredJudgement && hasExplicitEmptyUrls;
+};
+
+const extractWorkersAiText = (data) => {
+    if (typeof data === 'string') return data;
+    return [
+        data?.response,
+        data?.description,
+        data?.result?.response,
+        data?.result?.description,
+        data?.choices?.[0]?.message?.content,
+        data?.choices?.[0]?.text
+    ].find(value => typeof value === 'string' && value.trim()) || '';
+};
+
+const isGeminiQuotaOrServerError = (err) => {
+    const status = Number(err?.status || 0);
+    const message = String(err?.message || '');
+    return status === 429 || status >= 500 || /(quota|resource_exhausted|rate limit|overloaded|unavailable|timeout)/i.test(message);
 };
 
 export async function onRequestPost(context) {
@@ -165,11 +204,11 @@ export async function onRequestPost(context) {
   "advice": "台灣繁體中文，一句防護建議"
 }`;
 
-        if (!env.GEMINI_API_KEY) {
-            throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
-        }
-
         const callGeminiVisionAPI = async (modelName) => {
+            if (!env.GEMINI_API_KEY) {
+                throw new Error("Cloudflare 環境變數中沒有找到 GEMINI_API_KEY！");
+            }
+
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${env.GEMINI_API_KEY}`;
             const res = await fetch(url, {
                 method: 'POST',
@@ -188,34 +227,125 @@ export async function onRequestPost(context) {
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 const errorMsg = data.error ? data.error.message : res.statusText;
-                throw new Error(`${modelName} API 失敗 (${res.status}): ${errorMsg}`);
+                const error = new Error(`${modelName} API 失敗 (${res.status}): ${errorMsg}`);
+                error.status = res.status;
+                throw error;
             }
 
             const data = await res.json();
             return data.candidates[0].content.parts[0].text;
         };
 
+        const callCloudflareVisionAPI = async () => {
+            if (!env.AI) {
+                throw new Error("找不到 Workers AI binding（AI）。請在 Cloudflare Pages 或 Workers 設定 AI binding。");
+            }
+
+            const data = await env.AI.run(CLOUDFLARE_VISION_MODEL, {
+                messages: [
+                    { role: 'system', content: '你是台灣繁體中文的資安截圖分析助手。只輸出使用者要求的 JSON。' },
+                    { role: 'user', content: promptText }
+                ],
+                image: `data:${mimeType};base64,${base64String}`,
+                max_tokens: 300,
+                temperature: 0.1
+            });
+
+            const text = extractWorkersAiText(data);
+            if (!text) throw new Error("Cloudflare Llama Vision 沒有回傳文字內容");
+            return text;
+        };
+
+        const buildProviderResult = (provider, rawReport) => {
+            const builtReport = buildCleanReport(rawReport);
+            return {
+                provider,
+                rawReport,
+                report: builtReport.report,
+                targets: builtReport.targets,
+                sufficient: isVisionReportSufficient(builtReport)
+            };
+        };
+
         let cleanReport = '';
         let visualTargets = [];
+        let cloudflareCandidate = null;
+
+        const applyProviderResult = (result) => {
+            cleanReport = result.report;
+            visualTargets = result.targets;
+        };
+
+        const tryCloudflareVision = async () => {
+            const rawReport = await callCloudflareVisionAPI();
+            cloudflareCandidate = buildProviderResult('Cloudflare Llama Vision', rawReport);
+            return cloudflareCandidate;
+        };
 
         try {
-            // 👇 主將：優先動用 Gemini 2.5 Flash 處理圖片
-            const rawReport = await callGeminiVisionAPI('gemini-2.5-flash');
-            const builtReport = buildCleanReport(rawReport);
-            cleanReport = builtReport.report;
-            visualTargets = builtReport.targets;
-            
-        } catch (errFlash) {
-            console.log("⚠️ Gemini Flash 失敗，切換至 Pro 備援...", errFlash.message);
-            try {
-                // 👇 備援 1：切換到 Gemini 2.5 Pro 繼續嘗試
-                const rawReport = await callGeminiVisionAPI('gemini-2.5-pro');
-                const builtReport = buildCleanReport(rawReport);
-                cleanReport = builtReport.report;
-                visualTargets = builtReport.targets;
-            } catch (errPro) {
-                throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
+            const result = await tryCloudflareVision();
+            if (result.sufficient) {
+                applyProviderResult(result);
+            } else {
+                console.log("⚠️ Cloudflare Llama Vision 結果信心不足，改用 Gemini 精查");
             }
+        } catch (errCloudflare) {
+            console.log("⚠️ Cloudflare Llama Vision 失敗，改用 Gemini 精查...", errCloudflare.message);
+        }
+
+        if (!cleanReport) {
+            try {
+                // Cloudflare 解析失敗或信心不足時，才動用 Gemini Flash 精查。
+                const rawReport = await callGeminiVisionAPI('gemini-2.5-flash');
+                applyProviderResult(buildProviderResult('Gemini 2.5 Flash', rawReport));
+
+            } catch (errFlash) {
+                console.log("⚠️ Gemini Flash 失敗...", errFlash.message);
+
+                if (isGeminiQuotaOrServerError(errFlash)) {
+                    if (!cloudflareCandidate) {
+                        try {
+                            await tryCloudflareVision();
+                        } catch (errCloudflareRetry) {
+                            console.log("⚠️ Gemini quota/5xx 後 Cloudflare 備援也失敗...", errCloudflareRetry.message);
+                        }
+                    }
+
+                    if (cloudflareCandidate) {
+                        applyProviderResult(cloudflareCandidate);
+                    } else {
+                        throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
+                    }
+                } else {
+                    try {
+                        // Gemini Flash 非額度或服務錯誤時，保留原本的 Pro 精查備援。
+                        const rawReport = await callGeminiVisionAPI('gemini-2.5-pro');
+                        applyProviderResult(buildProviderResult('Gemini 2.5 Pro', rawReport));
+                    } catch (errPro) {
+                        if (isGeminiQuotaOrServerError(errPro)) {
+                            if (!cloudflareCandidate) {
+                                try {
+                                    await tryCloudflareVision();
+                                } catch (errCloudflareRetry) {
+                                    console.log("⚠️ Gemini Pro quota/5xx 後 Cloudflare 備援也失敗...", errCloudflareRetry.message);
+                                }
+                            }
+
+                            if (cloudflareCandidate) {
+                                applyProviderResult(cloudflareCandidate);
+                            } else {
+                                throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
+                            }
+                        } else {
+                            throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!cleanReport) {
+            throw new Error(`今日圖片分析額度已滿，請稍後再試。`);
         }
 
         // =========================================================
