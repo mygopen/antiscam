@@ -125,6 +125,10 @@ function isTrustedGlobalDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.trustedGlobalDomains);
 }
 
+function isTrustedEcommerceDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.trustedEcommerceRootDomains);
+}
+
 function isGlobalPaymentGatewayDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
 }
@@ -132,6 +136,7 @@ function isGlobalPaymentGatewayDomain(hostname) {
 function isVerifiedSafeRootDomain(hostname, whitelist = []) {
     return isOfficialTaiwanGovDomain(hostname) ||
         isTrustedGlobalDomain(hostname) ||
+        isTrustedEcommerceDomain(hostname) ||
         matchesDomainList(hostname, whitelist);
 }
 
@@ -145,6 +150,30 @@ function isTrustedPaymentGatewayOrApiEndpoint(rawUrl, whitelist = []) {
     const hasPaymentOrApiPath = /\/(?:api|checkout|checkoutnow|payment|payments|pay|billing|token|session|oauth|auth)(?:\/|$)/i.test(parsed.pathname);
     return isVerifiedSafeRoot &&
         (isGlobalPaymentGatewayDomain(parsed.hostname) || (isTrustedGlobalDomain(parsed.hostname) && hasPaymentOrApiPath));
+}
+
+function isTrackingUrlParamName(name) {
+    const lowerName = String(name || '').toLowerCase();
+    return riskConfig.trackingUrlParams.some(rule => {
+        const lowerRule = String(rule || '').toLowerCase();
+        if (lowerRule.endsWith('*')) return lowerName.startsWith(lowerRule.slice(0, -1));
+        return lowerName === lowerRule;
+    });
+}
+
+function sanitizeUrlForRiskScoring(rawUrl) {
+    const parsed = new URL(rawUrl);
+    const removedTrackingParams = [];
+    [...new Set([...parsed.searchParams.keys()])].forEach(name => {
+        if (isTrackingUrlParamName(name)) {
+            removedTrackingParams.push(name);
+            parsed.searchParams.delete(name);
+        }
+    });
+    return {
+        href: parsed.href,
+        removedTrackingParams
+    };
 }
 
 test('網址解析支援多層子網域與新版 TLD', () => {
@@ -987,7 +1016,8 @@ function getDomainParts(hostname) {
     const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
     return {
         subdomainLabels: parts.length > registeredSize ? parts.slice(0, -registeredSize) : [],
-        rootLabel: parts.length >= registeredSize ? parts[parts.length - registeredSize] : (parts[0] || '')
+        rootLabel: parts.length >= registeredSize ? parts[parts.length - registeredSize] : (parts[0] || ''),
+        registrableDomain: parts.length >= registeredSize ? parts.slice(-registeredSize).join('.') : parts.join('.')
     };
 }
 
@@ -1600,6 +1630,45 @@ test('可信支付閘道 checkout/API 端點不套用一般電商 CMS 與台灣�
         hasVerifiedBusinessEntity: false,
         businessMatched: false
     }), 'safe');
+});
+
+test('大型電商根網域子網域應直接視為可信 allowlist 並維持低風險', () => {
+    const trustedEcUrls = [
+        'https://24h.pchome.com.tw/prod/DCAH0M-A900FQ999?utm_source=google&gclid=abc&gbraid=def',
+        'https://tw.coupang.com/products/123456789?utm_medium=cpc&wbraid=abc',
+        'https://pxbox.es.pxmart.com.tw/product/path/deep?fbclid=abc&utm_campaign=promo',
+        'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=123&utm_term=test',
+        'https://ec-w.shopping.friday.tw/googleAI/product/deep/path?utm_source=google&gclid=abc'
+    ];
+
+    trustedEcUrls.forEach(rawUrl => {
+        const parsed = new URL(rawUrl);
+        const parts = getDomainParts(parsed.hostname);
+        const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname);
+        const hasTrustedAllowlistOverride = isWhitelisted;
+        const riskScore = hasTrustedAllowlistOverride ? 0 : 100;
+
+        assert.equal(isTrustedEcommerceDomain(parsed.hostname), true, parsed.hostname);
+        assert.ok(riskConfig.trustedEcommerceRootDomains.includes(parts.registrableDomain), parsed.hostname);
+        assert.equal(riskScore, 0, parsed.hostname);
+    });
+
+    assert.equal(isVerifiedSafeRootDomain('pchome.com.tw.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-momoshop.com.tw'), false);
+});
+
+test('風險評分前應移除標準行銷追蹤參數並保留必要商品與交易參數', () => {
+    const rawUrl = 'https://24h.pchome.com.tw/prod/DCAH0M-A900FQ999?utm_source=google&utm_medium=cpc&gclid=abc&gbraid=def&fbclid=ghi&i_code=123&token=keep';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'gbraid', 'gclid', 'utm_medium', 'utm_source'].sort());
+    assert.equal(parsed.searchParams.has('utm_source'), false);
+    assert.equal(parsed.searchParams.has('gclid'), false);
+    assert.equal(parsed.searchParams.has('gbraid'), false);
+    assert.equal(parsed.searchParams.has('fbclid'), false);
+    assert.equal(parsed.searchParams.get('i_code'), '123');
+    assert.equal(parsed.searchParams.get('token'), 'keep');
 });
 
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {

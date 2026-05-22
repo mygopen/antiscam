@@ -170,6 +170,34 @@ const { useState, useEffect, useRef } = React;
             return { ok: true, url: urlObj, hostname, href: urlObj.href };
         };
 
+        const isTrackingUrlParamName = (name) => {
+            const lowerName = String(name || '').toLowerCase();
+            return getRiskList('trackingUrlParams').some(rule => {
+                const lowerRule = String(rule || '').toLowerCase();
+                if (lowerRule.endsWith('*')) return lowerName.startsWith(lowerRule.slice(0, -1));
+                return lowerName === lowerRule;
+            });
+        };
+
+        const sanitizeUrlForRiskScoring = (rawUrl) => {
+            try {
+                const parsed = new URL(rawUrl);
+                const removedTrackingParams = [];
+                [...new Set([...parsed.searchParams.keys()])].forEach(name => {
+                    if (isTrackingUrlParamName(name)) {
+                        removedTrackingParams.push(name);
+                        parsed.searchParams.delete(name);
+                    }
+                });
+                return {
+                    href: parsed.href,
+                    removedTrackingParams
+                };
+            } catch (e) {
+                return { href: rawUrl, removedTrackingParams: [] };
+            }
+        };
+
         const isOfficialTaiwanGovDomain = (hostname) => {
             const cleanHostname = normalizeHostname(String(hostname || ''));
             return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
@@ -185,6 +213,10 @@ const { useState, useEffect, useRef } = React;
             return getRiskList('trustedGlobalDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const isTrustedEcommerceDomain = (hostname) => {
+            return getRiskList('trustedEcommerceRootDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
         const isGlobalPaymentGatewayDomain = (hostname) => {
             return getRiskList('globalPaymentGatewayDomains').some(domain => isSameRootDomain(hostname, domain));
         };
@@ -192,6 +224,7 @@ const { useState, useEffect, useRef } = React;
         const isVerifiedSafeRootDomain = (hostname, whitelist = []) => {
             return isOfficialTaiwanGovDomain(hostname) ||
                 isTrustedGlobalDomain(hostname) ||
+                isTrustedEcommerceDomain(hostname) ||
                 whitelist.some(domain => isSameRootDomain(hostname, domain));
         };
 
@@ -487,7 +520,8 @@ const { useState, useEffect, useRef } = React;
             const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
             return {
                 subdomainLabels: parts.length > registeredSize ? parts.slice(0, -registeredSize) : [],
-                rootLabel: parts.length >= registeredSize ? parts[parts.length - registeredSize] : (parts[0] || '')
+                rootLabel: parts.length >= registeredSize ? parts[parts.length - registeredSize] : (parts[0] || ''),
+                registrableDomain: parts.length >= registeredSize ? parts.slice(-registeredSize).join('.') : parts.join('.')
             };
         };
 
@@ -1079,100 +1113,166 @@ const { useState, useEffect, useRef } = React;
         };
 
         const checkSiteAvailability = async (fullUrl) => {
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
-            try {
-                const res = await fetch(proxyUrl);
-                if (!res.ok) return { status: 'unknown', msg: '無法檢測網站狀態', hasIframe: false, finalUrl: null, hasApk: false, pageSignals: createEmptyPageSignals() };
-                const data = await readJsonSafely(res, null);
-                if (!data) throw new Error('Primary content proxy returned non-json response');
-                if (data.status && data.status.http_code >= 400) {
-                    return {
-                        status: 'error',
-                        code: data.status.http_code,
-                        msg: `網站無法正常存取 (HTTP ${data.status.http_code})`,
-                        hasIframe: false,
-                        finalUrl: data.status.url,
-                        hasApk: false,
-                        pageSignals: createEmptyPageSignals()
-                    };
-                }
-                let text = "";
+            const emptySiteStatus = (status, msg, extra = {}) => ({
+                status,
+                msg,
+                hasIframe: false,
+                finalUrl: null,
+                linkStats: { total: 0, internal: 0, external: 0 },
+                hasApk: false,
+                pageSignals: createEmptyPageSignals(),
+                ...extra
+            });
+            const detectCrawlerBlock = (text, httpCode = 0) => {
+                const haystack = String(text || '').toLowerCase();
+                if ([403, 429].includes(Number(httpCode))) return true;
+                return /(access denied|request blocked|forbidden|verify you are human|checking your browser|cf-chl|cloudflare|akamai|incapsula|imperva|datadome|bot detection|anti[- ]?bot)/i.test(haystack);
+            };
+            const analyzeFetchedContent = (data, sourceLabel = 'content-fetch') => {
+                const code = Number(data?.status?.http_code || data?.code || 0);
+                const finalUrl = data?.status?.url || data?.finalUrl || null;
+                const text = String(data?.contents || '');
                 let isBlank = false;
-                let hasIframe = false;
-                let hasApk = false; // 👈 新增 APK 偵測變數
+                let hasIframe = /<iframe/i.test(text);
+                let hasApk = false;
                 let linkStats = { total: 0, internal: 0, external: 0 };
                 let pageSignals = createEmptyPageSignals();
-                if (data.contents) {
-                    text = data.contents;
-                    hasIframe = /<iframe/i.test(text);
-                    pageSignals.downloadSignals = analyzeDownloadSignals(null, text, fullUrl);
-                    // 只要原始碼、編碼字串或下載屬性裡出現 APK，就發出警報。
-                    hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
-                    if (text.length < 500) isBlank = true;
-                    else {
-                        try {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(text, 'text/html');
-                            const title = doc.title || "";
-                            if (title.toLowerCase().includes("index of /")) {
-                                return { status: 'blank', code: 200, msg: '網站顯示為伺服器目錄 (非正常網頁)', hasIframe, finalUrl: data.status?.url, linkStats, hasApk, pageSignals };
-                            }
-                            pageSignals = analyzePageSignals(doc, fullUrl, text);
-                            hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
-                            const links = doc.querySelectorAll('a');
-                            linkStats.total = links.length;
-                            let domainHostname = '';
-                            try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
-                            links.forEach(el => {
-                                const href = el.getAttribute('href');
-                                if (!href) return;
-                                let isInternal = false;
-                                if (href.startsWith('/') || href.startsWith('.') || href.startsWith('#')) {
-                                    isInternal = true;
-                                } else if (href.startsWith('http')) {
-                                    try {
-                                        const linkUrl = new URL(href);
-                                        if (linkUrl.hostname.includes(domainHostname) || domainHostname.includes(linkUrl.hostname)) {
-                                            isInternal = true;
-                                        }
-                                    } catch (e) { }
-                                } else if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
-                                    isInternal = true;
-                                }
-                                if (isInternal) linkStats.internal++;
-                                else linkStats.external++;
-                            });
-                            const invisibleTags = doc.querySelectorAll('script, style, link, meta, noscript, svg, path, iframe, frame, object, embed');
-                            invisibleTags.forEach(el => el.remove());
-                            const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
-                            if (visibleText.length < 800) isBlank = true;
-                        } catch (e) { }
-                    }
+
+                pageSignals.downloadSignals = analyzeDownloadSignals(null, text, fullUrl);
+                hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
+
+                if (detectCrawlerBlock(text, code)) {
+                    return emptySiteStatus('blocked', '網站可能啟用 WAF/Anti-bot，基礎爬蟲被阻擋', {
+                        code,
+                        finalUrl,
+                        hasIframe,
+                        hasApk,
+                        source: sourceLabel,
+                        pageSignals
+                    });
                 }
-                if (isBlank) return { status: 'blank', code: 200, msg: '網站可視內容過少 (高風險偽裝特徵)', hasIframe, finalUrl: data.status?.url, linkStats, hasApk, pageSignals };
-                return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: data.status?.url, linkStats, hasApk, pageSignals };
+
+                if (code >= 400) {
+                    return emptySiteStatus('error', `網站無法正常存取 (HTTP ${code})`, {
+                        code,
+                        finalUrl,
+                        source: sourceLabel
+                    });
+                }
+
+                if (!text) {
+                    return emptySiteStatus('unknown', '無法檢測網站內容', {
+                        code,
+                        finalUrl,
+                        source: sourceLabel
+                    });
+                }
+
+                if (text.length < 500) isBlank = true;
+                else {
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(text, 'text/html');
+                        const title = doc.title || "";
+                        if (title.toLowerCase().includes("index of /")) {
+                            return emptySiteStatus('blank', '網站顯示為伺服器目錄 (非正常網頁)', {
+                                code: code || 200,
+                                hasIframe,
+                                finalUrl,
+                                linkStats,
+                                hasApk,
+                                source: sourceLabel,
+                                pageSignals
+                            });
+                        }
+                        pageSignals = analyzePageSignals(doc, fullUrl, text);
+                        hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
+                        const links = doc.querySelectorAll('a');
+                        linkStats.total = links.length;
+                        let domainHostname = '';
+                        try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
+                        links.forEach(el => {
+                            const href = el.getAttribute('href');
+                            if (!href) return;
+                            let isInternal = false;
+                            if (href.startsWith('/') || href.startsWith('.') || href.startsWith('#')) {
+                                isInternal = true;
+                            } else if (href.startsWith('http')) {
+                                try {
+                                    const linkUrl = new URL(href);
+                                    if (linkUrl.hostname.includes(domainHostname) || domainHostname.includes(linkUrl.hostname)) {
+                                        isInternal = true;
+                                    }
+                                } catch (e) { }
+                            } else if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+                                isInternal = true;
+                            }
+                            if (isInternal) linkStats.internal++;
+                            else linkStats.external++;
+                        });
+                        const invisibleTags = doc.querySelectorAll('script, style, link, meta, noscript, svg, path, iframe, frame, object, embed');
+                        invisibleTags.forEach(el => el.remove());
+                        const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
+                        if (visibleText.length < 800) isBlank = true;
+                    } catch (e) { }
+                }
+
+                if (isBlank) {
+                    return emptySiteStatus('blank', '網站可視內容過少 (可能是 SPA、WAF 或偽裝頁)', {
+                        code: code || 200,
+                        hasIframe,
+                        finalUrl,
+                        linkStats,
+                        hasApk,
+                        source: sourceLabel,
+                        pageSignals
+                    });
+                }
+                return {
+                    status: 'ok',
+                    code: code || 200,
+                    msg: '網站運作正常',
+                    hasIframe,
+                    finalUrl,
+                    linkStats,
+                    hasApk,
+                    source: sourceLabel,
+                    pageSignals
+                };
+            };
+
+            try {
+                const directRes = await fetch(`/api/site-content?url=${encodeURIComponent(fullUrl)}`);
+                const directData = await readJsonSafely(directRes, null);
+                if (directData && (directData.contents || directData.status)) {
+                    const directResult = analyzeFetchedContent(directData, directData.source || 'direct-browser-ua');
+                    if (directResult.status !== 'unknown') return directResult;
+                }
+            } catch (e) { }
+
+            try {
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
+                const res = await fetch(proxyUrl);
+                if (!res.ok) return emptySiteStatus('unknown', '無法檢測網站狀態');
+                const data = await readJsonSafely(res, null);
+                if (!data) throw new Error('Primary content proxy returned non-json response');
+                const proxyResult = analyzeFetchedContent(data, 'allorigins');
+                if (proxyResult.status !== 'unknown') return proxyResult;
             } catch (e) {
                 try {
                     const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
                     const resBackup = await fetch(backupProxy);
                     if (resBackup.ok) {
                         const backupText = await resBackup.text();
-                        let pageSignals = createEmptyPageSignals();
-                        let hasIframe = /<iframe/i.test(backupText);
-                        let hasApk = false;
-                        try {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(backupText, 'text/html');
-                            pageSignals = analyzePageSignals(doc, fullUrl, backupText);
-                        } catch (err) {
-                            pageSignals.downloadSignals = analyzeDownloadSignals(null, backupText, fullUrl);
-                        }
-                        hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
-                        return { status: 'ok', code: 200, msg: '網站運作正常', hasIframe, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, hasApk, pageSignals };
+                        return analyzeFetchedContent({
+                            status: { http_code: 200, url: null },
+                            contents: backupText
+                        }, 'codetabs');
                     }
                 } catch (err) { }
-                return { status: 'unknown', msg: '無法檢測網站內容', hasIframe: false, finalUrl: null, linkStats: { total: 0, internal: 0, external: 0 }, pageSignals: createEmptyPageSignals() };
             }
+
+            return emptySiteStatus('unknown', '無法檢測網站內容');
         };
 
         const checkTrancoRank = async (domain) => {
@@ -1207,7 +1307,7 @@ const { useState, useEffect, useRef } = React;
         const fetchRDAPData = async (domain) => {
             try {
                 const apiUrl = `/api/rdap?domain=${domain}`;
-                const fallbackData = { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null };
+                const fallbackData = { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null, queriedDomain: domain };
                 const data = await fetchJsonSafely(apiUrl, fallbackData);
                 const events = data.events || [];
                 let regEvent =
@@ -1288,8 +1388,8 @@ const { useState, useEffect, useRef } = React;
                     }
                 };
                 searchEntities(data.entities);
-                return { date, expirationDate, registrationPeriodDays, privacyDetected, registrarName, registrantName, registrantOrganization };
-            } catch (e) { return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }; }
+                return { date, expirationDate, registrationPeriodDays, privacyDetected, registrarName, registrantName, registrantOrganization, queriedDomain: data.queriedDomain || domain };
+            } catch (e) { return { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null, queriedDomain: domain }; }
         };
 
         const fetchCertificateData = async (domain) => {
@@ -1426,9 +1526,12 @@ const { useState, useEffect, useRef } = React;
             const isOfficialTaiwanGov = isOfficialTaiwanGovDomain(domain);
             const isTrustedGlobalRootDomain = isTrustedGlobalDomain(domain);
             const isConfiguredAllowlistDomain = currentWhitelist.some(allowedDomain => isSameRootDomain(domain, allowedDomain));
+            const domainParts = getDomainParts(domain);
+            const registrableDomain = domainParts.registrableDomain || domain;
+            const isTrustedEcommerceRootDomain = isTrustedEcommerceDomain(domain);
 
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
-            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isConfiguredAllowlistDomain;
+            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isConfiguredAllowlistDomain;
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -1462,6 +1565,17 @@ const { useState, useEffect, useRef } = React;
                 linkStats: { total: 0, internal: 0, external: 0 },
                 pageSignals: createEmptyPageSignals()
             };
+            const trustedEcommerceSiteStatus = {
+                status: 'trusted',
+                code: 200,
+                msg: `受信賴大型電商根網域：${registrableDomain}，略過深度爬取與追蹤參數扣分`,
+                hasIframe: false,
+                finalUrl: fullUrl,
+                linkStats: { total: 0, internal: 0, external: 0 },
+                hasApk: false,
+                source: 'trusted-ecommerce-root',
+                pageSignals: createEmptyPageSignals()
+            };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
             const [geoLocationData, networkInfoData, securityHeadersData, siteSeoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
@@ -1469,7 +1583,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
                 withTimeout(fetchSiteSeoData(fullUrl), 5000, { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} }),
-                withTimeout(checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
+                withTimeout(isTrustedEcommerceRootDomain ? Promise.resolve(trustedEcommerceSiteStatus) : checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }),
@@ -1485,6 +1599,7 @@ const { useState, useEffect, useRef } = React;
             const rdapExpirationDate = rdapData.expirationDate || null;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
+            const rdapQueriedDomain = rdapData.queriedDomain || registrableDomain || domain;
             const serverInfo = geoLocationData || networkInfoData;
             const serverIp = serverInfo?.ip || resolvedIp || null;
             const serverCountryDetails = serverInfo?.isReal
@@ -1508,9 +1623,13 @@ const { useState, useEffect, useRef } = React;
             const trancoStatus = trancoData?.status || 'unavailable';
             const trancoQueriedDomain = trancoData?.queriedDomain || domain;
             const trancoDateText = trancoData?.date ? ` (${trancoData.date})` : '';
+            const hasRankedRootDomainFallback = trancoRank !== null &&
+                normalizeHostname(trancoQueriedDomain) !== domain &&
+                isSameRootDomain(domain, trancoQueriedDomain);
+            const hasRootDomainTrustBaseline = hasRankedRootDomainFallback || isTrustedEcommerceRootDomain;
 
             // Tranco 查詢失敗不等於低信任；只有明確查無排名才視為低流量。
-            const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting));
+            const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting) || isTrustedEcommerceRootDomain);
             let isLowTraffic = trancoStatus === 'unranked' && !isHighTraffic;
             const isUnknownTraffic = trancoStatus === 'unavailable' && !isHighTraffic;
             const safeShorteners = getRiskList('safeShorteners');
@@ -1545,7 +1664,6 @@ const { useState, useEffect, useRef } = React;
             }
 
             const subdomainPart = domain.split('.')[0];
-            const domainParts = getDomainParts(domain);
             const rootLabel = domainParts.rootLabel || '';
             const entropy = calculateEntropy(subdomainPart);
             const rootEntropy = calculateEntropy(rootLabel);
@@ -1791,13 +1909,14 @@ const { useState, useEffect, useRef } = React;
                 !hasStrongEcommerceValidation &&
                 hasSuspiciousLandingParams &&
                 hasShoppingLandingRiskContext;
+            const unreadablePageStatuses = ['blank', 'error', 'unknown', 'blocked'];
             const hasDisposableShoppingLandingRisk = !isWhitelisted &&
                 hasDisposableRootLabel &&
                 hasSuspiciousLandingParams;
             const hasDisposableUnreadablePageRisk = !isWhitelisted &&
                 hasDisposableRootLabel &&
                 !isHighTraffic &&
-                ['blank', 'error', 'unknown'].includes(siteStatusData.status);
+                unreadablePageStatuses.includes(siteStatusData.status);
             const hasDisposableRootPhishingRisk = !isWhitelisted &&
                 hasDisposableRootLabel &&
                 !isHighTraffic &&
@@ -1805,7 +1924,7 @@ const { useState, useEffect, useRef } = React;
                     suspiciousSubdomain.matched ||
                     isLowTraffic ||
                     isVeryNewDomain ||
-                    ['blank', 'error', 'unknown'].includes(siteStatusData.status)
+                    unreadablePageStatuses.includes(siteStatusData.status)
                 );
             const hasShoppingScamSignal = !isWhitelisted &&
                 !hasStrongEcommerceValidation &&
@@ -1889,8 +2008,11 @@ const { useState, useEffect, useRef } = React;
             };
             addTrustSignal(isOfficialTaiwanGov, 100, '台灣政府官方網域');
             addTrustSignal(isTrustedGlobalRootDomain, 80, '全球頂級可信根網域');
+            addTrustSignal(isTrustedEcommerceRootDomain, 90, `Trusted E-commerce Root Domain：${registrableDomain}`);
             addTrustSignal(isConfiguredAllowlistDomain && !isOfficialTaiwanGov, 70, 'Trusted Allowlist Domain');
             addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
+            addTrustSignal(hasRankedRootDomainFallback, 35, `Tranco 根網域 ${trancoQueriedDomain} 可查得排名，子網域繼承基線信任`);
+            addTrustSignal(isTrustedEcommerceRootDomain, 35, `可信大型電商根網域：${registrableDomain}`);
             addTrustSignal(domain.endsWith('.com.tw'), 20, '.com.tw 商業網域具 TWNIC 註冊審核脈絡');
             addTrustSignal((isTrustedTLD || domain.endsWith('.tw')) && domainAgeDays !== null && domainAgeDays >= 365, 25, '台灣常見網域且註冊已超過 1 年');
             addTrustSignal(hasMatureSeoSignals, 25, `成熟 SEO 訊號：${[
@@ -1951,7 +2073,12 @@ const { useState, useEffect, useRef } = React;
                 hasEncodedRedirectRisk ||
                 hasSuspiciousParams ||
                 hasNestedSuspiciousParams ||
-                ((siteStatusData.status === 'blank' || siteStatusData.status === 'error') && !isHighTraffic && !isTrustedTLD);
+                (unreadablePageStatuses.includes(siteStatusData.status) && !isHighTraffic && !isTrustedTLD);
+
+            const isCrawlerBlockedStatus = unreadablePageStatuses.includes(siteStatusData.status);
+            const hasCrawlerBlockedTrustedContext = isCrawlerBlockedStatus &&
+                !hasConfirmedThreatSignal &&
+                (isWhitelisted || isHighTraffic || isTrustedTLD || hasRootDomainTrustBaseline || hasSmallBusinessTrustContext);
 
             const hasMissingAllSecurityHeaders = hasMissingAllSecurityHeadersRaw &&
                 hasSecondaryFraudEvidence &&
@@ -1978,12 +2105,14 @@ const { useState, useEffect, useRef } = React;
                 const commonInternationalTLDs = getRiskList('commonInternationalTlds');
                 const isCommonInternational = commonInternationalTLDs.some(tld => domain.endsWith(tld));
 
-                if (siteStatusData.status === 'blank' || siteStatusData.status === 'error') {
-                    if (isHighTraffic || isTrustedTLD) {
-                        riskScore += 0; // 知名網站，容忍 SPA 空白
+                if (siteStatusData.status === 'blank' || siteStatusData.status === 'error' || siteStatusData.status === 'blocked') {
+                    if (hasCrawlerBlockedTrustedContext || isHighTraffic || isTrustedTLD) {
+                        riskScore += 0; // 知名網站或可信根網域，容忍 SPA 空白或 WAF 阻擋
                     } else if (isCommonInternational && siteStatusData.status === 'blank') {
                         // 👇 常見網域的空白頁多半是 React/Vue 等 SPA，或是 Cloudflare 防護，降至 10 分輕微懷疑
                         riskScore += isLowTraffic ? 10 : 5;
+                    } else if (siteStatusData.status === 'blocked') {
+                        riskScore += 75;
                     } else {
                         riskScore += (siteStatusData.status === 'blank') ? 95 : 80;
                     }
@@ -2182,6 +2311,7 @@ const { useState, useEffect, useRef } = React;
             const hasTrustedCommercialWeakSignalContext =
                 isTrustedTLD ||
                 domain.endsWith('.tw') ||
+                hasRootDomainTrustBaseline ||
                 isTrustedTaiwanRegistrar ||
                 hasSmallBusinessTrustContext ||
                 trustValidationSignals.length > 0 ||
@@ -2228,6 +2358,9 @@ const { useState, useEffect, useRef } = React;
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
                 riskScore = Math.min(riskScore, 25);
             }
+            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && hasCrawlerBlockedTrustedContext && riskScore > 25) {
+                riskScore = 25;
+            }
 
             if (!isWhitelisted && !isSocialMedia) {
                 const hasDangerDetail = hasBrandSimilarity ||
@@ -2265,7 +2398,8 @@ const { useState, useEffect, useRef } = React;
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
-            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : '受信賴的白名單網域';
+            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : (isTrustedEcommerceRootDomain ? `受信賴大型電商根網域：${registrableDomain}` : '受信賴的白名單網域');
+            else if (hasCrawlerBlockedTrustedContext) siteContentMsg = `頁面可能啟用 WAF/Anti-bot，已改以可信根網域 ${registrableDomain} 的排名/電商基線判斷，不因爬蟲阻擋扣為高風險`;
 
             // 決定網域特徵卡片的 UI 文字
             let domainAnalysisStatus = 'safe';
@@ -2425,7 +2559,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride,
+                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -2447,7 +2581,7 @@ const { useState, useEffect, useRef } = React;
                             '未命中目前內建的官方警示資料',
                         link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
                     },
-                    siteContent: { status: isSocialMedia ? 'warning' : ((hasOfficialAlert || isApkSite || isDownloadPhishingSignal) ? 'danger' : (isWhitelisted || siteStatusData.status === 'ok' ? 'safe' : 'danger')), label: '網站內容狀態', details: siteContentMsg },
+                    siteContent: { status: isSocialMedia ? 'warning' : ((hasOfficialAlert || isApkSite || isDownloadPhishingSignal) ? 'danger' : (isWhitelisted || siteStatusData.status === 'ok' ? 'safe' : (hasCrawlerBlockedTrustedContext ? 'info' : 'danger'))), label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -2456,7 +2590,7 @@ const { useState, useEffect, useRef } = React;
                     },
 
                     traffic: { status: trafficStatus, label: 'Tranco 流量排名', details: trafficDetails },
-                    serverLocation: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '伺服器所在國家', details: serverCountryDetails },
+                    serverLocation: { status: serverInfo?.isReal ? 'info' : (hasRootDomainTrustBaseline ? 'info' : 'unknown'), label: '伺服器所在國家', details: serverInfo?.isReal ? serverCountryDetails : (hasRootDomainTrustBaseline ? '無法自動判定伺服器所在國家；已由根網域排名/電商信任基線補強，不作為風險加權' : serverCountryDetails) },
                     validation: {
                         status: hasTrustedValidation ? 'safe' : (trustValidationSignals.length > 0 ? 'info' : 'unknown'),
                         label: '次要可信驗證',
@@ -2465,13 +2599,15 @@ const { useState, useEffect, useRef } = React;
                             : '未取得足夠 WHOIS、憑證、流量或內容語意佐證；需搭配其他風險指標判斷'
                     },
                     ecommerceValidation: {
-                        status: isTrustedPaymentGatewayOrApiEndpoint ? 'safe' : (hasStrongEcommerceValidation ? 'safe' : (ecommerceTrustSignals.score > 0 ? 'info' : 'unknown')),
+                        status: isTrustedPaymentGatewayOrApiEndpoint ? 'safe' : (hasCrawlerBlockedTrustedContext && hasRootDomainTrustBaseline ? 'info' : (hasStrongEcommerceValidation ? 'safe' : (ecommerceTrustSignals.score > 0 ? 'info' : 'unknown'))),
                         label: '正規電商佐證',
                         details: isTrustedPaymentGatewayOrApiEndpoint
                             ? '可信支付閘道/API/checkout 端點，不要求一般購物車、CMS 或電商平台足跡佐證'
+                            : (hasCrawlerBlockedTrustedContext && hasRootDomainTrustBaseline
+                            ? `頁面可能被 WAF/Anti-bot 阻擋；已改以可信電商根網域 ${registrableDomain} 與 Tranco/根網域基線作為佐證，不以缺少 CMS 足跡扣分`
                             : (ecommerceTrustSignals.score > 0
                             ? `${ecommerceTrustSignals.reasons.slice(0, 4).join('；')}（電商佐證分數 ${ecommerceTrustSignals.score}）${hasStrongEcommerceValidation ? '，不單獨以購物頁特徵判為高風險' : '，仍需搭配其他風險指標判斷'}`
-                            : '未取得足夠購物車、電商平台、聯絡資訊或 CMS 足跡佐證')
+                            : '未取得足夠購物車、電商平台、聯絡資訊或 CMS 足跡佐證'))
                     },
                     seoMaturity: {
                         status: hasMatureSeoSignals ? 'safe' : (combinedSeoScore > 0 ? 'info' : 'unknown'),
@@ -2536,7 +2672,7 @@ const { useState, useEffect, useRef } = React;
                                 (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'))),
                         label: '註冊時間',
                         details: isOfficialTaiwanGov ? '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' : (isWhitelisted ? '受信賴白名單網域，不以憑證日期判定新註冊風險' : (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)')),
-                        link: `https://who.is/whois/${domain}`
+                        link: `https://who.is/whois/${rdapQueriedDomain}`
                     },
                     registrationPeriod: {
                         status: hasNewOneYearRegistrationRisk ? (riskScore >= 70 ? 'danger' : 'warning') : (registrationPeriodDays !== null ? 'info' : 'unknown'),
@@ -2554,10 +2690,10 @@ const { useState, useEffect, useRef } = React;
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
-                    disposableDomain: { status: hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe'), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${['blank', 'error', 'unknown'].includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}` : '未偵測到主網域亂碼免洗特徵' },
+                    disposableDomain: { status: hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe'), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}` : '未偵測到主網域亂碼免洗特徵' },
                     userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : 'Mobile 與 Desktop User-Agent 未發現不同最終導向' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
-                    network: { status: serverInfo?.isReal ? 'info' : 'unknown', label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : '無法識別網路來源' },
+                    network: { status: serverInfo?.isReal ? 'info' : (hasRootDomainTrustBaseline ? 'info' : 'unknown'), label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : (hasRootDomainTrustBaseline ? '無法識別網路來源；已由根網域信任基線補強，不作為風險加權' : '無法識別網路來源') },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
@@ -2889,14 +3025,19 @@ const { useState, useEffect, useRef } = React;
                 }
 
                 const urlObj = parsedInput.url;
+                const sanitizedForRisk = sanitizeUrlForRiskScoring(urlObj.href);
+                const riskScoringUrl = sanitizedForRisk.href;
                 const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
 
                 const [scanData, brandDataRes] = await Promise.all([
-                    simulateScan(urlObj.hostname, urlObj.href, externalWhitelist),
+                    simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist),
                     skipAiBrandAnalysis
                         ? Promise.resolve(null)
-                        : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(urlObj.href)}`, null), 7000, null)
+                        : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(riskScoringUrl)}`, null), 7000, null)
                 ]);
+                scanData.inputUrl = urlObj.href;
+                scanData.sanitizedUrl = riskScoringUrl;
+                scanData.removedTrackingParams = sanitizedForRisk.removedTrackingParams;
 
                 if (scanData.isInvalid) {
                     setMessages(prev => [...prev, {
@@ -3477,7 +3618,9 @@ const { useState, useEffect, useRef } = React;
                     return;
                 }
                 const urlObj = parsedInput.url;
-                const urlToParse = parsedInput.href;
+                const sanitizedForRisk = sanitizeUrlForRiskScoring(parsedInput.href);
+                const riskScoringUrl = sanitizedForRisk.href;
+                const urlToParse = riskScoringUrl;
 
                 let loadingTimer = null;
 
@@ -3518,12 +3661,15 @@ const { useState, useEffect, useRef } = React;
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
-                        simulateScan(urlObj.hostname, urlObj.href, externalWhitelist), 
+                        simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist),
                         // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
                         (isSocialInput || skipAiBrandAnalysis)
                             ? Promise.resolve(null) 
                             : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`, null), 7000, null)
                     ]);
+                    scanData.inputUrl = parsedInput.href;
+                    scanData.sanitizedUrl = riskScoringUrl;
+                    scanData.removedTrackingParams = sanitizedForRisk.removedTrackingParams;
 
                     // 👇 新增防呆：如果網域已經掛掉或不存在 (isInvalid)，就不需要把 AI 結果塞進去，避免程式崩潰
                     if (!scanData.isInvalid) {
@@ -3625,9 +3771,10 @@ const { useState, useEffect, useRef } = React;
                     else if ((result.domain.match(/-/g) || []).length >= 2) warnings.push('⚠️ 網域包含多個連字號 (-)，極高機率為詐騙');
                 } else if (result.checks.domainAnalysis.status === 'warning' && !result.isSocialMedia) warnings.push('⚠️ 使用免費架站平台，風險較高');
                 
-                if (result.details.siteStatus.status === 'blank' && !result.isSocialMedia) warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
-                if (result.details.siteStatus.status === 'error' && !result.isSocialMedia) warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
-                if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
+                if (result.details.siteStatus.status === 'blank' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
+                if (result.details.siteStatus.status === 'error' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
+                if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
+                if (result.details.siteStatus.status === 'blocked' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站啟用防爬蟲或 WAF，無法被正常讀取');
                 if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
                 if (result.checks.apkCheck.status === 'danger') warnings.push(`⚠️ ${result.checks.apkCheck.details}`);
                 if (result.checks.securityHeaders?.status === 'danger') warnings.push('⚠️ 缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭');

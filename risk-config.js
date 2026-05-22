@@ -20,6 +20,10 @@ window.RISK_CONFIG = {
         'paypal.com', 'google.com', 'apple.com', 'microsoft.com', 'amazon.com',
         'youtube.com', 'netflix.com', 'openai.com', 'chatgpt.com'
     ],
+    trustedEcommerceRootDomains: [
+        'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
+        'momoshop.com.tw', 'friday.tw'
+    ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',
@@ -103,6 +107,15 @@ window.RISK_CONFIG = {
     suspiciousLandingParams: [
         'ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=',
         'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='
+    ],
+    trackingUrlParams: [
+        'utm_*', 'fbclid', 'gclid', 'gbraid', 'wbraid', 'msclkid',
+        'dclid', 'yclid', 'twclid', 'ttclid', 'li_fat_id', 'mc_cid',
+        'mc_eid', 'igshid', 'gad_source', 'gclsrc', '_ga', '_gl',
+        'fb_action_ids', 'fb_action_types', 'fb_source', 'irclickid',
+        'srsltid', 'sc_campaign', 'sc_channel', 'sc_content',
+        'sc_country', 'sc_geo', 'sc_medium', 'sc_outcome',
+        'sc_publisher', 'sc_subchannel'
     ],
     officialFlowPathKeywords: [
         '/login', '/signin', '/sign-in', '/verify', '/verification', '/auth',
