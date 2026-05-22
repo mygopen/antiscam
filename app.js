@@ -577,6 +577,55 @@ const { useState, useEffect, useRef } = React;
             };
         };
 
+        const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const getPageBrandKeywordContexts = (haystack, keyword) => {
+            const normalizedKeyword = String(keyword || '').toLowerCase();
+            if (!normalizedKeyword) return [];
+
+            let pattern;
+            if (normalizedKeyword === '711') {
+                pattern = /(?:^|[^a-z0-9])(?:7[\s._-]*11|711)(?=$|[^a-z0-9])/gi;
+            } else if (/^[a-z0-9]+$/i.test(normalizedKeyword)) {
+                pattern = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}(?=$|[^a-z0-9])`, 'gi');
+            }
+
+            if (pattern) {
+                const contexts = [];
+                let match;
+                while ((match = pattern.exec(haystack)) !== null) {
+                    contexts.push(haystack.slice(Math.max(0, match.index - 48), match.index + match[0].length + 48));
+                    if (match.index === pattern.lastIndex) pattern.lastIndex++;
+                }
+                return contexts;
+            }
+
+            const contexts = [];
+            let index = haystack.indexOf(normalizedKeyword);
+            while (index !== -1) {
+                contexts.push(haystack.slice(Math.max(0, index - 48), index + normalizedKeyword.length + 48));
+                index = haystack.indexOf(normalizedKeyword, index + normalizedKeyword.length);
+            }
+            return contexts;
+        };
+
+        const isBenignCommerceBrandReference = (brandName, keyword, contexts) => {
+            const isConvenienceStoreBrand = ['統一超商', '全家便利商店'].includes(brandName);
+            if (!isConvenienceStoreBrand || contexts.length === 0) return false;
+
+            const weakConvenienceKeywords = ['711', 'seven', 'family'];
+            const fulfillmentPattern = /(超商取貨|超商付款|取貨付款|門市取貨|門市配送|超商代碼|超商繳費|交貨便|賣貨便|店到店|配送|寄送|取貨|物流|pickup|store pickup|delivery|shipping|cvs)/i;
+            const sensitiveImpersonationPattern = /(驗證|認證|帳戶|賬戶|信用卡|金融卡|卡號|安全碼|cvv|otp|簡訊碼|異常|補繳|領取|中獎|獎勵|重設|停權|凍結|verify|verification|account|credit.?card|token|password)/i;
+            const normalizedKeyword = String(keyword || '').toLowerCase();
+
+            return contexts.every(context => {
+                const isWeakKeyword = weakConvenienceKeywords.includes(normalizedKeyword);
+                const hasFulfillmentContext = fulfillmentPattern.test(context);
+                const hasSensitiveContext = sensitiveImpersonationPattern.test(context);
+                return !hasSensitiveContext && (hasFulfillmentContext || isWeakKeyword);
+            });
+        };
+
         const analyzePageBrandSignals = (doc, fullUrl, rawText = '') => {
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
@@ -594,7 +643,10 @@ const { useState, useEffect, useRef } = React;
                 if (officialDomains.some(domain => isSameRootDomain(domainHostname, domain))) continue;
 
                 const keywords = [brand.name, ...(brand.keywords || [])].filter(Boolean);
-                const matchedKeyword = keywords.find(keyword => haystack.includes(keyword.toLowerCase()));
+                const matchedKeyword = keywords.find(keyword => {
+                    const contexts = getPageBrandKeywordContexts(haystack, keyword);
+                    return contexts.length > 0 && !isBenignCommerceBrandReference(brand.name, keyword, contexts);
+                });
                 if (matchedKeyword) {
                     return { matched: true, brandName: brand.name, keyword: matchedKeyword, source: 'page' };
                 }
@@ -699,7 +751,7 @@ const { useState, useEffect, useRef } = React;
                 matched,
                 details: mismatch
                     ? `頁面主要為中文，但 HTML lang="${htmlLang}"，需留意語言標記不一致`
-                    : (matched ? `台灣網域頁面語言與 HTML 語系一致${htmlLang ? ` (${htmlLang})` : ''}` : '未取得足夠語言一致性訊號'),
+                    : (matched ? `台灣網域頁面語言與 HTML 語系一致${htmlLang ? ` (${htmlLang})` : ''}` : '未取得足夠語言一致性訊號，此項不作為風險加權'),
                 dominantLanguage,
                 htmlLang
             };
@@ -1702,18 +1754,18 @@ const { useState, useEffect, useRef } = React;
                 trafficStatus = 'info';
                 trafficDetails = '未進入 Tranco 全球熱門排名；但具備中小型商家/台灣網域可信佐證，不作為風險加權';
             }
+            const hasShoppingLandingRiskContext =
+                hasDisposableRootLabel ||
+                isSuspiciousRootLabel ||
+                isSuspiciousLandingRootLabel ||
+                suspiciousSubdomain.matched ||
+                isVeryNewDomain ||
+                hasSuspiciousTempDomain ||
+                (isLowTraffic && !isTrustedTLD);
             const hasShoppingLandingUrlRisk = !isWhitelisted &&
                 !hasStrongEcommerceValidation &&
                 hasSuspiciousLandingParams &&
-                (
-                    hasDisposableRootLabel ||
-                    isSuspiciousRootLabel ||
-                    isSuspiciousLandingRootLabel ||
-                    suspiciousSubdomain.matched ||
-                    isVeryNewDomain ||
-                    isLowTraffic ||
-                    hasSuspiciousTempDomain
-                );
+                hasShoppingLandingRiskContext;
             const hasDisposableShoppingLandingRisk = !isWhitelisted &&
                 hasDisposableRootLabel &&
                 hasSuspiciousLandingParams;
