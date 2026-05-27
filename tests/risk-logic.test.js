@@ -556,6 +556,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
     addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
     addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
+    addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
     addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
@@ -1083,6 +1084,33 @@ function hasSensitiveUrlParam(rawUrl) {
     return false;
 }
 
+function hasRandomizedPathToken(rawUrl) {
+    try {
+        return new URL(rawUrl).pathname
+            .split('/')
+            .filter(Boolean)
+            .some(segment => /^[a-z0-9_-]{8,50}$/i.test(segment) && /[a-z]/i.test(segment) && /\d/.test(segment));
+    } catch (e) {
+        return false;
+    }
+}
+
+function hasFreeHostingSensitiveLinkRisk(rawUrl, {
+    isWhitelisted = false,
+    hasBrandSimilarity = false,
+    isHighTraffic = false,
+    hasSuspiciousTempDomain = false
+} = {}) {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const isFreeHosting = matchesDomainList(hostname, riskConfig.freeHostingProviders);
+    const isSuspiciousTLD = hasSuspiciousTld(hostname);
+    return !isWhitelisted &&
+        isFreeHosting &&
+        hasSensitiveUrlParam(rawUrl) &&
+        (hasBrandSimilarity || hasSuspiciousTempDomain || isSuspiciousTLD || hasRandomizedPathToken(rawUrl) || !isHighTraffic);
+}
+
 function analyzeSuspiciousSubdomain(hostname) {
     const { subdomainLabels, rootLabel } = getDomainParts(hostname);
     const rootTokens = rootLabel.split(/[-_]+/).filter(token => token.length >= 3);
@@ -1592,11 +1620,15 @@ test('Apple 冒用網域搭配一次性驗證參數應升為高風險', () => {
     const brandSimilarity = checkBrandSimilarity(hostname);
     const hasSensitiveParam = hasSensitiveUrlParam(url);
     const isFreeHosting = matchesDomainList(hostname, riskConfig.freeHostingProviders);
+    const hasFreeHostingTokenRisk = hasFreeHostingSensitiveLinkRisk(url, {
+        hasBrandSimilarity: brandSimilarity.matched
+    });
     const hasStrongRiskSignal = brandSimilarity.matched;
     const scanData = enforceFinalRiskConsistency({
         riskScore: hasStrongRiskSignal ? 80 : 0,
         checks: {
             brandSimilarity: { status: brandSimilarity.matched ? 'danger' : 'safe' },
+            freeHostingSensitiveLink: { status: hasFreeHostingTokenRisk ? 'danger' : 'safe' },
             params: { status: hasSensitiveParam ? 'danger' : 'safe' },
             domainAnalysis: {
                 status: brandSimilarity.matched ? 'danger' : 'safe',
@@ -1609,7 +1641,35 @@ test('Apple 冒用網域搭配一次性驗證參數應升為高風險', () => {
     assert.equal(brandSimilarity.brandName, 'Apple');
     assert.equal(hasSensitiveParam, true);
     assert.equal(isFreeHosting, true);
+    assert.equal(hasRandomizedPathToken(url), true);
+    assert.equal(hasFreeHostingTokenRisk, true);
     assert.equal(scanData.riskScore >= 70, true);
+});
+
+test('免費子網域搭配一次性驗證參數應是強風險，避免被弱訊號 cap 壓回低風險', () => {
+    const url = 'https://app-ie.eu.cc/HqTGLU0qwJ?_eat=valid_20260527143844_991ac1689258aa030d8d8605cef0ae5e';
+    const hasFreeHostingTokenRisk = hasFreeHostingSensitiveLinkRisk(url, {
+        hasBrandSimilarity: false,
+        isHighTraffic: false
+    });
+    const scoreBeforeCap = hasFreeHostingTokenRisk ? 85 : 0;
+    const scoreAfterCap = applyTrustedCommercialWeakSignalCap({
+        riskScore: scoreBeforeCap,
+        hasStrongRiskSignal: hasFreeHostingTokenRisk,
+        hasTrustedCommercialWeakSignalContext: true
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: 25,
+        checks: {
+            freeHostingSensitiveLink: { status: hasFreeHostingTokenRisk ? 'danger' : 'safe' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(hasFreeHostingTokenRisk, true);
+    assert.equal(scoreAfterCap, 85);
+    assert.equal(scanData.riskScore, 70);
+    assert.deepEqual(scanData.summaryReasons, ['免費子網域搭配一次性驗證參數']);
 });
 
 test('Apple 官方網域與 iCloud 官方網域不應被品牌相似規則誤判', () => {

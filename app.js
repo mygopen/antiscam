@@ -1813,6 +1813,16 @@ const { useState, useEffect, useRef } = React;
             const matchedLandingParams = landingParamList.filter(key => fullUrl.toLowerCase().includes(key));
             const hasSuspiciousLandingParams = matchedLandingParams.length > 0;
             const hasNestedSuspiciousParams = nestedUrls.some(url => hasSensitiveUrlParam(url));
+            const hasRandomizedPathToken = (() => {
+                try {
+                    return new URL(fullUrl).pathname
+                        .split('/')
+                        .filter(Boolean)
+                        .some(segment => /^[a-z0-9_-]{8,50}$/i.test(segment) && /[a-z]/i.test(segment) && /\d/.test(segment));
+                } catch (e) {
+                    return false;
+                }
+            })();
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
             const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
             const isTrustedPaymentGatewayOrApiEndpoint = hasTrustedAllowlistOverride &&
@@ -1922,6 +1932,10 @@ const { useState, useEffect, useRef } = React;
                 hasLogisticsScamSignal;
             const hasRegulatedTobaccoSalesSignal = !isWhitelisted &&
                 !!regulatedTobaccoSalesSignals.matched;
+            const hasFreeHostingSensitiveLinkRisk = !isWhitelisted &&
+                isFreeHosting &&
+                (hasSuspiciousParams || hasNestedSuspiciousParams) &&
+                (hasBrandSimilarity || hasSuspiciousTempDomain || isSuspiciousTLD || hasRandomizedPathToken || !isHighTraffic);
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
             const hasStrongEcommerceValidation = ecommerceTrustSignals.matched &&
@@ -2097,6 +2111,7 @@ const { useState, useEffect, useRef } = React;
                 hasUaCloakingRisk ||
                 isDownloadPhishingSignal ||
                 hasShoppingScamSignal ||
+                hasFreeHostingSensitiveLinkRisk ||
                 hasRegulatedTobaccoSalesSignal ||
                 hasShoppingLineContactRisk;
 
@@ -2273,6 +2288,7 @@ const { useState, useEffect, useRef } = React;
                     if (hasDisposableShoppingLandingRisk) riskScore += 85;
                     else if (hasDisposableRootPhishingRisk) riskScore += 70;
                     else if (hasDisposableUnreadablePageRisk) riskScore += 70;
+                    if (hasFreeHostingSensitiveLinkRisk) riskScore += 85;
                     if (hasRegulatedTobaccoSalesSignal) riskScore += 95;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
                     if (hasShoppingLineContactRisk) riskScore += hasShoppingLandingUrlRisk ? 50 : 40;
@@ -2394,6 +2410,7 @@ const { useState, useEffect, useRef } = React;
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
+                hasFreeHostingSensitiveLinkRisk ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
                 hasDisposableShoppingLandingRisk ||
@@ -2433,6 +2450,7 @@ const { useState, useEffect, useRef } = React;
                     isFinalVeryHighRiskTLD ||
                     hasSuspiciousTempDomain ||
                     hasFinalSuspiciousTemp ||
+                    hasFreeHostingSensitiveLinkRisk ||
                     hasSuspiciousEmailTrackingHost ||
                     hasDeepSubdomainPhishingPattern ||
                     hasDisposableShoppingLandingRisk ||
@@ -2563,6 +2581,9 @@ const { useState, useEffect, useRef } = React;
             } else if (hasBrandSimilarity) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 網域名稱與「${matchedBrandSimilarity.brandName}」高度相似，但不是官方網域，疑似釣魚仿冒！`;
+            } else if (hasFreeHostingSensitiveLinkRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 偵測到免費子網域搭配一次性驗證參數或隨機路徑，常見於冒用品牌的短期釣魚連結。';
             } else if (isVeryHighRiskTLD || isFinalVeryHighRiskTLD) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '網域或轉址目標為高風險網址，請注意！';
@@ -2754,6 +2775,13 @@ const { useState, useEffect, useRef } = React;
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
+                    freeHostingSensitiveLink: {
+                        status: hasFreeHostingSensitiveLinkRisk ? 'danger' : 'safe',
+                        label: '免費子網域驗證連結',
+                        details: hasFreeHostingSensitiveLinkRisk
+                            ? '免費架站/子網域服務搭配 token、驗證或一次性參數與隨機路徑，符合短期釣魚連結常見型態'
+                            : '未偵測到免費子網域搭配敏感驗證參數的高風險組合'
+                    },
                     regulatedProduct: {
                         status: hasRegulatedTobaccoSalesSignal ? 'danger' : 'safe',
                         label: '電子菸/加熱菸販售',
@@ -2791,6 +2819,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
             addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
+            addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
@@ -3867,7 +3896,7 @@ const { useState, useEffect, useRef } = React;
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.6 AI 偵測引擎</div></div></header>
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.7 AI 偵測引擎</div></div></header>
                     <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6"><div className="w-full max-w-3xl">
                         <div className="text-center mb-10 md:mb-12 animate-fade-in"><h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br className="md:hidden" /><span className="text-brand-red">從檢查網址開始</span></h2><p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p></div>
                         <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100">
