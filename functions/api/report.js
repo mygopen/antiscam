@@ -5,9 +5,12 @@ export async function onRequestPost(context) {
 
     try {
         const body = await request.json();
-        const { url, riskScore, aiAnalysis } = body;
+        const { url, rawUrl, sanitizedUrl, removedParams, riskScore, aiAnalysis } = body;
+        const forensicRawUrl = rawUrl || url;
+        const forensicSanitizedUrl = sanitizedUrl || url;
+        const removedParamList = Array.isArray(removedParams) ? removedParams : [];
 
-        if (!url) {
+        if (!forensicRawUrl) {
             return new Response(JSON.stringify({ error: "Missing URL parameter" }), { status: 400 });
         }
 
@@ -17,16 +20,22 @@ export async function onRequestPost(context) {
 // 👇 依照最新需求調整欄位對應
         let riskLevelText = riskScore >= 70 ? '高風險' : (riskScore >= 30 ? '中度風險' : '低風險');
 
+        const forensicNote = [
+            `原始URL：${forensicRawUrl}`,
+            forensicSanitizedUrl && forensicSanitizedUrl !== forensicRawUrl ? `掃描URL：${forensicSanitizedUrl}` : '',
+            removedParamList.length ? `移除參數：${removedParamList.join(', ')}` : ''
+        ].filter(Boolean).join('\n');
+
         const payload = {
-            feature_string: url,
+            feature_string: forensicRawUrl,
             content: "系統即時檢測回報", // 👈 將對外文字改為自動檢測中立字眼
             type: "OTHER",
             platform: "web",
             charge_type: "42",
             // 👇 修改 note 格式，符合完整的風險列表顯示
-            note: `風險等級：${riskLevelText}（分數 ${riskScore}）\n${aiAnalysis || ''}`.substring(0, 490),
+            note: `風險等級：${riskLevelText}（分數 ${riskScore}）\n${aiAnalysis || ''}\n\n[URL 稽核]\n${forensicNote}`.substring(0, 490),
             data: {
-                web_42_note: "" // 不放東西，維持空白
+                web_42_note: forensicNote.substring(0, 490)
             }
         };
 

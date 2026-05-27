@@ -118,6 +118,11 @@ window.RISK_CONFIG = {
         'sc_country', 'sc_geo', 'sc_medium', 'sc_outcome',
         'sc_publisher', 'sc_subchannel'
     ],
+    volatileUrlParams: [
+        '_eat', 'eat', '_t', '_ts', 'ts', 'timestamp', 'time',
+        'expires', 'expire', 'valid', 'nonce', 'cachebust',
+        'cachebuster', 'cb', 'rnd', 'rand'
+    ],
     officialFlowPathKeywords: [
         '/login', '/signin', '/sign-in', '/verify', '/verification', '/auth',
         '/account', '/card', '/bank', '/reward', '/bonus', '/claim',

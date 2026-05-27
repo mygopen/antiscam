@@ -161,18 +161,38 @@ function isTrackingUrlParamName(name) {
     });
 }
 
+function isVolatileUrlParam(name, value = '') {
+    const lowerName = String(name || '').toLowerCase();
+    const rawValue = String(value || '');
+    if (riskConfig.volatileUrlParams.some(rule => lowerName === String(rule || '').toLowerCase())) return true;
+    if (/^(?:valid|verify|auth|session)[_-]?\d{8,14}[_-][a-f0-9]{12,}$/i.test(rawValue)) return true;
+    if (/^(?:valid|expire|expires|ts|time|timestamp|nonce|rnd|rand|cb)$/i.test(lowerName) && /^[a-z0-9_-]{8,80}$/i.test(rawValue)) return true;
+    if (/(?:time|timestamp|expire|expires|valid|nonce)/i.test(lowerName) && /^\d{10,14}$/.test(rawValue)) return true;
+    if (lowerName.startsWith('_') && /^[a-z0-9_-]{16,120}$/i.test(rawValue) && (/\d/.test(rawValue) || /[a-f0-9]{16,}/i.test(rawValue))) return true;
+    return false;
+}
+
 function sanitizeUrlForRiskScoring(rawUrl) {
     const parsed = new URL(rawUrl);
     const removedTrackingParams = [];
+    const removedVolatileParams = [];
     [...new Set([...parsed.searchParams.keys()])].forEach(name => {
-        if (isTrackingUrlParamName(name)) {
+        const values = parsed.searchParams.getAll(name);
+        if (values.some(value => isVolatileUrlParam(name, value))) {
+            removedVolatileParams.push(name);
+            parsed.searchParams.delete(name);
+        } else if (isTrackingUrlParamName(name)) {
             removedTrackingParams.push(name);
             parsed.searchParams.delete(name);
         }
     });
+    const removedParams = [...new Set([...removedTrackingParams, ...removedVolatileParams])];
     return {
         href: parsed.href,
-        removedTrackingParams
+        removedTrackingParams: [...new Set(removedTrackingParams)],
+        removedVolatileParams: [...new Set(removedVolatileParams)],
+        removedParams,
+        rawUrl
     };
 }
 
@@ -1790,12 +1810,27 @@ test('風險評分前應移除標準行銷追蹤參數並保留必要商品與�
     const parsed = new URL(sanitized.href);
 
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'gbraid', 'gclid', 'utm_medium', 'utm_source'].sort());
+    assert.deepEqual(sanitized.removedVolatileParams, []);
     assert.equal(parsed.searchParams.has('utm_source'), false);
     assert.equal(parsed.searchParams.has('gclid'), false);
     assert.equal(parsed.searchParams.has('gbraid'), false);
     assert.equal(parsed.searchParams.has('fbclid'), false);
     assert.equal(parsed.searchParams.get('i_code'), '123');
     assert.equal(parsed.searchParams.get('token'), 'keep');
+});
+
+test('風險評分前應移除動態 anti-evasion 參數並保留原始網址稽核資訊', () => {
+    const rawUrl = 'https://app-ie.eu.cc/HqTGLU0qwJ?_eat=valid_20260527143844_991ac1689258aa030d8d8605cef0ae5e&utm_source=sms&token=keep';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+
+    assert.equal(sanitized.rawUrl, rawUrl);
+    assert.equal(parsed.searchParams.has('_eat'), false);
+    assert.equal(parsed.searchParams.has('utm_source'), false);
+    assert.equal(parsed.searchParams.get('token'), 'keep');
+    assert.deepEqual(sanitized.removedVolatileParams, ['_eat']);
+    assert.deepEqual(sanitized.removedTrackingParams, ['utm_source']);
+    assert.deepEqual(sanitized.removedParams.sort(), ['_eat', 'utm_source'].sort());
 });
 
 test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {

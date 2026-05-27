@@ -179,22 +179,45 @@ const { useState, useEffect, useRef } = React;
             });
         };
 
+        const isVolatileUrlParam = (name, value = '') => {
+            const lowerName = String(name || '').toLowerCase();
+            const rawValue = String(value || '');
+            const lowerValue = rawValue.toLowerCase();
+            if (getRiskList('volatileUrlParams').some(rule => lowerName === String(rule || '').toLowerCase())) return true;
+            if (/^(?:valid|verify|auth|session)[_-]?\d{8,14}[_-][a-f0-9]{12,}$/i.test(rawValue)) return true;
+            if (/^(?:valid|expire|expires|ts|time|timestamp|nonce|rnd|rand|cb)$/i.test(lowerName) && /^[a-z0-9_-]{8,80}$/i.test(rawValue)) return true;
+            if (/(?:time|timestamp|expire|expires|valid|nonce)/i.test(lowerName) && /^\d{10,14}$/.test(rawValue)) return true;
+            if (lowerName.startsWith('_') && /^[a-z0-9_-]{16,120}$/i.test(rawValue) && (/\d/.test(rawValue) || /[a-f0-9]{16,}/i.test(rawValue))) return true;
+            return false;
+        };
+
         const sanitizeUrlForRiskScoring = (rawUrl) => {
             try {
                 const parsed = new URL(rawUrl);
                 const removedTrackingParams = [];
+                const removedVolatileParams = [];
                 [...new Set([...parsed.searchParams.keys()])].forEach(name => {
-                    if (isTrackingUrlParamName(name)) {
+                    const values = parsed.searchParams.getAll(name);
+                    const removeAsVolatile = values.some(value => isVolatileUrlParam(name, value));
+                    if (removeAsVolatile) {
+                        removedVolatileParams.push(name);
+                        parsed.searchParams.delete(name);
+                    } else if (isTrackingUrlParamName(name)) {
                         removedTrackingParams.push(name);
                         parsed.searchParams.delete(name);
                     }
                 });
+                const removedParams = [...new Set([...removedTrackingParams, ...removedVolatileParams])];
                 return {
                     href: parsed.href,
-                    removedTrackingParams
+                    removedTrackingParams: [...new Set(removedTrackingParams)],
+                    removedVolatileParams: [...new Set(removedVolatileParams)],
+                    removedParams,
+                    rawHref: rawUrl,
+                    rawUrl
                 };
             } catch (e) {
-                return { href: rawUrl, removedTrackingParams: [] };
+                return { href: rawUrl, rawHref: rawUrl, rawUrl, removedTrackingParams: [], removedVolatileParams: [], removedParams: [] };
             }
         };
 
@@ -1157,7 +1180,9 @@ const { useState, useEffect, useRef } = React;
             );
         };
 
-        const checkSiteAvailability = async (fullUrl) => {
+        const checkSiteAvailability = async (fullUrl, options = {}) => {
+            const rawUrl = options.rawUrl || fullUrl;
+            const sanitizedUrl = options.sanitizedUrl || fullUrl;
             const emptySiteStatus = (status, msg, extra = {}) => ({
                 status,
                 msg,
@@ -1173,7 +1198,18 @@ const { useState, useEffect, useRef } = React;
                 if ([403, 429].includes(Number(httpCode))) return true;
                 return /(access denied|request blocked|forbidden|verify you are human|checking your browser|cf-chl|cloudflare|akamai|incapsula|imperva|datadome|bot detection|anti[- ]?bot)/i.test(haystack);
             };
-            const analyzeFetchedContent = (data, sourceLabel = 'content-fetch') => {
+            const getCrawlerCandidates = () => {
+                const candidates = [sanitizedUrl, fullUrl, rawUrl].filter(Boolean);
+                return [...new Set(candidates)];
+            };
+            const isUsableCrawlerResult = (result) => result?.status === 'ok';
+            const rememberBestCrawlerResult = (best, result) => {
+                if (!result) return best;
+                if (!best) return result;
+                const rank = { ok: 4, blank: 3, blocked: 2, error: 1, unknown: 0 };
+                return (rank[result.status] || 0) > (rank[best.status] || 0) ? result : best;
+            };
+            const analyzeFetchedContent = (data, sourceLabel = 'content-fetch', fetchUrl = fullUrl) => {
                 const code = Number(data?.status?.http_code || data?.code || 0);
                 const finalUrl = data?.status?.url || data?.finalUrl || null;
                 const text = String(data?.contents || '');
@@ -1183,16 +1219,19 @@ const { useState, useEffect, useRef } = React;
                 let linkStats = { total: 0, internal: 0, external: 0 };
                 let pageSignals = createEmptyPageSignals();
 
-                pageSignals.downloadSignals = analyzeDownloadSignals(null, text, fullUrl);
+                pageSignals.downloadSignals = analyzeDownloadSignals(null, text, fetchUrl);
                 hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
 
-                if (detectCrawlerBlock(text, code)) {
+                if (data?.blocked || detectCrawlerBlock(text, code)) {
                     return emptySiteStatus('blocked', '網站可能啟用 WAF/Anti-bot，基礎爬蟲被阻擋', {
                         code,
                         finalUrl,
                         hasIframe,
                         hasApk,
                         source: sourceLabel,
+                        fetchUrl,
+                        rawUrl,
+                        sanitizedUrl,
                         pageSignals
                     });
                 }
@@ -1201,7 +1240,10 @@ const { useState, useEffect, useRef } = React;
                     return emptySiteStatus('error', `網站無法正常存取 (HTTP ${code})`, {
                         code,
                         finalUrl,
-                        source: sourceLabel
+                        source: sourceLabel,
+                        fetchUrl,
+                        rawUrl,
+                        sanitizedUrl
                     });
                 }
 
@@ -1209,7 +1251,10 @@ const { useState, useEffect, useRef } = React;
                     return emptySiteStatus('unknown', '無法檢測網站內容', {
                         code,
                         finalUrl,
-                        source: sourceLabel
+                        source: sourceLabel,
+                        fetchUrl,
+                        rawUrl,
+                        sanitizedUrl
                     });
                 }
 
@@ -1230,12 +1275,12 @@ const { useState, useEffect, useRef } = React;
                                 pageSignals
                             });
                         }
-                        pageSignals = analyzePageSignals(doc, fullUrl, text);
+                        pageSignals = analyzePageSignals(doc, fetchUrl, text);
                         hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
                         const links = doc.querySelectorAll('a');
                         linkStats.total = links.length;
                         let domainHostname = '';
-                        try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
+                        try { domainHostname = new URL(fetchUrl).hostname; } catch (e) { }
                         links.forEach(el => {
                             const href = el.getAttribute('href');
                             if (!href) return;
@@ -1270,6 +1315,9 @@ const { useState, useEffect, useRef } = React;
                         linkStats,
                         hasApk,
                         source: sourceLabel,
+                        fetchUrl,
+                        rawUrl,
+                        sanitizedUrl,
                         pageSignals
                     });
                 }
@@ -1282,42 +1330,57 @@ const { useState, useEffect, useRef } = React;
                     linkStats,
                     hasApk,
                     source: sourceLabel,
+                    fetchUrl,
+                    rawUrl,
+                    sanitizedUrl,
                     pageSignals
                 };
             };
+            let bestResult = null;
+            const candidates = getCrawlerCandidates();
 
-            try {
-                const directRes = await fetch(`/api/site-content?url=${encodeURIComponent(fullUrl)}`);
-                const directData = await readJsonSafely(directRes, null);
-                if (directData && (directData.contents || directData.status)) {
-                    const directResult = analyzeFetchedContent(directData, directData.source || 'direct-browser-ua');
-                    if (directResult.status !== 'unknown') return directResult;
-                }
-            } catch (e) { }
-
-            try {
-                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}&disableCache=true`;
-                const res = await fetch(proxyUrl);
-                if (!res.ok) return emptySiteStatus('unknown', '無法檢測網站狀態');
-                const data = await readJsonSafely(res, null);
-                if (!data) throw new Error('Primary content proxy returned non-json response');
-                const proxyResult = analyzeFetchedContent(data, 'allorigins');
-                if (proxyResult.status !== 'unknown') return proxyResult;
-            } catch (e) {
+            for (const candidateUrl of candidates) {
                 try {
-                    const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullUrl)}`;
+                    const directRes = await fetch(`/api/site-content?url=${encodeURIComponent(candidateUrl)}&rawUrl=${encodeURIComponent(rawUrl)}`);
+                    const directData = await readJsonSafely(directRes, null);
+                    if (directData && (directData.contents || directData.status)) {
+                        const directResult = analyzeFetchedContent(directData, directData.source || 'direct-browser-ua', directData.fetchUrl || candidateUrl);
+                        if (isUsableCrawlerResult(directResult)) return directResult;
+                        bestResult = rememberBestCrawlerResult(bestResult, directResult);
+                    }
+                } catch (e) { }
+            }
+
+            for (const candidateUrl of candidates) {
+                try {
+                    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(candidateUrl)}&disableCache=true`;
+                    const res = await fetch(proxyUrl);
+                    if (!res.ok) continue;
+                    const data = await readJsonSafely(res, null);
+                    if (!data) throw new Error('Primary content proxy returned non-json response');
+                    const proxyResult = analyzeFetchedContent(data, 'allorigins', candidateUrl);
+                    if (isUsableCrawlerResult(proxyResult)) return proxyResult;
+                    bestResult = rememberBestCrawlerResult(bestResult, proxyResult);
+                } catch (e) { }
+            }
+
+            for (const candidateUrl of candidates) {
+                try {
+                    const backupProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(candidateUrl)}`;
                     const resBackup = await fetch(backupProxy);
                     if (resBackup.ok) {
                         const backupText = await resBackup.text();
-                        return analyzeFetchedContent({
+                        const backupResult = analyzeFetchedContent({
                             status: { http_code: 200, url: null },
                             contents: backupText
-                        }, 'codetabs');
+                        }, 'codetabs', candidateUrl);
+                        if (isUsableCrawlerResult(backupResult)) return backupResult;
+                        bestResult = rememberBestCrawlerResult(bestResult, backupResult);
                     }
                 } catch (err) { }
             }
 
-            return emptySiteStatus('unknown', '無法檢測網站內容');
+            return bestResult || emptySiteStatus('unknown', '無法檢測網站內容', { rawUrl, sanitizedUrl });
         };
 
         const checkTrancoRank = async (domain) => {
@@ -1556,7 +1619,15 @@ const { useState, useEffect, useRef } = React;
         );
 
         // --- Modified simulateScan with refined whitelist and risk scoring ---
-        const simulateScan = async (targetDomain, fullUrl, currentWhitelist = []) => {
+        const simulateScan = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
+            const rawScanUrl = scanOptions.rawUrl || fullUrl;
+            const sanitizedScanUrl = scanOptions.sanitizedUrl || fullUrl;
+            const removedTrackingParamsForScan = [...new Set(scanOptions.removedTrackingParams || [])];
+            const removedVolatileParamsForScan = [...new Set(scanOptions.removedVolatileParams || [])];
+            const removedParamsForScan = [...new Set(scanOptions.removedParams || [
+                ...removedTrackingParamsForScan,
+                ...removedVolatileParamsForScan
+            ])];
             let resolvedIp = null;
             try {
                 const dnsData = await fetchJsonSafely(`https://dns.google/resolve?name=${targetDomain}&type=A`, null);
@@ -1628,7 +1699,11 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
                 withTimeout(fetchSiteSeoData(fullUrl), 5000, { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} }),
-                withTimeout(isTrustedEcommerceRootDomain ? Promise.resolve(trustedEcommerceSiteStatus) : checkSiteAvailability(fullUrl), 5000, defaultSiteStatus),
+                withTimeout(isTrustedEcommerceRootDomain ? Promise.resolve(trustedEcommerceSiteStatus) : checkSiteAvailability(fullUrl, {
+                    rawUrl: rawScanUrl,
+                    sanitizedUrl: sanitizedScanUrl,
+                    removedVolatileParams: removedVolatileParamsForScan
+                }), 5000, defaultSiteStatus),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }),
@@ -1799,7 +1874,8 @@ const { useState, useEffect, useRef } = React;
             const hasEmbeddedTrustedTldLabel = embeddedTrustedTldLabels.some(tld =>
                 `.${domain}.`.includes(`.${tld}.`) && !domain.endsWith(`.${tld}`)
             );
-            const hasSuspiciousParams = hasSensitiveUrlParam(fullUrl);
+            const hasRemovedVolatileParams = removedVolatileParamsForScan.length > 0;
+            const hasSuspiciousParams = hasSensitiveUrlParam(fullUrl) || hasRemovedVolatileParams;
             const trustedEndpointPath = (() => {
                 try {
                     return new URL(fullUrl).pathname.toLowerCase();
@@ -1934,7 +2010,7 @@ const { useState, useEffect, useRef } = React;
                 !!regulatedTobaccoSalesSignals.matched;
             const hasFreeHostingSensitiveLinkRisk = !isWhitelisted &&
                 isFreeHosting &&
-                (hasSuspiciousParams || hasNestedSuspiciousParams) &&
+                (hasSuspiciousParams || hasNestedSuspiciousParams || hasRemovedVolatileParams) &&
                 (hasBrandSimilarity || hasSuspiciousTempDomain || isSuspiciousTLD || hasRandomizedPathToken || !isHighTraffic);
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
@@ -2637,7 +2713,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain },
+                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -2984,6 +3060,12 @@ const { useState, useEffect, useRef } = React;
         const sendAutoReport = async (url, scanData, brandDataRes, source, reportedUrls, setReportedUrls) => {
             try {
                 const indicators = [];
+                const rawUrl = scanData.rawUrl || scanData.inputUrl || url;
+                const sanitizedUrl = scanData.sanitizedUrl || scanData.scannedUrl || url;
+                const removedParams = scanData.removedParams || [
+                    ...(scanData.removedTrackingParams || []),
+                    ...(scanData.removedVolatileParams || [])
+                ];
                 
                 // 黑名單與假冒品牌屬於絕對危險特徵
                 if (scanData.blocklistListed) indicators.push('🚨 已列入165詐騙黑名單');
@@ -2996,13 +3078,16 @@ const { useState, useEffect, useRef } = React;
                     else if (check.status === 'safe') indicators.push(`✅ ${check.label}: ${check.details.split('\n')[0]}`);
                 });
                 
-                const aiAnalysisContent = `[系統自動檢測 - ${source}]\n判斷為正常或詐騙之指標：\n${indicators.join('\n')}`;
+                const aiAnalysisContent = `[系統自動檢測 - ${source}]\n判斷為正常或詐騙之指標：\n${indicators.join('\n')}\n\n[URL 稽核]\n原始URL：${rawUrl}\n掃描URL：${sanitizedUrl}${removedParams.length ? `\n移除參數：${removedParams.join(', ')}` : ''}`;
 
                 const res = await fetch('/api/report', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        url: url,
+                        url: rawUrl,
+                        rawUrl,
+                        sanitizedUrl,
+                        removedParams,
                         riskScore: scanData.riskScore,
                         aiAnalysis: aiAnalysisContent // 送出我們整理好的全指標清單
                     })
@@ -3047,6 +3132,9 @@ const { useState, useEffect, useRef } = React;
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             url: targetUrl,
+                            rawUrl: targetUrl,
+                            sanitizedUrl: targetUrl,
+                            removedParams: [],
                             riskScore: 100,
                             aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
                         })
@@ -3124,7 +3212,7 @@ const { useState, useEffect, useRef } = React;
                 const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
 
                 const [scanData, brandDataRes] = await Promise.all([
-                    simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist),
+                    simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
                     skipAiBrandAnalysis
                         ? Promise.resolve(null)
                         : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(riskScoringUrl)}`, null), 7000, null)
@@ -3132,6 +3220,8 @@ const { useState, useEffect, useRef } = React;
                 scanData.inputUrl = urlObj.href;
                 scanData.sanitizedUrl = riskScoringUrl;
                 scanData.removedTrackingParams = sanitizedForRisk.removedTrackingParams;
+                scanData.removedVolatileParams = sanitizedForRisk.removedVolatileParams;
+                scanData.removedParams = sanitizedForRisk.removedParams;
 
                 if (scanData.isInvalid) {
                     setMessages(prev => [...prev, {
@@ -3626,13 +3716,22 @@ const { useState, useEffect, useRef } = React;
 
                     // 去除重複項目並組合
                     const uniqueWarnings = [...new Set(warnings)];
-                    const detailedAnalysis = `\n原因：\n${uniqueWarnings.map(w => '- ' + w).join('\n')}`;
+                    const reportUrl = result.rawUrl || result.inputUrl || result.scannedUrl;
+                    const reportSanitizedUrl = result.sanitizedUrl || result.scannedUrl;
+                    const reportRemovedParams = result.removedParams || [
+                        ...(result.removedTrackingParams || []),
+                        ...(result.removedVolatileParams || [])
+                    ];
+                    const detailedAnalysis = `\n原因：\n${uniqueWarnings.map(w => '- ' + w).join('\n')}\n\n[URL 稽核]\n原始URL：${reportUrl}\n掃描URL：${reportSanitizedUrl}${reportRemovedParams.length ? `\n移除參數：${reportRemovedParams.join(', ')}` : ''}`;
 
                     const res = await fetch('/api/report', { 
                         method: 'POST', 
                         headers: { 'Content-Type': 'application/json' }, 
                         body: JSON.stringify({ 
-                            url: result.scannedUrl, 
+                            url: reportUrl,
+                            rawUrl: reportUrl,
+                            sanitizedUrl: reportSanitizedUrl,
+                            removedParams: reportRemovedParams,
                             riskScore: result.riskScore, 
                             aiAnalysis: detailedAnalysis 
                         }) 
@@ -3640,7 +3739,7 @@ const { useState, useEffect, useRef } = React;
                     
                     const data = await res.json();
                     if (data.success) {
-                        const newReported = [...reportedUrls, result.scannedUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
+                        const newReported = [...reportedUrls, reportUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
                         if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
                     } else {
                         let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
@@ -3653,7 +3752,7 @@ const { useState, useEffect, useRef } = React;
                 if (!targetUrl || isReporting) return;
                 setIsReporting(true);
                 try {
-                    const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: targetUrl, riskScore: 100, aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址" }) });
+                    const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: targetUrl, rawUrl: targetUrl, sanitizedUrl: targetUrl, removedParams: [], riskScore: 100, aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址" }) });
                     const data = await res.json();
                     if (data.success) {
                         const newReported = [...reportedUrls, targetUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
@@ -3755,7 +3854,7 @@ const { useState, useEffect, useRef } = React;
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
-                        simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist),
+                        simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
                         // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
                         (isSocialInput || skipAiBrandAnalysis)
                             ? Promise.resolve(null) 
@@ -3764,6 +3863,8 @@ const { useState, useEffect, useRef } = React;
                     scanData.inputUrl = parsedInput.href;
                     scanData.sanitizedUrl = riskScoringUrl;
                     scanData.removedTrackingParams = sanitizedForRisk.removedTrackingParams;
+                    scanData.removedVolatileParams = sanitizedForRisk.removedVolatileParams;
+                    scanData.removedParams = sanitizedForRisk.removedParams;
 
                     // 👇 新增防呆：如果網域已經掛掉或不存在 (isInvalid)，就不需要把 AI 結果塞進去，避免程式崩潰
                     if (!scanData.isInvalid) {
@@ -4216,7 +4317,7 @@ const { useState, useEffect, useRef } = React;
                                             </div>
                                         </div>
                                         
-                                        {reportedUrls.includes(result.scannedUrl) ? (
+                                        {reportedUrls.includes(result.rawUrl || result.inputUrl || result.scannedUrl) ? (
                                             <div className="px-4 py-2.5 bg-gray-200 text-gray-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto">
                                                 <CheckCircle size={18} /> 這個網址已檢舉通報中
                                             </div>
