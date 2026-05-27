@@ -150,6 +150,20 @@ window.RISK_CONFIG = {
         '/apk/', '/app/', '/install/', '/static/apk/', '/package/',
         '/update/', '/index.html'
     ],
+    regulatedTobaccoProductKeywords: [
+        '電子煙', '電子菸', '加熱菸', '加熱煙', '類菸品', '類煙品',
+        '煙彈', '菸彈', '煙油', '菸油', '煙桿', '菸桿', '主機煙桿',
+        '拋棄式電子煙', '拋棄式電子菸', '一次性電子煙', '一次性電子菸',
+        'relx', '悅刻', 'yueke', 'sp2s', 'snowplus', 'lana', 'ilia',
+        'hebat', 'vaka', 'ga8000'
+    ],
+    regulatedTobaccoSalesKeywords: [
+        '購物車', '加入購物車', '結帳', '下單', '訂單', '訂購', '立即購買',
+        '馬上訂購', '立即搶購', '如需購買', '售價', '價格', '特價',
+        '優惠價', '原價', 'nt$', 'ntd', '已售', '現貨', '正品現貨',
+        '貨到付款', '全台配送', '宅配', '超商取貨', '客服line',
+        'line客服', '加客服line', '加入line', '請加客服line'
+    ],
     trustedResourceDomains: [
         'google.com', 'googleapis.com', 'gstatic.com', 'googletagmanager.com',
         'google-analytics.com', 'cloudflare.com', 'cloudflareinsights.com',

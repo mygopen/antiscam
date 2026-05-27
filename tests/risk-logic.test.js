@@ -555,6 +555,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
     addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
     addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
+    addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
     addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
@@ -1292,6 +1293,40 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     };
 }
 
+function analyzeRegulatedTobaccoSalesSignals({ html = '', url }) {
+    const haystack = decodeSignalText(`${html}\n${url}`).replace(/\s+/g, ' ');
+    const productMatches = riskConfig.regulatedTobaccoProductKeywords
+        .filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const salesMatches = riskConfig.regulatedTobaccoSalesKeywords
+        .filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const hasPriceSignal = /(?:nt\$|ntd)\s*\d{2,6}|(?:售價|價格|優惠價|特價|原價)[:：\s$]*\d{2,6}|已售[:：]?\s*\d+/i.test(haystack);
+    const hasCartOrOrderSignal = /(購物車|加入購物車|結帳|下單|訂單|訂購|立即購買|立即搶購|馬上訂購)/i.test(haystack);
+    const hasLinePurchaseSignal = /(購買|訂購|下單|訂單|客服|如需購買).{0,18}line|line.{0,18}(購買|訂購|下單|訂單|客服)/i.test(haystack);
+    const hasTaiwanFulfillmentSignal = /(貨到付款|全台配送|宅配|超商取貨|國內現貨|正品現貨)/i.test(haystack);
+    const hasSalesSignal = salesMatches.length >= 2 ||
+        hasPriceSignal ||
+        hasCartOrOrderSignal ||
+        hasLinePurchaseSignal ||
+        hasTaiwanFulfillmentSignal;
+
+    const reasons = [];
+    if (productMatches.length > 0) reasons.push(`電子菸/加熱菸商品詞：${[...new Set(productMatches)].slice(0, 3).join('、')}`);
+    if (hasPriceSignal || hasCartOrOrderSignal) reasons.push('出現價格、購物車或下單流程');
+    if (hasLinePurchaseSignal) reasons.push('要求透過 LINE 客服購買或確認訂單');
+    if (hasTaiwanFulfillmentSignal) reasons.push('出現貨到付款、全台配送或現貨等交易話術');
+    if (salesMatches.length >= 2 && reasons.length < 4) reasons.push(`交易關鍵字：${[...new Set(salesMatches)].slice(0, 3).join('、')}`);
+
+    return {
+        matched: productMatches.length > 0 && hasSalesSignal,
+        reasons,
+        productMatches: [...new Set(productMatches)].slice(0, 5),
+        salesMatches: [...new Set(salesMatches)].slice(0, 5),
+        hasPriceSignal,
+        hasLinePurchaseSignal,
+        hasTaiwanFulfillmentSignal
+    };
+}
+
 function analyzeEcommerceTrustSignals({ html = '', url }) {
     const haystack = decodeSignalText(`${html}\n${url}`);
     const platformFootprints = [
@@ -2005,6 +2040,64 @@ test('一頁式購物頁要求加入 LINE 聯絡應提高為高風險', () => {
     assert.ok(signals.reasons.includes('要求加入 LINE 聯絡或下單'));
     assert.equal(hasShoppingLineContactRisk, true);
     assert.equal(riskScore >= 70, true);
+});
+
+test('電子菸網路販售頁應升為高風險並不被正規電商佐證洗白', () => {
+    const html = `
+        <main>
+            <script src="/wp-content/plugins/woocommerce/assets/js/frontend/cart-fragments.js"></script>
+            <p>歡迎光臨RELX電子煙悅刻，如需購買電子煙請加客服LINE：677sp</p>
+            <a href="/cart">購物車</a>
+            <section>
+                <h2>RELX電子煙專區</h2>
+                <article>RELX煙彈六代 1顆入 RELX悅刻電子煙 NT$130 已售：1807件</article>
+                <article>Relx電子煙悅刻6代主機煙桿 正品現貨 NT$700 已售：375件</article>
+                <article>RELX悅刻拋棄式GA8000口一次性電子煙 無需充電 NT$380 已售：810件</article>
+            </section>
+            <p>公司名稱：範例股份有限公司。客服電話與客服信箱提供售後服務。退換貨政策、隱私權政策、付款方式、配送方式完整揭露。</p>
+            <footer>正品保障、貨到付款、價格優惠</footer>
+        </main>`;
+    const regulatedSignals = analyzeRegulatedTobaccoSalesSignals({
+        html,
+        url: 'https://681336.com/relx-yueke/'
+    });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({
+        html,
+        url: 'https://681336.com/relx-yueke/'
+    });
+    const hasRegulatedTobaccoSalesSignal = regulatedSignals.matched;
+    const hasStrongEcommerceValidation = ecommerceSignals.matched && !hasRegulatedTobaccoSalesSignal;
+    const riskScore = hasRegulatedTobaccoSalesSignal ? 95 : 0;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: 25,
+        checks: {
+            regulatedProduct: { status: hasRegulatedTobaccoSalesSignal ? 'danger' : 'safe' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(regulatedSignals.matched, true);
+    assert.ok(regulatedSignals.productMatches.includes('電子煙'));
+    assert.equal(ecommerceSignals.matched, true);
+    assert.equal(hasStrongEcommerceValidation, false);
+    assert.equal(riskScore >= 70, true);
+    assert.equal(scanData.riskScore, 70);
+    assert.deepEqual(scanData.summaryReasons, ['違法電子菸/加熱菸網路販售風險']);
+});
+
+test('電子菸衛教或法規文章沒有交易脈絡時不應命中網路販售風險', () => {
+    const html = `
+        <article>
+            <h1>網路購買電子菸小心成為違法輸入者</h1>
+            <p>衛生局提醒民眾勿輸入電子菸或刊登電子菸廣告，避免受罰。</p>
+            <p>菸害防制法規定，輸入電子菸及其組合零件將受裁罰。</p>
+        </article>`;
+    const regulatedSignals = analyzeRegulatedTobaccoSalesSignals({
+        html,
+        url: 'https://www.chshb.gov.tw/node/219118282'
+    });
+
+    assert.equal(regulatedSignals.matched, false);
 });
 
 test('正常商家只有 LINE 聯絡資訊不應單獨判成一頁式購物詐騙', () => {

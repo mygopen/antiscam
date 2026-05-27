@@ -355,7 +355,8 @@ const { useState, useEffect, useRef } = React;
             businessIdentitySignals: { score: 0, matched: false, names: [], hasTaxId: false, reasons: [] },
             lineOfficialSignals: { matched: false, urls: [], reason: '' },
             ecommerceTrustSignals: { score: 0, matched: false, reasons: [], categories: [] },
-            shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasMerchantInfo: false }
+            shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasMerchantInfo: false },
+            regulatedTobaccoSalesSignals: { score: 0, matched: false, reasons: [], productMatches: [], salesMatches: [], hasPriceSignal: false, hasLinePurchaseSignal: false }
         });
 
         const decodeSignalText = (text) => {
@@ -999,6 +1000,49 @@ const { useState, useEffect, useRef } = React;
             };
         };
 
+        const analyzeRegulatedTobaccoSalesSignals = (doc, rawText = '', fullUrl = '') => {
+            const textParts = [rawText || '', doc?.title || '', doc?.body?.textContent || '', fullUrl || ''];
+            if (doc) {
+                doc.querySelectorAll('a, button, input, textarea, select, img[alt], meta[name="description"], meta[property="og:title"]').forEach(el => {
+                    ['name', 'id', 'placeholder', 'value', 'aria-label', 'alt', 'content', 'href', 'src'].forEach(attr => textParts.push(el.getAttribute(attr) || ''));
+                    textParts.push(el.textContent || '');
+                });
+            }
+
+            const haystack = decodeSignalText(textParts.join('\n')).replace(/\s+/g, ' ');
+            const productMatches = getRiskList('regulatedTobaccoProductKeywords')
+                .filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const salesMatches = getRiskList('regulatedTobaccoSalesKeywords')
+                .filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const hasPriceSignal = /(?:nt\$|ntd)\s*\d{2,6}|(?:售價|價格|優惠價|特價|原價)[:：\s$]*\d{2,6}|已售[:：]?\s*\d+/i.test(haystack);
+            const hasCartOrOrderSignal = /(購物車|加入購物車|結帳|下單|訂單|訂購|立即購買|立即搶購|馬上訂購)/i.test(haystack);
+            const hasLinePurchaseSignal = /(購買|訂購|下單|訂單|客服|如需購買).{0,18}line|line.{0,18}(購買|訂購|下單|訂單|客服)/i.test(haystack);
+            const hasTaiwanFulfillmentSignal = /(貨到付款|全台配送|宅配|超商取貨|國內現貨|正品現貨)/i.test(haystack);
+            const hasSalesSignal = salesMatches.length >= 2 ||
+                hasPriceSignal ||
+                hasCartOrOrderSignal ||
+                hasLinePurchaseSignal ||
+                hasTaiwanFulfillmentSignal;
+
+            const reasons = [];
+            if (productMatches.length > 0) reasons.push(`電子菸/加熱菸商品詞：${[...new Set(productMatches)].slice(0, 3).join('、')}`);
+            if (hasPriceSignal || hasCartOrOrderSignal) reasons.push('出現價格、購物車或下單流程');
+            if (hasLinePurchaseSignal) reasons.push('要求透過 LINE 客服購買或確認訂單');
+            if (hasTaiwanFulfillmentSignal) reasons.push('出現貨到付款、全台配送或現貨等交易話術');
+            if (salesMatches.length >= 2 && reasons.length < 4) reasons.push(`交易關鍵字：${[...new Set(salesMatches)].slice(0, 3).join('、')}`);
+
+            return {
+                score: Math.min(100, (productMatches.length > 0 ? 45 : 0) + Math.min(40, salesMatches.length * 8) + (hasPriceSignal ? 20 : 0) + (hasLinePurchaseSignal ? 20 : 0) + (hasTaiwanFulfillmentSignal ? 15 : 0)),
+                matched: productMatches.length > 0 && hasSalesSignal,
+                reasons,
+                productMatches: [...new Set(productMatches)].slice(0, 5),
+                salesMatches: [...new Set(salesMatches)].slice(0, 5),
+                hasPriceSignal,
+                hasLinePurchaseSignal,
+                hasTaiwanFulfillmentSignal
+            };
+        };
+
         const analyzePageSignals = (doc, fullUrl, rawText = '') => {
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
@@ -1076,7 +1120,8 @@ const { useState, useEffect, useRef } = React;
                 businessIdentitySignals: analyzeBusinessIdentitySignals(doc, rawText),
                 lineOfficialSignals: analyzeLineOfficialSignals(doc, rawText, fullUrl),
                 ecommerceTrustSignals: analyzeEcommerceTrustSignals(doc, rawText, fullUrl),
-                shoppingScamSignals: analyzeShoppingScamSignals(doc, rawText, fullUrl)
+                shoppingScamSignals: analyzeShoppingScamSignals(doc, rawText, fullUrl),
+                regulatedTobaccoSalesSignals: analyzeRegulatedTobaccoSalesSignals(doc, rawText, fullUrl)
             };
         };
 
@@ -1798,6 +1843,7 @@ const { useState, useEffect, useRef } = React;
             const languageSignals = pageSignals.languageSignals || createEmptyPageSignals().languageSignals;
             const businessIdentitySignals = pageSignals.businessIdentitySignals || createEmptyPageSignals().businessIdentitySignals;
             const lineOfficialSignals = pageSignals.lineOfficialSignals || createEmptyPageSignals().lineOfficialSignals;
+            const regulatedTobaccoSalesSignals = pageSignals.regulatedTobaccoSalesSignals || createEmptyPageSignals().regulatedTobaccoSalesSignals;
             const officialAlertMatches = officialAlertData?.matches || [];
             const officialAlertMatch = officialAlertMatches[0] || null;
             const hasOfficialAlert = !isWhitelisted && !!officialAlertData?.matched;
@@ -1874,10 +1920,13 @@ const { useState, useEffect, useRef } = React;
             const hasLogisticsBrandPhishing = hasBrandSimilarity &&
                 matchedBrandSimilarity.brandName === 'DHL' &&
                 hasLogisticsScamSignal;
+            const hasRegulatedTobaccoSalesSignal = !isWhitelisted &&
+                !!regulatedTobaccoSalesSignals.matched;
             const hasEncodedRedirectRisk = hasNestedUrl &&
                 (hasEmailTrackingRedirect || nestedDomains.some(item => hasRiskyHostnamePattern(item)) || hasNestedSuspiciousParams);
             const hasStrongEcommerceValidation = ecommerceTrustSignals.matched &&
                 siteStatusData.status === 'ok' &&
+                !hasRegulatedTobaccoSalesSignal &&
                 !hasBrandSimilarity &&
                 !hasPageBrandMismatch &&
                 !hasFinancialPhishingSignal &&
@@ -2048,6 +2097,7 @@ const { useState, useEffect, useRef } = React;
                 hasUaCloakingRisk ||
                 isDownloadPhishingSignal ||
                 hasShoppingScamSignal ||
+                hasRegulatedTobaccoSalesSignal ||
                 hasShoppingLineContactRisk;
 
             const hasSecondaryFraudEvidence = hasConfirmedThreatSignal ||
@@ -2223,6 +2273,7 @@ const { useState, useEffect, useRef } = React;
                     if (hasDisposableShoppingLandingRisk) riskScore += 85;
                     else if (hasDisposableRootPhishingRisk) riskScore += 70;
                     else if (hasDisposableUnreadablePageRisk) riskScore += 70;
+                    if (hasRegulatedTobaccoSalesSignal) riskScore += 95;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
                     if (hasShoppingLineContactRisk) riskScore += hasShoppingLandingUrlRisk ? 50 : 40;
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
@@ -2349,6 +2400,7 @@ const { useState, useEffect, useRef } = React;
                 hasDisposableUnreadablePageRisk ||
                 hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
+                hasRegulatedTobaccoSalesSignal ||
                 hasShoppingLineContactRisk ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform && !isTraceHighRiskSameRoot);
 
@@ -2387,6 +2439,7 @@ const { useState, useEffect, useRef } = React;
                     hasDisposableUnreadablePageRisk ||
                     hasShoppingLandingUrlRisk ||
                     hasShoppingScamSignal ||
+                    hasRegulatedTobaccoSalesSignal ||
                     hasShoppingLineContactRisk ||
                     isDownloadPhishingSignal ||
                     isApkSite;
@@ -2448,6 +2501,10 @@ const { useState, useEffect, useRef } = React;
             } else if (hasUaCloakingRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到裝置導向差異：網站對 Mobile 與 Desktop 回傳不同最終路徑，可能是 User-Agent cloaking。${uaCloakingDetails}`;
+            } else if (hasRegulatedTobaccoSalesSignal) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到台灣高風險電子菸/加熱菸網路販售：${regulatedTobaccoSalesSignals.reasons.slice(0, 3).join('、')}。此類非法商品頁常伴隨 LINE 導流、貨到付款或一頁式交易詐騙風險。`;
+                siteContentMsg = '危險：疑似電子菸/加熱菸網路販售或交易導流';
             } else if (hasShoppingScamSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到一頁式購物詐騙特徵：${shoppingScamSignals.reasons.slice(0, 3).join('、')}。`;
@@ -2697,6 +2754,13 @@ const { useState, useEffect, useRef } = React;
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },
                     formFields: { status: highRiskSensitiveFieldCount > 0 ? (isHighTraffic || isWhitelisted ? 'info' : 'warning') : (lowRiskSensitiveFieldCount > 0 ? 'info' : 'safe'), label: '表單敏感欄位', details: highRiskSensitiveFieldCount > 0 ? `偵測到 ${highRiskSensitiveFieldCount} 個可能要求密碼、OTP 或金融資料的高敏感欄位` : (lowRiskSensitiveFieldCount > 0 ? `偵測到 ${lowRiskSensitiveFieldCount} 個一般登入/聯絡欄位，未視為強風險` : '未偵測到敏感表單欄位') },
                     externalResources: { status: externalFormActionCount > 0 ? 'danger' : (suspiciousExternalResourceCount > 0 ? 'warning' : 'safe'), label: '外部資源/表單送出', details: externalFormActionCount > 0 ? `表單資料會送往 ${externalFormActionCount} 個外部網域，請勿輸入個資` : (suspiciousExternalResourceCount > 0 ? `偵測到 ${suspiciousExternalResourceCount} 個可疑外部 script/iframe 資源` : (externalResourceCount > 0 ? `偵測到 ${externalResourceCount} 個一般第三方資源，未視為強風險` : '未偵測到異常外部表單或資源')) },
+                    regulatedProduct: {
+                        status: hasRegulatedTobaccoSalesSignal ? 'danger' : 'safe',
+                        label: '電子菸/加熱菸販售',
+                        details: hasRegulatedTobaccoSalesSignal
+                            ? `偵測到電子菸、煙彈、RELX/悅刻等商品搭配交易脈絡：${regulatedTobaccoSalesSignals.reasons.slice(0, 4).join('、')}。在台灣情境下屬高度法規與交易詐騙風險。`
+                            : '未偵測到電子菸、加熱菸或煙彈的網路販售脈絡'
+                    },
                     shoppingScam: { status: hasStrongEcommerceValidation ? 'info' : ((hasShoppingScamSignal || hasShoppingLineContactRisk) ? 'danger' : (shoppingScamSignals.matched || hasShoppingLandingUrlRisk ? 'warning' : 'safe')), label: '一頁式購物詐騙', details: hasStrongEcommerceValidation ? '偵測到購物頁特徵，但同時具備正規電商佐證，未單獨判為一頁式購物詐騙' : (shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : (hasShoppingLandingUrlRisk ? '頁面內容未完整取得，無法確認購物頁結構；但網址本身已符合可疑購物落地頁特徵' : '未能從可讀 HTML 中確認一頁式購物結構')) },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
                     shoppingLanding: { status: hasShoppingLandingUrlRisk ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數') },
@@ -2726,6 +2790,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
+            addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
