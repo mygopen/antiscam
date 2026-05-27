@@ -102,7 +102,8 @@ window.RISK_CONFIG = {
         'card', 'creditcard', 'transaction', 'verify', 'verification'
     ],
     sensitiveUrlParams: [
-        'token=', 'session=', 'auth=', 'verify=', 'verification=', 'login='
+        'token=', 'session=', 'auth=', 'verify=', 'verification=', 'login=',
+        '_eat='
     ],
     suspiciousLandingParams: [
         'ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=',
@@ -187,6 +188,7 @@ window.RISK_CONFIG = {
         { name: '財政部電子發票', keywords: ['einvoice', 'invoicenat', 'einvoicenat'], domains: ['einvoice.nat.gov.tw', 'invoice.etax.nat.gov.tw', 'etax.nat.gov.tw', 'mof.gov.tw'] },
         { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },
         { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] },
-        { name: 'DHL', keywords: ['dhl'], domains: ['dhl.com', 'dhl.com.tw'] }
+        { name: 'DHL', keywords: ['dhl'], domains: ['dhl.com', 'dhl.com.tw'] },
+        { name: 'Apple', keywords: ['apple', 'icloud', 'appleid', 'appstore', '蘋果', '蘋果帳號'], domains: ['apple.com', 'icloud.com'] }
     ]
 };

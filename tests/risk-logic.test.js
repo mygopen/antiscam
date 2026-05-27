@@ -1586,6 +1586,38 @@ test('電子發票 nat 偽裝網域會命中受保護品牌，官方網域不誤
     assert.equal(riskConfig.fakeServiceKeywords.includes('invoicenat'), true);
 });
 
+test('Apple 冒用網域搭配一次性驗證參數應升為高風險', () => {
+    const url = 'https://app-ie.eu.cc/HqTGLU0qwJ?_eat=valid_20260527143844_991ac1689258aa030d8d8605cef0ae5e';
+    const hostname = new URL(url).hostname;
+    const brandSimilarity = checkBrandSimilarity(hostname);
+    const hasSensitiveParam = hasSensitiveUrlParam(url);
+    const isFreeHosting = matchesDomainList(hostname, riskConfig.freeHostingProviders);
+    const hasStrongRiskSignal = brandSimilarity.matched;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasStrongRiskSignal ? 80 : 0,
+        checks: {
+            brandSimilarity: { status: brandSimilarity.matched ? 'danger' : 'safe' },
+            params: { status: hasSensitiveParam ? 'danger' : 'safe' },
+            domainAnalysis: {
+                status: brandSimilarity.matched ? 'danger' : 'safe',
+                details: brandSimilarity.matched ? `網域疑似模仿「${brandSimilarity.brandName}」相關名稱` : ''
+            }
+        }
+    });
+
+    assert.equal(brandSimilarity.matched, true);
+    assert.equal(brandSimilarity.brandName, 'Apple');
+    assert.equal(hasSensitiveParam, true);
+    assert.equal(isFreeHosting, true);
+    assert.equal(scanData.riskScore >= 70, true);
+});
+
+test('Apple 官方網域與 iCloud 官方網域不應被品牌相似規則誤判', () => {
+    assert.equal(checkBrandSimilarity('apple.com').matched, false);
+    assert.equal(checkBrandSimilarity('support.apple.com').matched, false);
+    assert.equal(checkBrandSimilarity('icloud.com').matched, false);
+});
+
 test('政府 JWT result 參數不應因參數值內容誤判為敏感參數', () => {
     const govUrl = 'https://500.gov.tw/FOAS/actions/GspValid.action?result=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.auth.token.session.verify';
     const phishingUrl = 'https://verify.example.com/login?token=abc123';
