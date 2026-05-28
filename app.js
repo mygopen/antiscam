@@ -240,6 +240,10 @@ const { useState, useEffect, useRef } = React;
             return getRiskList('trustedEcommerceRootDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const isTrustedTaiwanServiceDomain = (hostname) => {
+            return getRiskList('trustedTaiwanServiceDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
         const isGlobalPaymentGatewayDomain = (hostname) => {
             return getRiskList('globalPaymentGatewayDomains').some(domain => isSameRootDomain(hostname, domain));
         };
@@ -248,6 +252,7 @@ const { useState, useEffect, useRef } = React;
             return isOfficialTaiwanGovDomain(hostname) ||
                 isTrustedGlobalDomain(hostname) ||
                 isTrustedEcommerceDomain(hostname) ||
+                isTrustedTaiwanServiceDomain(hostname) ||
                 whitelist.some(domain => isSameRootDomain(hostname, domain));
         };
 
@@ -1645,9 +1650,10 @@ const { useState, useEffect, useRef } = React;
             const domainParts = getDomainParts(domain);
             const registrableDomain = domainParts.registrableDomain || domain;
             const isTrustedEcommerceRootDomain = isTrustedEcommerceDomain(domain);
+            const isTrustedTaiwanServiceRootDomain = isTrustedTaiwanServiceDomain(domain);
 
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
-            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isConfiguredAllowlistDomain;
+            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isConfiguredAllowlistDomain;
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -1746,7 +1752,7 @@ const { useState, useEffect, useRef } = React;
             const hasRankedRootDomainFallback = trancoRank !== null &&
                 normalizeHostname(trancoQueriedDomain) !== domain &&
                 isSameRootDomain(domain, trancoQueriedDomain);
-            const hasRootDomainTrustBaseline = hasRankedRootDomainFallback || isTrustedEcommerceRootDomain;
+            const hasRootDomainTrustBaseline = hasRankedRootDomainFallback || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain;
 
             // Tranco 查詢失敗不等於低信任；只有明確查無排名才視為低流量。
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting) || isTrustedEcommerceRootDomain);
@@ -1767,6 +1773,8 @@ const { useState, useEffect, useRef } = React;
                     trafficDetails = 'MyGoPen 官方服務，安全無虞';
                 } else if (isTrustedGlobalRootDomain) {
                     trafficDetails = '全球頂級可信根網域，Tranco 暫時無法取得時不以低流量扣分';
+                } else if (isTrustedTaiwanServiceRootDomain) {
+                    trafficDetails = '受信賴台灣民營服務官方網域，流量排名不足不作為風險加權';
                 } else if (isConfiguredAllowlistDomain) {
                     trafficDetails = '受信賴白名單網域，流量排名不足不作為風險加權';
                 } else {
@@ -2148,6 +2156,7 @@ const { useState, useEffect, useRef } = React;
             addTrustSignal(isOfficialTaiwanGov, 100, '台灣政府官方網域');
             addTrustSignal(isTrustedGlobalRootDomain, 80, '全球頂級可信根網域');
             addTrustSignal(isTrustedEcommerceRootDomain, 90, `Trusted E-commerce Root Domain：${registrableDomain}`);
+            addTrustSignal(isTrustedTaiwanServiceRootDomain, 80, `可信台灣民營服務網域：${registrableDomain}`);
             addTrustSignal(isConfiguredAllowlistDomain && !isOfficialTaiwanGov, 70, 'Trusted Allowlist Domain');
             addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
             addTrustSignal(hasRankedRootDomainFallback, 35, `Tranco 根網域 ${trancoQueriedDomain} 可查得排名，子網域繼承基線信任`);
@@ -2545,7 +2554,7 @@ const { useState, useEffect, useRef } = React;
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
-            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : (isTrustedEcommerceRootDomain ? `受信賴大型電商根網域：${registrableDomain}` : '受信賴的白名單網域');
+            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : (isTrustedEcommerceRootDomain ? `受信賴大型電商根網域：${registrableDomain}` : (isTrustedTaiwanServiceRootDomain ? `受信賴台灣民營服務官方網域：${registrableDomain}` : '受信賴的白名單網域'));
             else if (hasCrawlerBlockedTrustedContext) siteContentMsg = `頁面可能啟用 WAF/Anti-bot，已改以可信根網域 ${registrableDomain} 的排名/電商基線判斷，不因爬蟲阻擋扣為高風險`;
 
             // 決定網域特徵卡片的 UI 文字
@@ -2713,7 +2722,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain },
+                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3997,7 +4006,7 @@ const { useState, useEffect, useRef } = React;
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.7 AI 偵測引擎</div></div></header>
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.8 AI 偵測引擎</div></div></header>
                     <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6"><div className="w-full max-w-3xl">
                         <div className="text-center mb-10 md:mb-12 animate-fade-in"><h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br className="md:hidden" /><span className="text-brand-red">從檢查網址開始</span></h2><p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p></div>
                         <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100">

@@ -129,6 +129,10 @@ function isTrustedEcommerceDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.trustedEcommerceRootDomains);
 }
 
+function isTrustedTaiwanServiceDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.trustedTaiwanServiceDomains);
+}
+
 function isGlobalPaymentGatewayDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
 }
@@ -137,6 +141,7 @@ function isVerifiedSafeRootDomain(hostname, whitelist = []) {
     return isOfficialTaiwanGovDomain(hostname) ||
         isTrustedGlobalDomain(hostname) ||
         isTrustedEcommerceDomain(hostname) ||
+        isTrustedTaiwanServiceDomain(hostname) ||
         matchesDomainList(hostname, whitelist);
 }
 
@@ -916,7 +921,7 @@ function checkBrandSimilarity(hostname, whitelist = []) {
     const domainText = comparableDomainText(hostname);
 
     for (const brand of riskConfig.protectedBrands) {
-        if (matchesDomainList(hostname, brand.domains) || matchesDomainList(hostname, whitelist)) continue;
+        if (matchesDomainList(hostname, brand.domains) || isVerifiedSafeRootDomain(hostname, whitelist)) continue;
 
         for (const keyword of brand.keywords) {
             const normalizedKeyword = keyword.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1696,6 +1701,34 @@ test('Apple 官方網域與 iCloud 官方網域不應被品牌相似規則誤判
     assert.equal(checkBrandSimilarity('apple.com').matched, false);
     assert.equal(checkBrandSimilarity('support.apple.com').matched, false);
     assert.equal(checkBrandSimilarity('icloud.com').matched, false);
+});
+
+test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單', () => {
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const hostname = 'www.cinvoice.tw';
+    const isWhitelisted = isVerifiedSafeRootDomain(hostname, []);
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname,
+        text: '發票載具 APP 可同步雲端發票，並串接財政部電子發票整合服務平台資料。'
+    });
+    const hasPageBrandMismatch = !isWhitelisted && !checkBrandSimilarity(hostname, []).matched && pageBrandSignals.matched;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('cinvoice.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isWhitelisted, true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname, []), true);
+    assert.equal(checkBrandSimilarity(hostname, []).matched, false);
+    assert.equal(pageBrandSignals.matched, true);
+    assert.equal(hasPageBrandMismatch, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
 });
 
 test('政府 JWT result 參數不應因參數值內容誤判為敏感參數', () => {

@@ -24,6 +24,9 @@ window.RISK_CONFIG = {
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
         'momoshop.com.tw', 'friday.tw'
     ],
+    trustedTaiwanServiceDomains: [
+        'cinvoice.tw'
+    ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',
