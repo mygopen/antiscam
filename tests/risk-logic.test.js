@@ -1731,6 +1731,34 @@ test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單'
     assert.equal(override.riskScore, 0);
 });
 
+test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網址白名單', () => {
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const hostname = 'cmy.tw';
+    const officialDestination = 'www.cmoney.com.tw';
+    const appDestination = 'www.cmoney.tw';
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('cmy.tw'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('cmoney.tw'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('cmoney.com.tw'));
+    assert.ok(riskConfig.safeShorteners.includes('cmy.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(officialDestination, whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isTrustedTaiwanServiceDomain(officialDestination), true);
+    assert.equal(isTrustedTaiwanServiceDomain(appDestination), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain(officialDestination, []), true);
+    assert.equal(isVerifiedSafeRootDomain(appDestination, []), true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
+});
+
 test('政府 JWT result 參數不應因參數值內容誤判為敏感參數', () => {
     const govUrl = 'https://500.gov.tw/FOAS/actions/GspValid.action?result=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.auth.token.session.verify';
     const phishingUrl = 'https://verify.example.com/login?token=abc123';

@@ -1,6 +1,6 @@
 {
   "description": "麥擱騙網址白名單 - 包含官方網域、熱門服務及銀行官網",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "updatedAt": "2026-05-28",
   "domains": [
     "google.com", "facebook.com", "yahoo.com", "youtube.com", "wikipedia.org", 
@@ -16,7 +16,7 @@
     "txp.rs", "lohasnet.tw", "skool.com", "nike.com","tsmc.com", "myship.7-11.com.tw","donation.msf.org.tw",
     "payuni.com.tw","invos.com.tw","savethr.com","cofacts.tw","ibr.tw","handhand.info",
     "specialoffers.jcb","pansci.asia","spx.tw","lovable.dev","fetnet.net", "taiwanmobile.com", "cht.com.tw",
-    "cmoney.tw", "zingala.cc", "zingala.com.tw", "binance.com", "aka.ms", "line.me", "nike.com.cn",
+    "cmoney.tw", "cmoney.com.tw", "cmy.tw", "zingala.cc", "zingala.com.tw", "binance.com", "aka.ms", "line.me", "nike.com.cn",
     "gotaipei.taipei","line-tw-official.weblog.to","fetnet.tw","simplelaborlaw.com",
     "cathay-ins.com.tw","cathayins.tw","cathay.insure","cathaylife.tw","taiwanriceaward2026.com.tw",
     "ctbc.tw","ximalaya.com","chatgpt.com", "openai.com", "chat.openai.com","go.jp","fubonlife.tw","donuni.com.tw",

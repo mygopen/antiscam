@@ -25,7 +25,7 @@ window.RISK_CONFIG = {
         'momoshop.com.tw', 'friday.tw'
     ],
     trustedTaiwanServiceDomains: [
-        'cinvoice.tw'
+        'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
@@ -42,7 +42,7 @@ window.RISK_CONFIG = {
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
-        'bitly.com', 'aka.ms'
+        'bitly.com', 'aka.ms', 'cmy.tw'
     ],
     emailTrackingRedirectors: [
         'awstrack.me', 'sendgrid.net', 'ct.sendgrid.net', 'u.ct.sendgrid.net',
