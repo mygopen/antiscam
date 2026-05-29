@@ -633,6 +633,7 @@ const { useState, useEffect, useRef } = React;
                 const segments = cleanLabel.split('-').filter(Boolean);
                 const hasHyphen = cleanLabel.includes('-');
                 const hasTopicOverlap = rootTokens.some(token => compactLabel.includes(token) || token.includes(compactLabel));
+                const hasNumericOnlyShortCode = /^\d{3,8}$/.test(compactLabel);
                 const hasShortRandomSegment = segments.some(segment => {
                     if (!/[a-z]/.test(segment) || segment.length < 2 || segment.length > 8) return false;
                     return !/[aeiou]/.test(segment) || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(segment);
@@ -641,6 +642,7 @@ const { useState, useEffect, useRef } = React;
                     compactLabel.length <= 20 &&
                     (!hasReadableVowelPattern(compactLabel) || calculateEntropy(compactLabel) > 3.4);
 
+                if (hasNumericOnlyShortCode) suspiciousReasons.push('子網域為純數字短碼');
                 if (hasHyphen && !hasTopicOverlap) suspiciousReasons.push('子網域含連字號且與主網域主題無明顯關聯');
                 if (hasShortRandomSegment) suspiciousReasons.push('子網域包含短隨機片段');
                 if (looksUnreadable) suspiciousReasons.push('子網域長度 6-20 且不易讀成自然詞');
@@ -1806,6 +1808,7 @@ const { useState, useEffect, useRef } = React;
             // 特徵 B：連續出現 4 個以上的子音字母，極度不符合正常英文拼字邏輯
             const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxz]{4,}/i.test(subdomainPart);
             const suspiciousSubdomain = analyzeSuspiciousSubdomain(domain);
+            const hasNumericOnlySubdomain = domainParts.subdomainLabels.some(label => /^\d{3,8}$/.test(label));
             
             // 只要符合任一項特徵，且不是常見的 www 等，就判定為高風險亂碼
             const isHighEntropy = (isLongGibberish || lacksVowels || hasConsecutiveConsonants) && subdomainPart !== 'www';
@@ -1834,6 +1837,7 @@ const { useState, useEffect, useRef } = React;
             let isFinalFakeGov = false;
             let hasFinalSuspiciousTemp = false;
             let isFinalWhitelisted = false;
+            let isSameRootRedirect = false;
             // 👇 新增：判斷最終網域是否為 .top / .xyz 等高危險後綴
             let isFinalVeryHighRiskTLD = false;
 
@@ -1853,6 +1857,7 @@ const { useState, useEffect, useRef } = React;
 
                         // 👇 新增：判斷是否為同一個主網域的子網域互轉 (如 brand.com -> shop.brand.com)
                         const isSameRoot = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
+                        isSameRootRedirect = isSameRoot;
 
                         redirectDetails = `偵測到轉址至: ${finalDomain}`;
                         if (isKnownShortener) redirectDetails += ' (短網址服務)';
@@ -2111,6 +2116,12 @@ const { useState, useEffect, useRef } = React;
                     hasSuspiciousTempDomain ||
                     isLowTraffic
                 );
+            const hasSuspiciousExternalTrustedRedirect = !isWhitelisted &&
+                !isHighTraffic &&
+                isRedirected &&
+                isFinalWhitelisted &&
+                !isSameRootRedirect &&
+                hasNumericOnlySubdomain;
 
             const isGoogleFlagged = safeBrowsingData && safeBrowsingData.isUnsafe;
             const blocklistListedForRisk = blocklistListed && !hasTrustedAllowlistOverride;
@@ -2192,6 +2203,7 @@ const { useState, useEffect, useRef } = React;
                 (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                 hasLogisticsBrandPhishing ||
                 hasPageBrandMismatch ||
+                hasSuspiciousExternalTrustedRedirect ||
                 hasHomographSignal ||
                 hasUaCloakingRisk ||
                 isDownloadPhishingSignal ||
@@ -2358,6 +2370,7 @@ const { useState, useEffect, useRef } = React;
                     if (hasLogisticsBrandPhishing) riskScore += 90;
                     else if (hasLogisticsScamSignal && hasBrandSimilarity) riskScore += 70;
                     if (hasPageBrandMismatch) riskScore += 80;
+                    if (hasSuspiciousExternalTrustedRedirect) riskScore += 85;
                     if (hasOfficialFlowPathSignal && (hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic)) riskScore += 45;
                     else if (hasOfficialFlowPathSignal) riskScore += 15;
                     if (hasUrgencyScamSignal && (hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain)) riskScore += 45;
@@ -2485,6 +2498,7 @@ const { useState, useEffect, useRef } = React;
                 (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                 hasLogisticsBrandPhishing ||
                 hasPageBrandMismatch ||
+                hasSuspiciousExternalTrustedRedirect ||
                 hasHomographSignal ||
                 hasUaCloakingRisk ||
                 isNewDomainWithNewCertificate ||
@@ -2524,6 +2538,7 @@ const { useState, useEffect, useRef } = React;
                     (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
                     hasLogisticsBrandPhishing ||
                     hasPageBrandMismatch ||
+                    hasSuspiciousExternalTrustedRedirect ||
                     hasHomographSignal ||
                     hasUaCloakingRisk ||
                     isNewDomainWithNewCertificate ||
@@ -2598,6 +2613,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到頁面品牌與網域不一致：頁面看起來像「${pageBrandSignals.brandName}」，但目前網域不是官方網域。`;
                 siteContentMsg = '危險：疑似品牌釣魚頁';
+            } else if (hasSuspiciousExternalTrustedRedirect) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到可疑占位式轉址：未知網域使用純數字子網域，並跨網域轉址至 ${finalDomain}。這類模式常用來避開內容檢測或暫時隱藏真實頁面。`;
+                siteContentMsg = '危險：純數字子網域搭配外部可信大站轉址';
             } else if (hasHomographSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到 Punycode/Unicode 混淆網域，可能利用相似字元偽裝官方網站。';
@@ -2710,6 +2729,9 @@ const { useState, useEffect, useRef } = React;
             } else if (hasUaCloakingRisk) {
                 redirectStatus = 'danger';
                 redirectCheckDetails = `偵測到 Mobile/Desktop User-Agent 導向差異。${uaCloakingDetails}`;
+            } else if (hasSuspiciousExternalTrustedRedirect) {
+                redirectStatus = 'danger';
+                redirectCheckDetails = `未知純數字子網域跨網域轉址至可信大站 (${finalDomain})，疑似用來閃避內容檢測`;
             } else if (traceData && traceData.redirectCount >= 3) {
                 redirectStatus = 'warning';
                 redirectCheckDetails = `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`;
@@ -2852,7 +2874,7 @@ const { useState, useEffect, useRef } = React;
                     registrar: { status: isHighRiskRegistrar ? 'warning' : (isTrustedTaiwanRegistrar ? 'safe' : 'safe'), label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : (isTrustedTaiwanRegistrar ? `台灣常見註冊商: ${registrarName}` : `註冊商: ${registrarName}`)) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
                     subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
-                    subdomainPattern: { status: suspiciousSubdomain.matched ? (isHighTraffic ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
+                    subdomainPattern: { status: suspiciousSubdomain.matched ? ((isWhitelisted || isHighTraffic) ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
                     disposableDomain: { status: hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe'), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}` : '未偵測到主網域亂碼免洗特徵' },
                     userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : 'Mobile 與 Desktop User-Agent 未發現不同最終導向' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
@@ -4006,7 +4028,7 @@ const { useState, useEffect, useRef } = React;
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.9 AI 偵測引擎</div></div></header>
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.10 AI 偵測引擎</div></div></header>
                     <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6"><div className="w-full max-w-3xl">
                         <div className="text-center mb-10 md:mb-12 animate-fade-in"><h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br className="md:hidden" /><span className="text-brand-red">從檢查網址開始</span></h2><p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p></div>
                         <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100">

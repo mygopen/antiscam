@@ -1153,6 +1153,7 @@ function analyzeSuspiciousSubdomain(hostname) {
         const segments = cleanLabel.split('-').filter(Boolean);
         const hasHyphen = cleanLabel.includes('-');
         const hasTopicOverlap = rootTokens.some(token => compactLabel.includes(token) || token.includes(compactLabel));
+        const hasNumericOnlyShortCode = /^\d{3,8}$/.test(compactLabel);
         const hasShortRandomSegment = segments.some(segment => {
             if (!/[a-z]/.test(segment) || segment.length < 2 || segment.length > 8) return false;
             return !/[aeiou]/.test(segment) || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(segment);
@@ -1161,6 +1162,7 @@ function analyzeSuspiciousSubdomain(hostname) {
             compactLabel.length <= 20 &&
             (!hasReadableVowelPattern(compactLabel) || calculateEntropy(compactLabel) > 3.4);
 
+        if (hasNumericOnlyShortCode) suspiciousReasons.push('子網域為純數字短碼');
         if (hasHyphen && !hasTopicOverlap) suspiciousReasons.push('子網域含連字號且與主網域主題無明顯關聯');
         if (hasShortRandomSegment) suspiciousReasons.push('子網域包含短隨機片段');
         if (looksUnreadable) suspiciousReasons.push('子網域長度 6-20 且不易讀成自然詞');
@@ -1203,6 +1205,29 @@ function hasDeepSubdomainPhishingPattern({
             hasSuspiciousTempDomain ||
             isLowTraffic
         );
+}
+
+function hasSuspiciousExternalTrustedRedirect({
+    hostname,
+    finalHostname,
+    isWhitelisted = false,
+    isHighTraffic = false,
+    whitelist = []
+}) {
+    const domain = hostname.toLowerCase();
+    const finalDomain = finalHostname.toLowerCase();
+    const { subdomainLabels } = getDomainParts(domain);
+    const cleanDomain = domain.replace(/^www\./, '');
+    const cleanFinalDomain = finalDomain.replace(/^www\./, '');
+    const isSameRootRedirect = cleanFinalDomain.endsWith(cleanDomain) || cleanDomain.endsWith(cleanFinalDomain);
+    const hasNumericOnlySubdomain = subdomainLabels.some(label => /^\d{3,8}$/.test(label));
+    const isFinalWhitelisted = isVerifiedSafeRootDomain(finalDomain, whitelist);
+
+    return !isWhitelisted &&
+        !isHighTraffic &&
+        hasNumericOnlySubdomain &&
+        isFinalWhitelisted &&
+        !isSameRootRedirect;
 }
 
 function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
@@ -2086,6 +2111,39 @@ test('可疑子網域模式會抓到 hyphen、短隨機片段與難讀命名', (
     assert.equal(analyzeSuspiciousSubdomain('api.example.com').matched, false);
     assert.equal(analyzeSuspiciousSubdomain('shop.example.com').matched, false);
     assert.equal(analyzeSuspiciousSubdomain('news.discover-news.tokyo').matched, false);
+});
+
+test('純數字子網域跨網域轉址到可信大站應視為高風險占位式轉址', () => {
+    const hostname = '992.comunimass.com';
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain(hostname);
+    const hasRisk = hasSuspiciousExternalTrustedRedirect({
+        hostname,
+        finalHostname: 'www.google.com'
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: capWeakSignalRisk(hasRisk ? 85 : 0, hasRisk),
+        checks: {
+            redirect: { status: hasRisk ? 'danger' : 'safe', details: '未知純數字子網域跨網域轉址至可信大站' },
+            domainAnalysis: { status: hasRisk ? 'danger' : 'safe', details: '純數字子網域搭配外部可信大站轉址' },
+            subdomainPattern: { status: suspiciousSubdomain.matched ? 'warning' : 'safe', details: suspiciousSubdomain.reasons.join('、') }
+        }
+    });
+
+    assert.equal(suspiciousSubdomain.matched, true);
+    assert.ok(suspiciousSubdomain.reasons.includes('子網域為純數字短碼'));
+    assert.equal(hasRisk, true);
+    assert.equal(scanData.riskScore, 85);
+    assert.deepEqual(scanData.summaryReasons, ['郵件追蹤跳板或隱藏轉址', '純數字子網域搭配外部可信大站轉址']);
+    assert.equal(hasSuspiciousExternalTrustedRedirect({
+        hostname: '500.gov.tw',
+        finalHostname: 'www.google.com',
+        isWhitelisted: true
+    }), false);
+    assert.equal(hasSuspiciousExternalTrustedRedirect({
+        hostname: '24h.pchome.com.tw',
+        finalHostname: 'www.google.com',
+        isWhitelisted: true
+    }), false);
 });
 
 test('深層可疑子網域會升為強風險並避免 summary 低風險', () => {
