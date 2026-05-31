@@ -2935,6 +2935,107 @@ const { useState, useEffect, useRef } = React;
             };
         };
 
+        const createScanCheck = (status, label, details, extra = {}) => ({ status, label, details, ...extra });
+
+        const createScanFailureResult = (targetDomain, fullUrl, scanOptions = {}, err = null) => {
+            const rawUrl = scanOptions.rawUrl || fullUrl;
+            const sanitizedUrl = scanOptions.sanitizedUrl || fullUrl;
+            const removedTrackingParams = [...new Set(scanOptions.removedTrackingParams || [])];
+            const removedVolatileParams = [...new Set(scanOptions.removedVolatileParams || [])];
+            const removedParams = [...new Set(scanOptions.removedParams || [
+                ...removedTrackingParams,
+                ...removedVolatileParams
+            ])];
+            const siteStatus = {
+                status: 'unknown',
+                code: null,
+                msg: '檢測流程發生例外，未完成深度掃描',
+                hasIframe: false,
+                finalUrl: null,
+                linkStats: { total: 0, internal: 0, external: 0 },
+                pageSignals: createEmptyPageSignals()
+            };
+            const fallbackDetails = '檢測流程暫時中斷，系統已避免頁面當掉；請稍後重試，或先不要在此網址輸入個資。';
+            return {
+                domain: targetDomain,
+                scannedUrl: fullUrl,
+                rawUrl,
+                sanitizedUrl,
+                removedTrackingParams,
+                removedVolatileParams,
+                removedParams,
+                traceChain: [],
+                riskScore: 30,
+                risk_flag: true,
+                riskFlags: { scanRuntimeError: true, errorMessage: err?.message || '' },
+                blocklistListed: false,
+                isSocialMedia: false,
+                isWhitelisted: false,
+                isTrustedAllowlist: false,
+                crawlerBlockedTrustedContext: false,
+                rootDomainTrust: { registrableDomain: targetDomain, hasRankedRootDomainFallback: false, isTrustedEcommerceRootDomain: false, isTrustedTaiwanServiceRootDomain: false },
+                details: {
+                    serverCountry: '隱藏/無法偵測',
+                    serverIp: null,
+                    serverOrg: '',
+                    siteStatus
+                },
+                checks: {
+                    googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
+                    officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
+                    siteContent: createScanCheck('unknown', '網站內容狀態', fallbackDetails),
+                    domainAnalysis: createScanCheck('warning', '網域特徵分析', fallbackDetails),
+                    traffic: createScanCheck('unknown', 'Tranco 流量排名', '檢測流程未完整完成，無法取得流量排名'),
+                    serverLocation: createScanCheck('unknown', '伺服器所在國家', '無法自動判定伺服器所在國家'),
+                    validation: createScanCheck('unknown', '次要可信驗證', '檢測流程未完整完成，尚未取得可信佐證'),
+                    ecommerceValidation: createScanCheck('unknown', '正規電商佐證', '檢測流程未完整完成，無法確認正規電商佐證'),
+                    seoMaturity: createScanCheck('unknown', 'SEO 成熟度', '檢測流程未完整完成，無法確認 SEO 佐證'),
+                    languageConsistency: createScanCheck('unknown', '語言一致性', '檢測流程未完整完成，無法判定頁面語言一致性'),
+                    businessIdentity: createScanCheck('unknown', '商家實體一致性', '檢測流程未完整完成，無法比對商家實體'),
+                    lineOfficial: createScanCheck('safe', 'LINE 官方帳號脈絡', '未偵測到 LINE 聯絡導流'),
+                    securityHeaders: createScanCheck('unknown', 'HTTP 安全標頭', '無法自動檢查 HTTP 安全標頭'),
+                    mxRecords: createScanCheck('unknown', 'MX 郵件紀錄', '無法自動判定 MX 郵件紀錄'),
+                    age: createScanCheck('unknown', '註冊時間', '無法自動獲取 (建議手動查詢 WHOIS)'),
+                    registrationPeriod: createScanCheck('unknown', '註冊週期', '無法自動判定註冊週期'),
+                    certificate: createScanCheck('unknown', 'HTTPS 憑證時間', '無法自動取得憑證核發時間'),
+                    registrar: createScanCheck('unknown', '註冊商信譽', '無法辨識註冊商'),
+                    whoisPrivacy: createScanCheck('unknown', 'WHOIS 身份隱藏', '無法自動判定 WHOIS 身份隱藏狀態'),
+                    subdomain: createScanCheck('safe', '子網域深度', '子網域層級正常'),
+                    subdomainPattern: createScanCheck('safe', '可疑子網域模式', '未偵測到異常子網域命名模式'),
+                    disposableDomain: createScanCheck('safe', '免洗亂碼網域', '未偵測到主網域亂碼免洗特徵'),
+                    userAgentCloaking: createScanCheck('unknown', '裝置導向差異', '未完成 Mobile 與 Desktop User-Agent 比對'),
+                    redirect: createScanCheck('unknown', '轉址/短網址', '檢測流程未完整完成，無法確認轉址狀態'),
+                    network: createScanCheck('unknown', '網路服務商 (ISP/ASN)', '無法識別網路來源'),
+                    links: createScanCheck('unknown', '網頁連結分析', '無法分析頁面內容'),
+                    formFields: createScanCheck('safe', '表單敏感欄位', '未偵測到敏感表單欄位'),
+                    externalResources: createScanCheck('safe', '外部資源/表單送出', '未偵測到異常外部表單或資源'),
+                    freeHostingSensitiveLink: createScanCheck('safe', '免費子網域驗證連結', '未偵測到免費子網域搭配敏感驗證參數的高風險組合'),
+                    regulatedProduct: createScanCheck('safe', '電子菸/加熱菸販售', '未偵測到電子菸、加熱菸或煙彈的網路販售脈絡'),
+                    shoppingScam: createScanCheck('unknown', '一頁式購物詐騙', '未能從可讀 HTML 中確認一頁式購物結構'),
+                    lineContact: createScanCheck('safe', 'LINE 聯絡導流', '未偵測到 LINE 聯絡導流'),
+                    shoppingLanding: createScanCheck('unknown', '購物/廣告落地頁網址', '檢測流程未完整完成，無法確認購物/廣告落地頁特徵'),
+                    brandSimilarity: createScanCheck('safe', '品牌相似網域', '未偵測到常見品牌相似網域'),
+                    pageBrand: createScanCheck('safe', '頁面品牌一致性', '未偵測到頁面品牌與網域不一致'),
+                    officialFlowPath: createScanCheck('safe', '官方流程路徑', '未偵測到可疑官方流程路徑'),
+                    urgency: createScanCheck('safe', '限時/恐嚇話術', '未偵測到常見限時或恐嚇話術'),
+                    homograph: createScanCheck('safe', '相似字元網域', '未偵測到 Punycode 或 Unicode 混淆網域'),
+                    params: createScanCheck('safe', '網址參數檢查', '未發現敏感追蹤或認證參數'),
+                    entropy: createScanCheck('safe', '亂碼/隨機網址', '網域名稱結構正常'),
+                    iframe: createScanCheck('safe', 'Iframe 偽裝', '未偵測到異常框架'),
+                    apkCheck: createScanCheck('safe', '可疑檔案下載', '未偵測到可疑 Android 應用程式')
+                }
+            };
+        };
+
+        const runRiskScanSafely = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
+            try {
+                return await simulateScan(targetDomain, fullUrl, currentWhitelist, scanOptions);
+            } catch (err) {
+                console.error('風險掃描流程異常，已改用保守備援結果:', err);
+                return createScanFailureResult(targetDomain, fullUrl, scanOptions, err);
+            }
+        };
+
         const getHighRiskSummaryReasons = (scanData) => {
             if (!scanData || !scanData.checks) return [];
 
@@ -3266,7 +3367,7 @@ const { useState, useEffect, useRef } = React;
                 const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
 
                 const [scanData, brandDataRes] = await Promise.all([
-                    simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
+                    runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
                     skipAiBrandAnalysis
                         ? Promise.resolve(null)
                         : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(riskScoringUrl)}`, null), 7000, null)
@@ -3908,7 +4009,7 @@ const { useState, useEffect, useRef } = React;
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
-                        simulateScan(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
+                        runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
                         // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
                         (isSocialInput || skipAiBrandAnalysis)
                             ? Promise.resolve(null) 
@@ -3999,6 +4100,8 @@ const { useState, useEffect, useRef } = React;
 
             const handleCopyReport = () => {
                 if (!result) return;
+                const checks = result.checks || {};
+                const siteStatus = result.details?.siteStatus || {};
                 
                 // 👇 複製報告時，也要考慮社群網站的特殊狀態
                 let riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 低度風險');
@@ -4014,30 +4117,30 @@ const { useState, useEffect, useRef } = React;
                     warnings.push('⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！');
                 }
 
-                if (result.checks.domainAnalysis.status === 'danger') {
+                if (checks.domainAnalysis?.status === 'danger') {
                     if (result.domain.includes('-tw') || result.domain.includes('-com') || result.domain.includes('-online')) warnings.push('⚠️ 網域包含 "-tw", "-com" 或 "-online" 偽裝字樣，風險極高');
                     else if (result.domain.includes('gov') && !result.domain.endsWith('.gov') && !result.domain.endsWith('.gov.tw')) warnings.push('⚠️ 網域偽造政府機關 (gov)，極高風險');
                     else if ((result.domain.match(/-/g) || []).length >= 2) warnings.push('⚠️ 網域包含多個連字號 (-)，極高機率為詐騙');
-                } else if (result.checks.domainAnalysis.status === 'warning' && !result.isSocialMedia) warnings.push('⚠️ 使用免費架站平台，風險較高');
+                } else if (checks.domainAnalysis?.status === 'warning' && !result.isSocialMedia) warnings.push(`⚠️ ${checks.domainAnalysis.details || '網域特徵需要留意'}`);
                 
-                if (result.details.siteStatus.status === 'blank' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
-                if (result.details.siteStatus.status === 'error' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push(`⚠️ 網站無法正常存取 (${result.details.siteStatus.code || 'Connection Error'})`);
-                if (result.details.siteStatus.status === 'unknown' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
-                if (result.details.siteStatus.status === 'blocked' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站啟用防爬蟲或 WAF，無法被正常讀取');
-                if (result.details.siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
-                if (result.checks.apkCheck.status === 'danger') warnings.push(`⚠️ ${result.checks.apkCheck.details}`);
-                if (result.checks.securityHeaders?.status === 'danger') warnings.push('⚠️ 缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭');
-                if (result.checks.mxRecords?.status === 'danger') warnings.push('⚠️ 網域未設定 MX 郵件紀錄');
-                if (result.checks.registrationPeriod?.status === 'danger') warnings.push('⚠️ 新網域且註冊週期約 1 年，具備短期棄置風險');
-                else if (result.checks.age.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
-                if (result.checks.disposableDomain?.status === 'danger') warnings.push(`⚠️ ${result.checks.disposableDomain.details}`);
-                if (result.checks.entropy.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
-                if (result.checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${result.checks.redirect.details})`);
-                if (result.checks.whoisPrivacy.status !== 'safe' && !result.isSocialMedia) warnings.push('⚠️ WHOIS 身份已隱藏');
-                if (result.checks.registrar.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${result.checks.registrar.details.split(' ')[1]})`);
-                if (result.checks.subdomain.status === 'danger') warnings.push('⚠️ 子網域層級過深 (≥ 5層)，極高風險');
-                else if (result.checks.subdomain.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
-                if (result.checks.params.status === 'danger') warnings.push('⚠️ 包含敏感參數 (token/auth/session)');
+                if (siteStatus.status === 'blank' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站內容異常空白或極少 (高風險)');
+                if (siteStatus.status === 'error' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push(`⚠️ 網站無法正常存取 (${siteStatus.code || 'Connection Error'})`);
+                if (siteStatus.status === 'unknown' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站無法被正常讀取 (疑似阻擋)');
+                if (siteStatus.status === 'blocked' && !result.isSocialMedia && !result.crawlerBlockedTrustedContext) warnings.push('⚠️ 網站啟用防爬蟲或 WAF，無法被正常讀取');
+                if (siteStatus.hasIframe) warnings.push('⚠️ 偵測到 Iframe 隱藏框架');
+                if (checks.apkCheck?.status === 'danger') warnings.push(`⚠️ ${checks.apkCheck.details}`);
+                if (checks.securityHeaders?.status === 'danger') warnings.push('⚠️ 缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭');
+                if (checks.mxRecords?.status === 'danger') warnings.push('⚠️ 網域未設定 MX 郵件紀錄');
+                if (checks.registrationPeriod?.status === 'danger') warnings.push('⚠️ 新網域且註冊週期約 1 年，具備短期棄置風險');
+                else if (checks.age?.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
+                if (checks.disposableDomain?.status === 'danger') warnings.push(`⚠️ ${checks.disposableDomain.details}`);
+                if (checks.entropy?.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
+                if (checks.redirect?.status && checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${checks.redirect.details})`);
+                if (checks.whoisPrivacy?.status && checks.whoisPrivacy.status !== 'safe' && !result.isSocialMedia) warnings.push('⚠️ WHOIS 身份已隱藏');
+                if (checks.registrar?.status === 'warning') warnings.push(`⚠️ 註冊商信譽不佳 (${(checks.registrar.details || '').split(' ')[1] || checks.registrar.details})`);
+                if (checks.subdomain?.status === 'danger') warnings.push('⚠️ 子網域層級過深 (≥ 5層)，極高風險');
+                else if (checks.subdomain?.status === 'warning') warnings.push('⚠️ 子網域層級過深 (常見詐騙特徵)');
+                if (checks.params?.status === 'danger') warnings.push('⚠️ 包含敏感參數 (token/auth/session)');
                 
                 const report = `【幫你查好囉！網址檢測結果】\n----------------------\n🔍 幫你查了這個網址：${result.domain}\n🛡️ 目前的風險評估是：${riskLevel}\n----------------------\n${warnings.length > 0 ? `🛑 覺得怪怪的地方：\n${warnings.map(w => w).join('\n')}\n----------------------\n` : ''}請務必保持警覺，切勿隨意輸入個資🙏`;
                 const textArea = document.createElement("textarea");
