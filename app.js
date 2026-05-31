@@ -1635,16 +1635,6 @@ const { useState, useEffect, useRef } = React;
                 ...removedTrackingParamsForScan,
                 ...removedVolatileParamsForScan
             ])];
-            let resolvedIp = null;
-            try {
-                const dnsData = await fetchJsonSafely(`https://dns.google/resolve?name=${targetDomain}&type=A`, null);
-                if (dnsData?.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
-                if (dnsData?.Answer && dnsData.Answer.length > 0) {
-                    const aRecord = dnsData.Answer.find(r => r.type === 1);
-                    if (aRecord) resolvedIp = aRecord.data;
-                }
-            } catch (e) { }
-
             const domain = targetDomain.toLowerCase();
             const isOfficialTaiwanGov = isOfficialTaiwanGovDomain(domain);
             const isTrustedGlobalRootDomain = isTrustedGlobalDomain(domain);
@@ -1670,6 +1660,20 @@ const { useState, useEffect, useRef } = React;
             const isVeryHighRiskTLD = highRiskSuffixes.some(s => domain.endsWith(s));
             const suspiciousTlds = getRiskList('suspiciousTlds');
             const isSuspiciousTLD = suspiciousTlds.some(s => domain.endsWith(s)) || domain.endsWith('.info');
+
+            if (!isWhitelisted && isSuspiciousTLD && removedTrackingParamsForScan.length > 0) {
+                return createUrlOnlySuspiciousAdLandingResult(targetDomain, fullUrl, scanOptions);
+            }
+
+            let resolvedIp = null;
+            try {
+                const dnsData = await fetchJsonSafely(`https://dns.google/resolve?name=${targetDomain}&type=A`, null);
+                if (dnsData?.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
+                if (dnsData?.Answer && dnsData.Answer.length > 0) {
+                    const aRecord = dnsData.Answer.find(r => r.type === 1);
+                    if (aRecord) resolvedIp = aRecord.data;
+                }
+            } catch (e) { }
 
             const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
@@ -2955,7 +2959,12 @@ const { useState, useEffect, useRef } = React;
                 linkStats: { total: 0, internal: 0, external: 0 },
                 pageSignals: createEmptyPageSignals()
             };
+            const suspiciousTlds = getRiskList('suspiciousTlds');
+            const isFallbackSuspiciousAdLanding = !isVerifiedSafeRootDomain(targetDomain) &&
+                (suspiciousTlds.some(suffix => String(targetDomain || '').toLowerCase().endsWith(suffix)) || String(targetDomain || '').toLowerCase().endsWith('.info')) &&
+                removedTrackingParams.length > 0;
             const fallbackDetails = '檢測流程暫時中斷，系統已避免頁面當掉；請稍後重試，或先不要在此網址輸入個資。';
+            const fallbackAdLandingDetails = `檢測流程逾時或中斷，但原始網址含 ${removedTrackingParams.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且網域使用可疑後綴；先以高風險處理。`;
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
@@ -2965,7 +2974,7 @@ const { useState, useEffect, useRef } = React;
                 removedVolatileParams,
                 removedParams,
                 traceChain: [],
-                riskScore: 30,
+                riskScore: isFallbackSuspiciousAdLanding ? 85 : 30,
                 risk_flag: true,
                 riskFlags: { scanRuntimeError: true, errorMessage: err?.message || '' },
                 blocklistListed: false,
@@ -2983,8 +2992,8 @@ const { useState, useEffect, useRef } = React;
                 checks: {
                     googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
-                    siteContent: createScanCheck('unknown', '網站內容狀態', fallbackDetails),
-                    domainAnalysis: createScanCheck('warning', '網域特徵分析', fallbackDetails),
+                    siteContent: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'unknown', '網站內容狀態', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails),
+                    domainAnalysis: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'warning', '網域特徵分析', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails),
                     traffic: createScanCheck('unknown', 'Tranco 流量排名', '檢測流程未完整完成，無法取得流量排名'),
                     serverLocation: createScanCheck('unknown', '伺服器所在國家', '無法自動判定伺服器所在國家'),
                     validation: createScanCheck('unknown', '次要可信驗證', '檢測流程未完整完成，尚未取得可信佐證'),
@@ -3013,7 +3022,7 @@ const { useState, useEffect, useRef } = React;
                     regulatedProduct: createScanCheck('safe', '電子菸/加熱菸販售', '未偵測到電子菸、加熱菸或煙彈的網路販售脈絡'),
                     shoppingScam: createScanCheck('unknown', '一頁式購物詐騙', '未能從可讀 HTML 中確認一頁式購物結構'),
                     lineContact: createScanCheck('safe', 'LINE 聯絡導流', '未偵測到 LINE 聯絡導流'),
-                    shoppingLanding: createScanCheck('unknown', '購物/廣告落地頁網址', '檢測流程未完整完成，無法確認購物/廣告落地頁特徵'),
+                    shoppingLanding: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'unknown', '購物/廣告落地頁網址', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : '檢測流程未完整完成，無法確認購物/廣告落地頁特徵'),
                     brandSimilarity: createScanCheck('safe', '品牌相似網域', '未偵測到常見品牌相似網域'),
                     pageBrand: createScanCheck('safe', '頁面品牌一致性', '未偵測到頁面品牌與網域不一致'),
                     officialFlowPath: createScanCheck('safe', '官方流程路徑', '未偵測到可疑官方流程路徑'),
@@ -3027,9 +3036,31 @@ const { useState, useEffect, useRef } = React;
             };
         };
 
+        const createUrlOnlySuspiciousAdLandingResult = (targetDomain, fullUrl, scanOptions = {}) => {
+            const result = createScanFailureResult(targetDomain, fullUrl, scanOptions);
+            const removedTrackingParams = result.removedTrackingParams || [];
+            const adLandingDetails = `原始網址含 ${removedTrackingParams.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且 ${targetDomain} 使用可疑網域後綴；為避免長時間深度掃描造成頁面卡住，已先以 URL-only 強風險規則判定。`;
+            result.riskScore = 85;
+            result.riskFlags = { urlOnlySuspiciousAdLanding: true };
+            result.details.siteStatus.msg = '已由 URL-only 強風險規則快速判定，略過耗時深度掃描';
+            result.checks.siteContent.status = 'info';
+            result.checks.siteContent.details = '已由網址結構先行判定；深度內容檢測可稍後再試';
+            result.checks.domainAnalysis.status = 'danger';
+            result.checks.domainAnalysis.details = adLandingDetails;
+            result.checks.shoppingLanding.status = 'danger';
+            result.checks.shoppingLanding.details = adLandingDetails;
+            result.summaryReasons = ['可疑購物/廣告落地頁網址'];
+            return result;
+        };
+
         const runRiskScanSafely = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
+            const fallbackResult = createScanFailureResult(targetDomain, fullUrl, scanOptions);
             try {
-                return await simulateScan(targetDomain, fullUrl, currentWhitelist, scanOptions);
+                return await withTimeout(
+                    simulateScan(targetDomain, fullUrl, currentWhitelist, scanOptions),
+                    18000,
+                    fallbackResult
+                ) || fallbackResult;
             } catch (err) {
                 console.error('風險掃描流程異常，已改用保守備援結果:', err);
                 return createScanFailureResult(targetDomain, fullUrl, scanOptions, err);
