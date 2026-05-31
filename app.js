@@ -1899,8 +1899,15 @@ const { useState, useEffect, useRef } = React;
             const hasPaymentOrApiPath = /\/(?:api|checkout|checkoutnow|payment|payments|pay|billing|token|session|oauth|auth)(?:\/|$)/i.test(trustedEndpointPath);
             const defaultLandingParams = ['ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=', 'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='];
             const landingParamList = [...new Set([...getRiskList('suspiciousLandingParams'), ...defaultLandingParams])];
+            const rawScanUrlLower = String(rawScanUrl || fullUrl || '').toLowerCase();
             const matchedLandingParams = landingParamList.filter(key => fullUrl.toLowerCase().includes(key));
+            const matchedRawLandingParams = landingParamList.filter(key => rawScanUrlLower.includes(key));
+            const rawAdLandingParamDetails = [...new Set([
+                ...matchedRawLandingParams.map(key => key.replace(/=$/, '').replace(/_$/, '_*')),
+                ...removedTrackingParamsForScan
+            ])].filter(Boolean);
             const hasSuspiciousLandingParams = matchedLandingParams.length > 0;
+            const hasRawAdvertisingLandingParams = rawAdLandingParamDetails.length > 0;
             const hasNestedSuspiciousParams = nestedUrls.some(url => hasSensitiveUrlParam(url));
             const hasRandomizedPathToken = (() => {
                 try {
@@ -2049,6 +2056,13 @@ const { useState, useEffect, useRef } = React;
                 trafficStatus = 'info';
                 trafficDetails = '未進入 Tranco 全球熱門排名；但具備中小型商家/台灣網域可信佐證，不作為風險加權';
             }
+            const hasSuspiciousTldAdLandingRisk = !isWhitelisted &&
+                isSuspiciousTLD &&
+                hasRawAdvertisingLandingParams &&
+                !hasStrongEcommerceValidation &&
+                !hasVerifiedBusinessEntity &&
+                !isTrustedTaiwanRegistrar &&
+                !hasRootDomainTrustBaseline;
             const hasShoppingLandingRiskContext =
                 hasDisposableRootLabel ||
                 isSuspiciousRootLabel ||
@@ -2208,6 +2222,7 @@ const { useState, useEffect, useRef } = React;
                 hasUaCloakingRisk ||
                 isDownloadPhishingSignal ||
                 hasShoppingScamSignal ||
+                hasSuspiciousTldAdLandingRisk ||
                 hasFreeHostingSensitiveLinkRisk ||
                 hasRegulatedTobaccoSalesSignal ||
                 hasShoppingLineContactRisk;
@@ -2227,6 +2242,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
                 hasUaCloakingRisk ||
+                hasSuspiciousTldAdLandingRisk ||
                 hasDisposableShoppingLandingRisk ||
                 hasDisposableRootPhishingRisk ||
                 hasDisposableUnreadablePageRisk ||
@@ -2383,6 +2399,7 @@ const { useState, useEffect, useRef } = React;
                     if (hasBrandSimilarity) riskScore += 80;
                     if (isDownloadPhishingSignal) riskScore += 80;
                     if (hasShoppingLandingUrlRisk) riskScore += siteStatusData.status === 'ok' ? 50 : 75;
+                    if (hasSuspiciousTldAdLandingRisk) riskScore += 85;
                     if (hasDisposableShoppingLandingRisk) riskScore += 85;
                     else if (hasDisposableRootPhishingRisk) riskScore += 70;
                     else if (hasDisposableUnreadablePageRisk) riskScore += 70;
@@ -2510,6 +2527,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
                 hasFreeHostingSensitiveLinkRisk ||
+                hasSuspiciousTldAdLandingRisk ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
                 hasDisposableShoppingLandingRisk ||
@@ -2551,6 +2569,7 @@ const { useState, useEffect, useRef } = React;
                     hasSuspiciousTempDomain ||
                     hasFinalSuspiciousTemp ||
                     hasFreeHostingSensitiveLinkRisk ||
+                    hasSuspiciousTldAdLandingRisk ||
                     hasSuspiciousEmailTrackingHost ||
                     hasDeepSubdomainPhishingPattern ||
                     hasDisposableShoppingLandingRisk ||
@@ -2627,6 +2646,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到台灣高風險電子菸/加熱菸網路販售：${regulatedTobaccoSalesSignals.reasons.slice(0, 3).join('、')}。此類非法商品頁常伴隨 LINE 導流、貨到付款或一頁式交易詐騙風險。`;
                 siteContentMsg = '危險：疑似電子菸/加熱菸網路販售或交易導流';
+            } else if (hasSuspiciousTldAdLandingRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到可疑後綴廣告落地頁：${domain} 使用較常被濫用的網域後綴，原始網址含 ${rawAdLandingParamDetails.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且缺少可信白名單、商家實體或正規電商佐證。`;
+                siteContentMsg = '危險：可疑網域後綴搭配社群廣告落地頁';
             } else if (hasShoppingScamSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到一頁式購物詐騙特徵：${shoppingScamSignals.reasons.slice(0, 3).join('、')}。`;
@@ -2898,7 +2921,7 @@ const { useState, useEffect, useRef } = React;
                     },
                     shoppingScam: { status: hasStrongEcommerceValidation ? 'info' : ((hasShoppingScamSignal || hasShoppingLineContactRisk) ? 'danger' : (shoppingScamSignals.matched || hasShoppingLandingUrlRisk ? 'warning' : 'safe')), label: '一頁式購物詐騙', details: hasStrongEcommerceValidation ? '偵測到購物頁特徵，但同時具備正規電商佐證，未單獨判為一頁式購物詐騙' : (shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : (hasShoppingLandingUrlRisk ? '頁面內容未完整取得，無法確認購物頁結構；但網址本身已符合可疑購物落地頁特徵' : '未能從可讀 HTML 中確認一頁式購物結構')) },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
-                    shoppingLanding: { status: hasShoppingLandingUrlRisk ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數') },
+                    shoppingLanding: { status: (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數')) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
                     officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },

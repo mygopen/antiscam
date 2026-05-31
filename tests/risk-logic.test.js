@@ -1268,6 +1268,34 @@ function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
         hasLandingRiskContext;
 }
 
+function hasSuspiciousTldAdLandingRisk(rawUrl, {
+    removedTrackingParams = [],
+    isWhitelisted = false,
+    hasStrongEcommerceValidation = false,
+    hasVerifiedBusinessEntity = false,
+    isTrustedTaiwanRegistrar = false,
+    hasRootDomainTrustBaseline = false
+} = {}) {
+    const parsed = new URL(rawUrl);
+    const domain = parsed.hostname.toLowerCase();
+    const isSuspiciousTLD = riskConfig.suspiciousTlds.some(suffix => domain.endsWith(suffix)) || domain.endsWith('.info');
+    const defaultLandingParams = ['ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=', 'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='];
+    const landingParamList = [...new Set([...riskConfig.suspiciousLandingParams, ...defaultLandingParams])];
+    const matchedRawLandingParams = landingParamList.filter(key => rawUrl.toLowerCase().includes(key));
+    const rawAdLandingParamDetails = [...new Set([
+        ...matchedRawLandingParams.map(key => key.replace(/=$/, '').replace(/_$/, '_*')),
+        ...removedTrackingParams
+    ])].filter(Boolean);
+
+    return !isWhitelisted &&
+        isSuspiciousTLD &&
+        rawAdLandingParamDetails.length > 0 &&
+        !hasStrongEcommerceValidation &&
+        !hasVerifiedBusinessEntity &&
+        !isTrustedTaiwanRegistrar &&
+        !hasRootDomainTrustBaseline;
+}
+
 function capWeakSignalRisk(score, hasStrongRiskSignal) {
     return !hasStrongRiskSignal && score > 60 ? 60 : score;
 }
@@ -2521,6 +2549,37 @@ test('正規台灣商業網域只有廣告參數與低流量不應命中購物�
     });
 
     assert.equal(hasRisk, false);
+});
+
+test('可疑 .cc 社群廣告落地頁即使清除 tracking 仍應升為高風險', () => {
+    const rawUrl = 'https://gonomad.cc/bonebone/?fbclid=sample&utm_medium=paid&utm_source=fb&utm_id=120249894728860274&utm_content=120249894728850274&utm_term=120249894728870274&utm_campaign=120249894728860274';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const hasRisk = hasSuspiciousTldAdLandingRisk(rawUrl, {
+        removedTrackingParams: sanitized.removedTrackingParams
+    });
+    const riskScore = hasRisk ? 85 : 15;
+
+    assert.equal(parsed.search, '');
+    assert.equal(sanitized.rawUrl, rawUrl);
+    assert.ok(sanitized.removedTrackingParams.includes('fbclid'));
+    assert.ok(sanitized.removedTrackingParams.includes('utm_source'));
+    assert.equal(hasRisk, true);
+    assert.equal(riskScore >= 70, true);
+});
+
+test('可疑後綴廣告落地頁規則不應覆寫白名單或正規電商佐證', () => {
+    const rawUrl = 'https://gonomad.cc/bonebone/?fbclid=sample&utm_source=fb';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+
+    assert.equal(hasSuspiciousTldAdLandingRisk(rawUrl, {
+        removedTrackingParams: sanitized.removedTrackingParams,
+        isWhitelisted: true
+    }), false);
+    assert.equal(hasSuspiciousTldAdLandingRisk(rawUrl, {
+        removedTrackingParams: sanitized.removedTrackingParams,
+        hasStrongEcommerceValidation: true
+    }), false);
 });
 
 test('台灣商業網域若主網域具亂碼免洗特徵仍應命中購物落地頁高風險', () => {
