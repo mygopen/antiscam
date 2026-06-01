@@ -1,5 +1,39 @@
 // 檔案路徑：functions/api/check-fake-brand.js
 
+function normalizeBrandToken(value) {
+    return String(value || "")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fff]/g, "");
+}
+
+function isSameRootDomain(hostname, rootDomain) {
+    const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
+    const root = String(rootDomain || "").toLowerCase().replace(/^www\./, "");
+    return !!host && !!root && (host === root || host.endsWith("." + root));
+}
+
+function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
+    const trustedCampaignHosts = [
+        {
+            domain: "mababy.com",
+            allowedBrandTokens: ["nestle", "雀巢", "能恩", "nan", "nestlebaby"]
+        }
+    ];
+    const normalizedBrand = normalizeBrandToken(detectedBrand);
+    if (!normalizedBrand) return false;
+
+    return trustedCampaignHosts.some(item => {
+        if (!isSameRootDomain(inputDomain, item.domain)) return false;
+        return item.allowedBrandTokens.some(token => {
+            const normalizedToken = normalizeBrandToken(token);
+            return normalizedToken &&
+                (normalizedBrand.includes(normalizedToken) || normalizedToken.includes(normalizedBrand));
+        });
+    });
+}
+
 async function getOfficialDomain(brand) {
 // 1. 本地白名單：改為「陣列」格式，支援一個品牌擁有多個合法網域
 const localBrandMap = {
@@ -22,6 +56,11 @@ const localBrandMap = {
         "zingala": ["zingala.com.tw", "zingala.cc", "zingala.com"],
         "銀角零卡": ["zingala.com.tw", "zingala.cc", "zingala.com"],
         "中租": ["chailease.com.tw", "zingala.com.tw", "zingala.cc", "zingala.com"],
+        "Nestle": ["nestle.com", "nestle.com.tw", "nestlebaby.com.tw"],
+        "Nestlé": ["nestle.com", "nestle.com.tw", "nestlebaby.com.tw"],
+        "雀巢": ["nestle.com", "nestle.com.tw", "nestlebaby.com.tw"],
+        "雀巢能恩": ["nestlebaby.com.tw"],
+        "能恩": ["nestlebaby.com.tw"],
         "microsoft": ["microsoft.com", "aka.ms", "live.com", "office.com"],
         "微軟": ["microsoft.com", "aka.ms", "live.com", "office.com"],
         "7-zip": ["7-zip.org"],
@@ -116,6 +155,7 @@ export async function onRequest(context) {
         const prompt = `你是一位嚴格的資安分析師。請閱讀以下的網頁內容，進行判斷：
         1. 如果網頁「明確」冒用特定知名品牌（如：中國信託、台灣大哥大、中華郵政等），請直接輸出該「品牌名稱」。
         2. 如果這是一般的「戶外用品、服飾、生活百貨等合法電商」或「一般購物網站」，請嚴格輸出「Unknown」。絕對不可以因為有打折促銷就當作詐騙。
+        2a. 如果這是媒體、活動承辦或合作夥伴網域上的品牌合作活動頁，且未要求密碼、OTP、信用卡或金融帳密，不要只因出現贊助品牌名稱就判定冒用；請輸出「Unknown」。
         3. 只有當內容包含強烈的通用詐騙特徵（如：保證獲利、高薪免經驗代工、要求加 LINE 領飆股、免聯徵快速借款、身分證小額借貸、代辦包裝信用等），才輸出「Generic_Scam」。
         4. 如果網頁在台灣情境下販售或導流購買電子煙、電子菸、煙彈、菸彈、加熱菸、RELX/悅刻等類菸品，且出現 LINE 客服、貨到付款、現貨、價格、購物車或下單資訊，請輸出「Generic_Scam」。
         請只輸出單一詞彙（品牌名稱、Generic_Scam 或 Unknown），絕對不要有任何標點符號或解釋。
@@ -161,6 +201,17 @@ export async function onRequest(context) {
 
         
         // 3. AI Agent 2：取得官方網域並比對
+        if (isTrustedCoBrandCampaignHost(inputDomain, detectedBrand)) {
+            return new Response(JSON.stringify({
+                detectedBrand: detectedBrand,
+                inputDomain: inputDomain,
+                isFakeBrand: false,
+                coBrandCampaign: true,
+                message: "可信活動/媒體網域上的品牌合作活動，不視為品牌仿冒"
+            }), {
+                headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+            });
+        }
         const officialDomains = await getOfficialDomain(detectedBrand);
         
         if (!officialDomains || officialDomains.length === 0) {

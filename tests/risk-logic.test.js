@@ -137,6 +137,34 @@ function isGlobalPaymentGatewayDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
 }
 
+function normalizeBrandToken(value) {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
+}
+
+function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
+    const trustedCampaignHosts = [
+        {
+            domain: 'mababy.com',
+            allowedBrandTokens: ['nestle', '雀巢', '能恩', 'nan', 'nestlebaby']
+        }
+    ];
+    const normalizedBrand = normalizeBrandToken(detectedBrand);
+    if (!normalizedBrand) return false;
+
+    return trustedCampaignHosts.some(item => {
+        if (!matchesDomainList(inputDomain, [item.domain])) return false;
+        return item.allowedBrandTokens.some(token => {
+            const normalizedToken = normalizeBrandToken(token);
+            return normalizedToken &&
+                (normalizedBrand.includes(normalizedToken) || normalizedToken.includes(normalizedBrand));
+        });
+    });
+}
+
 function isVerifiedSafeRootDomain(hostname, whitelist = []) {
     return isOfficialTaiwanGovDomain(hostname) ||
         isTrustedGlobalDomain(hostname) ||
@@ -1574,6 +1602,24 @@ test('白名單包含 simplite.com.tw 並支援 www 子網域', () => {
 
     assert.equal(matchesDomainList('simplite.com.tw', whitelist), true);
     assert.equal(matchesDomainList('www.simplite.com.tw', whitelist), true);
+});
+
+test('嬰兒與母親活動子網域應繼承可信服務根網域', () => {
+    const rawUrl = 'https://acts.mababy.com/2025thi_nestle_HA?fbclid=sample&utm_medium=paid&utm_source=fb&utm_campaign=120246974505240275';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+
+    assert.equal(isTrustedTaiwanServiceDomain('acts.mababy.com'), true);
+    assert.equal(isVerifiedSafeRootDomain('acts.mababy.com'), true);
+    assert.equal(shouldSkipAiBrandAnalysis('acts.mababy.com'), true);
+    assert.ok(sanitized.removedTrackingParams.includes('fbclid'));
+    assert.ok(sanitized.removedTrackingParams.includes('utm_source'));
+});
+
+test('可信媒體活動網域上的雀巢合作活動不應視為品牌仿冒', () => {
+    assert.equal(isTrustedCoBrandCampaignHost('acts.mababy.com', 'Nestlé'), true);
+    assert.equal(isTrustedCoBrandCampaignHost('acts.mababy.com', '雀巢能恩水解3'), true);
+    assert.equal(isTrustedCoBrandCampaignHost('promo.example.com', 'Nestlé'), false);
+    assert.equal(isTrustedCoBrandCampaignHost('acts.mababy.com', 'Apple'), false);
 });
 
 test('白名單包含 ONE BOY 官方網域並支援 www 子網域', () => {

@@ -25,7 +25,8 @@ window.RISK_CONFIG = {
         'momoshop.com.tw', 'friday.tw'
     ],
     trustedTaiwanServiceDomains: [
-        'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw'
+        'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
+        'mababy.com'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
