@@ -19,6 +19,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: "mababy.com",
             allowedBrandTokens: ["nestle", "雀巢", "能恩", "nan", "nestlebaby"]
+        },
+        {
+            domain: "uni-prosperity.com.tw",
+            allowedBrandTokens: ["carrefour", "家樂福", "家福", "康達盛通", "uni-prosperity", "uniprosperity", "uniprosperitylifestyle"]
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -50,6 +54,15 @@ const localBrandMap = {
         "衛生福利部": ["mohw.gov.tw"], "台灣大哥大": ["taiwanmobile.com"],
         "中華電信": ["cht.com.tw"], "遠傳電信": ["fetnet.net"],
         "台灣積體電路製造": ["tsmc.com"],
+        "家樂福": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "家福": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "家福股份有限公司": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "康達盛通": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "康達盛通生活事業股份有限公司": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "Carrefour": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "Carrefour Taiwan": ["carrefour.com.tw", "uni-prosperity.com.tw"],
+        "Uni-Prosperity": ["uni-prosperity.com.tw", "carrefour.com.tw"],
+        "Uni-Prosperity Lifestyle Corp.": ["uni-prosperity.com.tw", "carrefour.com.tw"],
         "Apple": ["apple.com", "icloud.com"], "APPLE": ["apple.com", "icloud.com"],
         "蘋果": ["apple.com", "icloud.com"], "Apple ID": ["apple.com", "icloud.com"],
         "iCloud": ["icloud.com", "apple.com"], "App Store": ["apple.com"],

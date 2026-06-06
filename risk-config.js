@@ -22,7 +22,7 @@ window.RISK_CONFIG = {
     ],
     trustedEcommerceRootDomains: [
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
-        'momoshop.com.tw', 'friday.tw'
+        'momoshop.com.tw', 'friday.tw', 'uni-prosperity.com.tw'
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
@@ -194,6 +194,7 @@ window.RISK_CONFIG = {
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
+        { name: '家樂福', keywords: ['carrefour', 'uni-prosperity', 'uniprosperity'], domains: ['carrefour.com.tw', 'uni-prosperity.com.tw'] },
         { name: '財政部電子發票', keywords: ['einvoice', 'invoicenat', 'einvoicenat'], domains: ['einvoice.nat.gov.tw', 'invoice.etax.nat.gov.tw', 'etax.nat.gov.tw', 'mof.gov.tw'] },
         { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },
         { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] },

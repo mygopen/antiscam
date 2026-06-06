@@ -151,6 +151,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: 'mababy.com',
             allowedBrandTokens: ['nestle', '雀巢', '能恩', 'nan', 'nestlebaby']
+        },
+        {
+            domain: 'uni-prosperity.com.tw',
+            allowedBrandTokens: ['carrefour', '家樂福', '家福', '康達盛通', 'uni-prosperity', 'uniprosperity', 'uniprosperitylifestyle']
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -1995,7 +1999,8 @@ test('大型電商根網域子網域應直接視為可信 allowlist 並維持低
         'https://tw.coupang.com/products/123456789?utm_medium=cpc&wbraid=abc',
         'https://pxbox.es.pxmart.com.tw/product/path/deep?fbclid=abc&utm_campaign=promo',
         'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=123&utm_term=test',
-        'https://ec-w.shopping.friday.tw/googleAI/product/deep/path?utm_source=google&gclid=abc'
+        'https://ec-w.shopping.friday.tw/googleAI/product/deep/path?utm_source=google&gclid=abc',
+        'https://giftcard.uni-prosperity.com.tw/giftcard/LIbqV9Tt0m'
     ];
 
     trustedEcUrls.forEach(rawUrl => {
@@ -2012,6 +2017,36 @@ test('大型電商根網域子網域應直接視為可信 allowlist 並維持低
 
     assert.equal(isVerifiedSafeRootDomain('pchome.com.tw.evil.shop'), false);
     assert.equal(isVerifiedSafeRootDomain('fake-momoshop.com.tw'), false);
+});
+
+test('家樂福 Uni-Prosperity 官方禮物卡子網域應視為可信且跳過 AI 品牌誤判', () => {
+    const hostname = 'giftcard.uni-prosperity.com.tw';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname,
+        text: '<title>家樂福電子禮券 CARREFOUR E-GC</title><p>憑電子禮券上的條碼，可至家樂福所有門市消費使用。</p>'
+    });
+    const fakeCarrefour = checkBrandSimilarity('carrefour-gift.example.shop', []);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('uni-prosperity.com.tw'));
+    assert.ok(matchesDomainList(hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname, []), true);
+    assert.equal(isTrustedCoBrandCampaignHost(hostname, 'Carrefour Taiwan'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(hostname, '家樂福'), true);
+    assert.equal(checkBrandSimilarity(hostname, []).matched, false);
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(fakeCarrefour.matched, true);
+    assert.equal(fakeCarrefour.brandName, '家樂福');
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
 });
 
 test('風險評分前應移除標準行銷追蹤參數並保留必要商品與交易參數', () => {
