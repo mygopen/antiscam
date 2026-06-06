@@ -146,7 +146,8 @@ const { useState, useEffect, useRef } = React;
             const sanitized = sanitizeUrlInput(value);
             if (!sanitized) return { ok: false, reason: 'empty' };
 
-            const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized)
+            const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized);
+            const normalizedUrl = hasExplicitScheme
                 ? sanitized
                 : `https://${sanitized}`;
 
@@ -167,7 +168,7 @@ const { useState, useEffect, useRef } = React;
             }
 
             try { urlObj.hostname = hostname; } catch (e) { }
-            return { ok: true, url: urlObj, hostname, href: urlObj.href };
+            return { ok: true, url: urlObj, hostname, href: urlObj.href, hasExplicitScheme, rawInput: sanitized };
         };
 
         const isTrackingUrlParamName = (name) => {
@@ -219,6 +220,34 @@ const { useState, useEffect, useRef } = React;
             } catch (e) {
                 return { href: rawUrl, rawHref: rawUrl, rawUrl, removedTrackingParams: [], removedVolatileParams: [], removedParams: [] };
             }
+        };
+
+        const toHttpFallbackUrl = (value) => {
+            try {
+                const parsed = new URL(value);
+                if (parsed.protocol !== 'https:') return '';
+                parsed.protocol = 'http:';
+                return parsed.href;
+            } catch (e) {
+                return '';
+            }
+        };
+
+        const buildCrawlerCandidateUrls = (urls, options = {}) => {
+            const preferHttpFallback = options.preferHttpFallback === true;
+            const candidates = [];
+            const add = (value) => {
+                if (value && !candidates.includes(value)) candidates.push(value);
+            };
+
+            urls.filter(Boolean).forEach(value => {
+                const httpFallback = toHttpFallbackUrl(value);
+                if (preferHttpFallback && httpFallback) add(httpFallback);
+                add(value);
+                if (!preferHttpFallback && httpFallback) add(httpFallback);
+            });
+
+            return candidates;
         };
 
         const isOfficialTaiwanGovDomain = (hostname) => {
@@ -575,6 +604,14 @@ const { useState, useEffect, useRef } = React;
             const consonantTrigrams = compact.match(/[bcdfghjklmnpqrstvwxyz]{3,}/g) || [];
             const rareBigrams = compact.match(/(?:qg|gq|kq|qk|xq|qx|zq|qz|vj|jv|yj|jy|kg|gk|mgq|rgm)/g) || [];
             const lowVowelRatio = ((compact.match(/[aeiou]/g) || []).length / compact.length) < 0.25;
+            const isShortAcronymLike = isShortRoot &&
+                compact.length <= 6 &&
+                lacksVowels &&
+                /^[a-z]+$/.test(compact) &&
+                !/[qxzjv]/.test(compact) &&
+                !qWithoutU &&
+                rareBigrams.length === 0 &&
+                entropyValue <= 2.5;
             const hasAwkwardShortFlow = isShortRoot &&
                 (
                     (rareBigrams.length > 0 && (consonantTrigrams.length > 0 || entropyValue > 2.1)) ||
@@ -582,7 +619,7 @@ const { useState, useEffect, useRef } = React;
                     /^[bcdfghjklmnpqrstvwxyz]{3,}[aeiou]{2}/i.test(compact)
                 );
             const looksMachineGenerated =
-                lacksVowels ||
+                (lacksVowels && !isShortAcronymLike) ||
                 hasDigitMix ||
                 hasAwkwardShortFlow ||
                 (qWithoutU && (consonantTrigrams.length > 0 || entropyValue > 3.0)) ||
@@ -594,7 +631,7 @@ const { useState, useEffect, useRef } = React;
             if (rareBigrams.length > 0) reasons.push(`含少見字母組合 ${[...new Set(rareBigrams)].slice(0, 2).join('、')}`);
             if (consonantTrigrams.length >= 2 || hasAwkwardShortFlow) reasons.push('短網域含不自然字母排列');
             if (hasDigitMix) reasons.push('英數混合隨機碼');
-            if (lacksVowels) reasons.push('缺少母音');
+            if (lacksVowels && !isShortAcronymLike) reasons.push('缺少母音');
             if (entropyValue > 3.0) reasons.push('主網域隨機度偏高');
 
             return { matched: looksMachineGenerated, reasons, entropy: entropyValue };
@@ -1206,8 +1243,9 @@ const { useState, useEffect, useRef } = React;
                 return /(access denied|request blocked|forbidden|verify you are human|checking your browser|cf-chl|cloudflare|akamai|incapsula|imperva|datadome|bot detection|anti[- ]?bot)/i.test(haystack);
             };
             const getCrawlerCandidates = () => {
-                const candidates = [sanitizedUrl, fullUrl, rawUrl].filter(Boolean);
-                return [...new Set(candidates)];
+                return buildCrawlerCandidateUrls([sanitizedUrl, fullUrl, rawUrl], {
+                    preferHttpFallback: options.inputHadExplicitScheme === false
+                });
             };
             const isUsableCrawlerResult = (result) => result?.status === 'ok';
             const rememberBestCrawlerResult = (best, result) => {
@@ -2770,6 +2808,21 @@ const { useState, useEffect, useRef } = React;
                 redirectCheckDetails = `後端偵測異常: ${traceData.riskReason}`;
             }
 
+            const hasConfirmedSiteContentThreat = hasOfficialAlert ||
+                isApkSite ||
+                isDownloadPhishingSignal ||
+                hasPageBrandMismatch ||
+                hasShoppingScamSignal ||
+                hasShoppingLineContactRisk ||
+                hasRegulatedTobaccoSalesSignal;
+            const siteContentStatus = isSocialMedia
+                ? 'warning'
+                : (hasConfirmedSiteContentThreat
+                    ? 'danger'
+                    : (isWhitelisted || siteStatusData.status === 'ok'
+                        ? 'safe'
+                        : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
+
             return {
                 domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain },
                 details: {
@@ -2793,7 +2846,7 @@ const { useState, useEffect, useRef } = React;
                             '未命中目前內建的官方警示資料',
                         link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
                     },
-                    siteContent: { status: isSocialMedia ? 'warning' : ((hasOfficialAlert || isApkSite || isDownloadPhishingSignal) ? 'danger' : (isWhitelisted || siteStatusData.status === 'ok' ? 'safe' : (hasCrawlerBlockedTrustedContext ? 'info' : 'danger'))), label: '網站內容狀態', details: siteContentMsg },
+                    siteContent: { status: siteContentStatus, label: '網站內容狀態', details: siteContentMsg },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -3071,6 +3124,8 @@ const { useState, useEffect, useRef } = React;
             if (!scanData || !scanData.checks) return [];
 
             const checks = scanData.checks;
+            const siteStatus = scanData.details?.siteStatus?.status || '';
+            const isUnavailableSiteContentOnly = ['blank', 'error', 'unknown', 'blocked'].includes(siteStatus);
             const reasons = [];
             const addReason = (condition, reason) => {
                 if (condition && !reasons.includes(reason)) reasons.push(reason);
@@ -3096,7 +3151,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.securityHeaders?.status === 'danger', '缺少全部現代 HTTP 安全標頭');
             addReason(checks.mxRecords?.status === 'danger', '網域未設定 MX 郵件紀錄');
             addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
-            addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
+            addReason(checks.siteContent?.status === 'danger' && reasons.length === 0 && !isUnavailableSiteContentOnly, checks.siteContent?.details || '網站內容具高風險特徵');
 
             return reasons.slice(0, 3);
         };
@@ -3394,11 +3449,15 @@ const { useState, useEffect, useRef } = React;
 
                 const urlObj = parsedInput.url;
                 const sanitizedForRisk = sanitizeUrlForRiskScoring(urlObj.href);
+                const scanOptions = {
+                    ...sanitizedForRisk,
+                    inputHadExplicitScheme: parsedInput.hasExplicitScheme
+                };
                 const riskScoringUrl = sanitizedForRisk.href;
                 const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
 
                 const [scanData, brandDataRes] = await Promise.all([
-                    runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
+                    runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, scanOptions),
                     skipAiBrandAnalysis
                         ? Promise.resolve(null)
                         : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(riskScoringUrl)}`, null), 7000, null)
@@ -3998,6 +4057,10 @@ const { useState, useEffect, useRef } = React;
                 }
                 const urlObj = parsedInput.url;
                 const sanitizedForRisk = sanitizeUrlForRiskScoring(parsedInput.href);
+                const scanOptions = {
+                    ...sanitizedForRisk,
+                    inputHadExplicitScheme: parsedInput.hasExplicitScheme
+                };
                 const riskScoringUrl = sanitizedForRisk.href;
                 const urlToParse = riskScoringUrl;
 
@@ -4040,7 +4103,7 @@ const { useState, useEffect, useRef } = React;
 
                     // 平行處理
                     const [scanData, brandDataRes] = await Promise.all([
-                        runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, sanitizedForRisk),
+                        runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, scanOptions),
                         // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
                         (isSocialInput || skipAiBrandAnalysis)
                             ? Promise.resolve(null) 

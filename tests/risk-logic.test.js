@@ -54,7 +54,8 @@ function parseUserUrl(value) {
     const sanitized = sanitizeUrlInput(value);
     if (!sanitized) return { ok: false, reason: 'empty' };
 
-    const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized)
+    const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized);
+    const normalizedUrl = hasExplicitScheme
         ? sanitized
         : `https://${sanitized}`;
 
@@ -75,7 +76,7 @@ function parseUserUrl(value) {
     }
 
     try { urlObj.hostname = hostname; } catch (e) { }
-    return { ok: true, url: urlObj, hostname, href: urlObj.href };
+    return { ok: true, url: urlObj, hostname, href: urlObj.href, hasExplicitScheme, rawInput: sanitized };
 }
 
 async function withTimeoutForTest(promise, ms, fallbackValue) {
@@ -229,6 +230,33 @@ function sanitizeUrlForRiskScoring(rawUrl) {
     };
 }
 
+function toHttpFallbackUrl(value) {
+    try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'https:') return '';
+        parsed.protocol = 'http:';
+        return parsed.href;
+    } catch (e) {
+        return '';
+    }
+}
+
+function buildCrawlerCandidateUrls(urls, { preferHttpFallback = false } = {}) {
+    const candidates = [];
+    const add = value => {
+        if (value && !candidates.includes(value)) candidates.push(value);
+    };
+
+    urls.filter(Boolean).forEach(value => {
+        const httpFallback = toHttpFallbackUrl(value);
+        if (preferHttpFallback && httpFallback) add(httpFallback);
+        add(value);
+        if (!preferHttpFallback && httpFallback) add(httpFallback);
+    });
+
+    return candidates;
+}
+
 test('網址解析支援多層子網域與新版 TLD', () => {
     const parsed = parseUserUrl('https://hnjz.sqkszxt.online/');
 
@@ -260,6 +288,18 @@ test('網址解析會補上 protocol 並清理貼上時常見標點', () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.hostname, 'hnjz.sqkszxt.online');
     assert.equal(parsed.href, 'https://hnjz.sqkszxt.online/path');
+    assert.equal(parsed.hasExplicitScheme, false);
+});
+
+test('未輸入 scheme 的網址應優先嘗試 HTTP fallback 避免 HTTPS-only timeout 誤判', () => {
+    const parsed = parseUserUrl('www.crntt.tw');
+    const candidates = buildCrawlerCandidateUrls([parsed.href], {
+        preferHttpFallback: parsed.hasExplicitScheme === false
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.href, 'https://www.crntt.tw/');
+    assert.deepEqual(candidates.slice(0, 2), ['http://www.crntt.tw/', 'https://www.crntt.tw/']);
 });
 
 test('網址解析仍拒絕不合法 hostname', () => {
@@ -599,6 +639,8 @@ function getHighRiskSummaryReasons(scanData) {
     if (!scanData || !scanData.checks) return [];
 
     const checks = scanData.checks;
+    const siteStatus = scanData.details?.siteStatus?.status || '';
+    const isUnavailableSiteContentOnly = ['blank', 'error', 'unknown', 'blocked'].includes(siteStatus);
     const reasons = [];
     const addReason = (condition, reason) => {
         if (condition && !reasons.includes(reason)) reasons.push(reason);
@@ -621,7 +663,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.securityHeaders?.status === 'danger', '缺少全部現代 HTTP 安全標頭');
     addReason(checks.mxRecords?.status === 'danger', '網域未設定 MX 郵件紀錄');
     addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
-    addReason(checks.siteContent?.status === 'danger' && reasons.length === 0, checks.siteContent?.details || '網站內容具高風險特徵');
+    addReason(checks.siteContent?.status === 'danger' && reasons.length === 0 && !isUnavailableSiteContentOnly, checks.siteContent?.details || '網站內容具高風險特徵');
 
     return reasons.slice(0, 3);
 }
@@ -1099,6 +1141,14 @@ function analyzeDisposableRootLabel(rootLabel) {
     const consonantTrigrams = compact.match(/[bcdfghjklmnpqrstvwxyz]{3,}/g) || [];
     const rareBigrams = compact.match(/(?:qg|gq|kq|qk|xq|qx|zq|qz|vj|jv|yj|jy|kg|gk|mgq|rgm)/g) || [];
     const lowVowelRatio = ((compact.match(/[aeiou]/g) || []).length / compact.length) < 0.25;
+    const isShortAcronymLike = isShortRoot &&
+        compact.length <= 6 &&
+        lacksVowels &&
+        /^[a-z]+$/.test(compact) &&
+        !/[qxzjv]/.test(compact) &&
+        !qWithoutU &&
+        rareBigrams.length === 0 &&
+        entropyValue <= 2.5;
     const hasAwkwardShortFlow = isShortRoot &&
         (
             (rareBigrams.length > 0 && (consonantTrigrams.length > 0 || entropyValue > 2.1)) ||
@@ -1106,7 +1156,7 @@ function analyzeDisposableRootLabel(rootLabel) {
             /^[bcdfghjklmnpqrstvwxyz]{3,}[aeiou]{2}/i.test(compact)
         );
     const looksMachineGenerated =
-        lacksVowels ||
+        (lacksVowels && !isShortAcronymLike) ||
         hasDigitMix ||
         hasAwkwardShortFlow ||
         (qWithoutU && (consonantTrigrams.length > 0 || entropyValue > 3.0)) ||
@@ -1118,7 +1168,7 @@ function analyzeDisposableRootLabel(rootLabel) {
     if (rareBigrams.length > 0) reasons.push(`含少見字母組合 ${[...new Set(rareBigrams)].slice(0, 2).join('、')}`);
     if (consonantTrigrams.length >= 2 || hasAwkwardShortFlow) reasons.push('短網域含不自然字母排列');
     if (hasDigitMix) reasons.push('英數混合隨機碼');
-    if (lacksVowels) reasons.push('缺少母音');
+    if (lacksVowels && !isShortAcronymLike) reasons.push('缺少母音');
     if (entropyValue > 3.0) reasons.push('主網域隨機度偏高');
 
     return { matched: looksMachineGenerated, reasons, entropy: entropyValue };
@@ -2695,6 +2745,22 @@ test('危險細節應拉高 summary 分數下限', () => {
     assert.deepEqual(scanData.summaryReasons, ['郵件追蹤跳板或隱藏轉址']);
 });
 
+test('單純網站內容不可讀不應被 summary 一致性拉成高度風險', () => {
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: 25,
+        details: {
+            siteStatus: { status: 'unknown' }
+        },
+        checks: {
+            siteContent: { status: 'danger', details: '無法檢測網站內容' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(scanData.riskScore, 25);
+    assert.deepEqual(scanData.summaryReasons, []);
+});
+
 test('台電 typo 與 base64 參數會被視為公共事業釣魚強風險', () => {
     const url = 'https://taipwoer.com.tw/menghuan.html?c=aHR0cHM6Ly90YWlwd29lci5jb20udHc=#/';
     const nestedUrls = extractNestedUrls(url);
@@ -2956,6 +3022,7 @@ test('免洗 root 亂碼偵測會命中 kforgmamgeq 並避開常見可讀品牌�
     const normalBrand = analyzeDisposableRootLabel('everypixel');
     const knownSafe = analyzeDisposableRootLabel('infodemic');
     const shortReadable = analyzeDisposableRootLabel('yahoo');
+    const shortAcronym = analyzeDisposableRootLabel('crntt');
 
     assert.equal(suspicious.matched, true);
     assert.ok(suspicious.reasons.some(reason => reason.includes('q') || reason.includes('少見字母組合')));
@@ -2964,6 +3031,7 @@ test('免洗 root 亂碼偵測會命中 kforgmamgeq 並避開常見可讀品牌�
     assert.equal(normalBrand.matched, false);
     assert.equal(knownSafe.matched, false);
     assert.equal(shortReadable.matched, false);
+    assert.equal(shortAcronym.matched, false);
 });
 
 test('短亂碼 root 搭配可疑子網域應升高風險，避免 std.ouyjs.com 落入低風險', () => {

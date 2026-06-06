@@ -53,6 +53,31 @@ function sanitizeUrlForCrawler(target) {
   };
 }
 
+function toHttpFallbackUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:') return '';
+    parsed.protocol = 'http:';
+    return parsed.href;
+  } catch (err) {
+    return '';
+  }
+}
+
+function buildCrawlerCandidateUrls(urls) {
+  const candidates = [];
+  const add = value => {
+    if (value && !candidates.includes(value)) candidates.push(value);
+  };
+
+  urls.filter(Boolean).forEach(value => {
+    add(value);
+    add(toHttpFallbackUrl(value));
+  });
+
+  return candidates;
+}
+
 function looksCrawlerBlocked(text, statusCode = 0) {
   const haystack = String(text || '').toLowerCase();
   if ([403, 429].includes(Number(statusCode))) return true;
@@ -137,7 +162,7 @@ export async function onRequest(context) {
 
   const sanitized = sanitizeUrlForCrawler(target);
   const rawUrl = normalizeTargetUrl(url.searchParams.get('rawUrl'))?.href || target.href;
-  const candidates = [...new Set([sanitized.href, target.href, rawUrl])];
+  const candidates = buildCrawlerCandidateUrls([sanitized.href, target.href, rawUrl]);
   const attempts = [];
   let best = null;
 
