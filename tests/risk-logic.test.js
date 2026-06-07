@@ -159,6 +159,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: 'uni-lions.com.tw',
             allowedBrandTokens: ['統一超商', '7-11', '711', '7eleven', '統一7eleven獅', '統一獅', 'unilions', 'lioncrew', '萊恩酷']
+        },
+        {
+            domain: 'sunsetgoods.tw',
+            allowedBrandTokens: ['日落小物', 'sunsetgoods', '蠟筆小新', '小新', 'crayonshinchan', 'shinchan']
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -2005,7 +2009,8 @@ test('大型電商根網域子網域應直接視為可信 allowlist 並維持低
         'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=123&utm_term=test',
         'https://ec-w.shopping.friday.tw/googleAI/product/deep/path?utm_source=google&gclid=abc',
         'https://giftcard.uni-prosperity.com.tw/giftcard/LIbqV9Tt0m',
-        'https://lioncrew.uni-lions.com.tw/products/ulc080800002603?utm_source=fb'
+        'https://lioncrew.uni-lions.com.tw/products/ulc080800002603?utm_source=fb',
+        'https://www.sunsetgoods.tw/SalePage/Index/11682153?utm_medium=ads&utm_source=facebook&utm_campaign=0420_%E5%B0%8F%E6%96%B0%E5%8D%8A%E6%A9%9F%E6%A2%B0%E7%A9%8D%E6%9C%A8&fbclid=IwdGRjcASR13pleHRuA2FlbQIxMQBzcnRjBmFwcF9pZAo2NjI4NTY4Mzc5AAEet5ADCFi3U68SO2IQKkom8d3kZJfjwFoKOs-sk6DbyUyK1EWgHMhLyJOd6VA_aem_QqY-u0aI0sNz0rX2btxnEA'
     ];
 
     trustedEcUrls.forEach(rawUrl => {
@@ -2085,6 +2090,50 @@ test('統一獅 LION CREW 官方商城子網域應視為可信且不被統一超
     assert.match(brandApiSource, /"LION CREW": \["uni-lions\.com\.tw"\]/);
     assert.equal(override.hasTrustedAllowlistOverride, true);
     assert.equal(override.riskScore, 0);
+});
+
+test('日落小物 91APP 商品頁應移除社群追蹤參數並視為可信電商', () => {
+    const rawUrl = 'https://www.sunsetgoods.tw/SalePage/Index/11682153?utm_medium=ads&utm_source=facebook&utm_campaign=0420_%E5%B0%8F%E6%96%B0%E5%8D%8A%E6%A9%9F%E6%A2%B0%E7%A9%8D%E6%9C%A8&fbclid=IwdGRjcASR13pleHRuA2FlbQIxMQBzcnRjBmFwcF9pZAo2NjI4NTY4Mzc5AAEet5ADCFi3U68SO2IQKkom8d3kZJfjwFoKOs-sk6DbyUyK1EWgHMhLyJOd6VA_aem_QqY-u0aI0sNz0rX2btxnEA';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const parts = getDomainParts(parsed.hostname);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const ecommerce = analyzeEcommerceTrustSignals({
+        url: sanitized.href,
+        html: `
+            <title>《蠟筆小新》半機械動感小新積木 - 日落小物 sunsetgoods</title>
+            <link rel="canonical" href="https://www.sunsetgoods.tw/SalePage/Index/11682153">
+            <script src="https://official-static.91app.com/v2/SalePage/controller.js"></script>
+            <a href="/ShoppingCart">購物車</a>
+            <button>加入購物車</button>
+            <p>付款方式 配送方式 退換貨政策 服務條款 商品分類</p>
+        `
+    });
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.equal(sanitized.href, 'https://www.sunsetgoods.tw/SalePage/Index/11682153');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_campaign', 'utm_medium', 'utm_source'].sort());
+    assert.deepEqual(sanitized.removedVolatileParams, []);
+    assert.equal(parts.registrableDomain, 'sunsetgoods.tw');
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('sunsetgoods.tw'));
+    assert.ok(matchesDomainList(parsed.hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, '蠟筆小新'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, 'Crayon Shinchan'), true);
+    assert.equal(ecommerce.matched, true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
+    assert.match(brandApiSource, /function sanitizeUrlForBrandAnalysis/);
+    assert.match(brandApiSource, /function isMarketplaceProductBrandContext/);
+    assert.match(brandApiSource, /"日落小物": \["sunsetgoods\.tw"\]/);
 });
 
 test('風險評分前應移除標準行銷追蹤參數並保留必要商品與交易參數', () => {

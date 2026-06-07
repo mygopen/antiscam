@@ -14,6 +14,95 @@ function isSameRootDomain(hostname, rootDomain) {
     return !!host && !!root && (host === root || host.endsWith("." + root));
 }
 
+const TRACKING_URL_PARAM_RULES = [
+    "utm_*", "fbclid", "gclid", "gbraid", "wbraid", "msclkid",
+    "dclid", "yclid", "twclid", "ttclid", "li_fat_id", "mc_cid",
+    "mc_eid", "igshid", "gad_source", "gclsrc", "_ga", "_gl",
+    "fb_action_ids", "fb_action_types", "fb_source", "irclickid",
+    "srsltid", "sc_campaign", "sc_channel", "sc_content",
+    "sc_country", "sc_geo", "sc_medium", "sc_outcome",
+    "sc_publisher", "sc_subchannel"
+];
+
+const VOLATILE_URL_PARAM_RULES = [
+    "_eat", "eat", "_t", "_ts", "ts", "timestamp", "time",
+    "expires", "expire", "valid", "nonce", "cachebust",
+    "cachebuster", "cb", "rnd", "rand"
+];
+
+function isTrackingUrlParamName(name) {
+    const lowerName = String(name || "").toLowerCase();
+    return TRACKING_URL_PARAM_RULES.some(rule => {
+        const lowerRule = String(rule || "").toLowerCase();
+        if (lowerRule.endsWith("*")) return lowerName.startsWith(lowerRule.slice(0, -1));
+        return lowerName === lowerRule;
+    });
+}
+
+function isVolatileUrlParam(name, value = "") {
+    const lowerName = String(name || "").toLowerCase();
+    const rawValue = String(value || "");
+    if (VOLATILE_URL_PARAM_RULES.some(rule => lowerName === String(rule || "").toLowerCase())) return true;
+    if (/^(?:valid|verify|auth|session)[_-]?\d{8,14}[_-][a-f0-9]{12,}$/i.test(rawValue)) return true;
+    if (/^(?:valid|expire|expires|ts|time|timestamp|nonce|rnd|rand|cb)$/i.test(lowerName) && /^[a-z0-9_-]{8,80}$/i.test(rawValue)) return true;
+    if (/(?:time|timestamp|expire|expires|valid|nonce)/i.test(lowerName) && /^\d{10,14}$/.test(rawValue)) return true;
+    if (lowerName.startsWith("_") && /^[a-z0-9_-]{16,120}$/i.test(rawValue) && (/\d/.test(rawValue) || /[a-f0-9]{16,}/i.test(rawValue))) return true;
+    return false;
+}
+
+function sanitizeUrlForBrandAnalysis(rawUrl) {
+    const parsed = new URL(rawUrl);
+    const removedTrackingParams = [];
+    const removedVolatileParams = [];
+
+    [...new Set([...parsed.searchParams.keys()])].forEach(name => {
+        const values = parsed.searchParams.getAll(name);
+        if (values.some(value => isVolatileUrlParam(name, value))) {
+            removedVolatileParams.push(name);
+            parsed.searchParams.delete(name);
+        } else if (isTrackingUrlParamName(name)) {
+            removedTrackingParams.push(name);
+            parsed.searchParams.delete(name);
+        }
+    });
+
+    parsed.hash = "";
+    return {
+        href: parsed.href,
+        rawUrl,
+        removedTrackingParams: [...new Set(removedTrackingParams)],
+        removedVolatileParams: [...new Set(removedVolatileParams)]
+    };
+}
+
+function isMarketplaceProductBrandContext(markdownText = "", targetUrl = "") {
+    const text = String(markdownText || "").toLowerCase();
+    let pathname = "";
+    try {
+        pathname = new URL(targetUrl).pathname.toLowerCase();
+    } catch (e) {}
+
+    const hasProductPath = /\/(?:salepage|products?|goods|items?|collections?)\b/i.test(pathname) ||
+        /\/salepage\/index\/\d+/i.test(pathname);
+    const commerceSignals = [
+        "購物車", "加入購物車", "商品分類", "商品規格", "規格",
+        "售價", "特價", "nt$", "結帳", "下單", "訂單",
+        "配送", "付款", "退換貨", "官方 app", "官方app"
+    ].filter(keyword => text.includes(keyword.toLowerCase()));
+    const managedCommerceSignals = [
+        "91app", "official-static.91app", "shopline", "cyberbiz",
+        "waca", "qdm", "myshopify"
+    ].filter(keyword => text.includes(keyword.toLowerCase()));
+    const sensitiveCollectionSignals = [
+        "信用卡卡號", "card number", "cvv", "cvc", "otp", "簡訊碼",
+        "金融卡", "網銀密碼", "password", "帳戶異常", "account suspended"
+    ].filter(keyword => text.includes(keyword.toLowerCase()));
+
+    return (hasProductPath || managedCommerceSignals.length > 0 || commerceSignals.length >= 4) &&
+        commerceSignals.length >= 2 &&
+        sensitiveCollectionSignals.length === 0;
+}
+
 function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
     const trustedCampaignHosts = [
         {
@@ -27,6 +116,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: "uni-lions.com.tw",
             allowedBrandTokens: ["統一超商", "7-11", "711", "7eleven", "統一7eleven獅", "統一獅", "unilions", "lioncrew", "萊恩酷"]
+        },
+        {
+            domain: "sunsetgoods.tw",
+            allowedBrandTokens: ["日落小物", "sunsetgoods", "蠟筆小新", "小新", "crayonshinchan", "shinchan"]
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -78,6 +171,9 @@ const localBrandMap = {
         "LION CREW": ["uni-lions.com.tw"],
         "萊恩酷": ["uni-lions.com.tw"],
         "萊恩酷商城": ["uni-lions.com.tw"],
+        "日落小物": ["sunsetgoods.tw"],
+        "Sunset Goods": ["sunsetgoods.tw"],
+        "sunsetgoods": ["sunsetgoods.tw"],
         "Apple": ["apple.com", "icloud.com"], "APPLE": ["apple.com", "icloud.com"],
         "蘋果": ["apple.com", "icloud.com"], "Apple ID": ["apple.com", "icloud.com"],
         "iCloud": ["icloud.com", "apple.com"], "App Store": ["apple.com"],
@@ -132,11 +228,19 @@ const localBrandMap = {
 export async function onRequest(context) {
     const { request, env } = context;
     const urlParams = new URL(request.url).searchParams;
-    const targetUrl = urlParams.get("url");
+    const rawTargetUrl = urlParams.get("url");
 
-    if (!targetUrl) return new Response(JSON.stringify({ error: "Missing url parameter" }), { status: 400 });
+    if (!rawTargetUrl) return new Response(JSON.stringify({ error: "Missing url parameter" }), { status: 400 });
 
     try {
+        const sanitizedTarget = sanitizeUrlForBrandAnalysis(rawTargetUrl);
+        const targetUrl = sanitizedTarget.href;
+        const analysisMetadata = {
+            analyzedUrl: targetUrl,
+            rawUrl: rawTargetUrl,
+            removedTrackingParams: sanitizedTarget.removedTrackingParams,
+            removedVolatileParams: sanitizedTarget.removedVolatileParams
+        };
         const parsedUrl = new URL(targetUrl);
         let inputDomain = parsedUrl.hostname.toLowerCase();
         if (inputDomain.startsWith("www.")) inputDomain = inputDomain.slice(4);
@@ -162,12 +266,12 @@ export async function onRequest(context) {
             clearTimeout(timeoutId);
         } catch (fetchError) {
             clearTimeout(timeoutId);
-            return new Response(JSON.stringify({ isFakeBrand: false, message: "網站渲染超時或阻擋" }));
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "網站渲染超時或阻擋", ...analysisMetadata }));
         }
         
         const renderData = await renderRes.json();
         if (!renderData.success) {
-            return new Response(JSON.stringify({ isFakeBrand: false, message: "網頁渲染失敗" }));
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "網頁渲染失敗", ...analysisMetadata }));
         }
         
         // 只取前 2000 個字元，節省 AI Token
@@ -175,7 +279,7 @@ export async function onRequest(context) {
 
         // 🚨 新增防呆機制：如果網頁內容太少（例如空白或被阻擋），直接跳過 AI 辨識，避免幻覺
         if (markdownText.length < 30) {
-            return new Response(JSON.stringify({ isFakeBrand: false, message: "網頁內容過少，無法判斷品牌" }));
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "網頁內容過少，無法判斷品牌", ...analysisMetadata }));
         }
 
         // 2. AI Agent 1：萃取品牌名稱 (利用 Workers AI)
@@ -192,7 +296,7 @@ export async function onRequest(context) {
         ${markdownText}`;
 
         if (!env.GEMINI_API_KEY) {
-            return new Response(JSON.stringify({ isFakeBrand: false, message: "未設定 API Key" }));
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "未設定 API Key", ...analysisMetadata }));
         }
 
         // 👇 將純文字的品牌偵測，交給 Gemma 3 4B
@@ -207,14 +311,14 @@ export async function onRequest(context) {
         });
 
         if (!aiRes.ok) {
-            return new Response(JSON.stringify({ isFakeBrand: false, message: "AI 品牌分析 API 連線失敗" }));
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "AI 品牌分析 API 連線失敗", ...analysisMetadata }));
         }
 
         const aiData = await aiRes.json();
         const detectedBrand = aiData.candidates[0].content.parts[0].text.trim().replace(/[*#_`~]/g, '');
 
         if (!detectedBrand || detectedBrand === "Unknown" || detectedBrand.toLowerCase().includes("unknown")) {
-            return new Response(JSON.stringify({ isFakeBrand: false, message: "未偵測到明顯品牌偽裝" }));
+            return new Response(JSON.stringify({ isFakeBrand: false, message: "未偵測到明顯品牌偽裝", ...analysisMetadata }));
         }
 
         // 👇 如果 AI 發現是一般購物詐騙，就不會回傳 isFakeBrand: true
@@ -223,7 +327,8 @@ export async function onRequest(context) {
                 detectedBrand: "Generic_Scam",
                 isFakeBrand: false,
                 isGenericScam: true,
-                warningMessage: "嚴重警告：此網站內容包含強烈的通用型詐騙特徵！"
+                warningMessage: "嚴重警告：此網站內容包含強烈的通用型詐騙特徵！",
+                ...analysisMetadata
             }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
         }
 
@@ -235,7 +340,8 @@ export async function onRequest(context) {
                 inputDomain: inputDomain,
                 isFakeBrand: false,
                 coBrandCampaign: true,
-                message: "可信活動/媒體網域上的品牌合作活動，不視為品牌仿冒"
+                message: "可信活動/媒體網域上的品牌合作活動，不視為品牌仿冒",
+                ...analysisMetadata
             }), {
                 headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
             });
@@ -246,19 +352,35 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({ 
                 isFakeBrand: false, 
                 detectedBrand: detectedBrand,
-                message: "無法查證該品牌的官方網域" 
+                message: "無法查證該品牌的官方網域",
+                ...analysisMetadata
             }));
         }
 
         // 🚨 判定邏輯更新：只要輸入的網域符合陣列中的「任何一個」合法網域（或是其子網域），就是安全的！
         const isMatch = officialDomains.some(domain => inputDomain === domain || inputDomain.endsWith("." + domain));
 
+        if (!isMatch && isMarketplaceProductBrandContext(markdownText, targetUrl)) {
+            return new Response(JSON.stringify({
+                detectedBrand: detectedBrand,
+                officialDomain: officialDomains[0],
+                inputDomain: inputDomain,
+                isFakeBrand: false,
+                productBrandContext: true,
+                message: "一般電商商品頁出現商品品牌，不視為品牌仿冒",
+                ...analysisMetadata
+            }), {
+                headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+            });
+        }
+
         return new Response(JSON.stringify({
             detectedBrand: detectedBrand,
             officialDomain: officialDomains[0], // 畫面上顯示主要的第一個網域即可
             inputDomain: inputDomain,
             isFakeBrand: !isMatch,
-            warningMessage: !isMatch ? `嚴重警告：此網站企圖偽裝成「${detectedBrand}」，但其真實網域並非官方網站（如 ${officialDomains[0]}）！` : "品牌與網域相符。"
+            warningMessage: !isMatch ? `嚴重警告：此網站企圖偽裝成「${detectedBrand}」，但其真實網域並非官方網站（如 ${officialDomains[0]}）！` : "品牌與網域相符。",
+            ...analysisMetadata
         }), {
             headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
