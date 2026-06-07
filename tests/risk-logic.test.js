@@ -155,6 +155,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: 'uni-prosperity.com.tw',
             allowedBrandTokens: ['carrefour', '家樂福', '家福', '康達盛通', 'uni-prosperity', 'uniprosperity', 'uniprosperitylifestyle']
+        },
+        {
+            domain: 'uni-lions.com.tw',
+            allowedBrandTokens: ['統一超商', '7-11', '711', '7eleven', '統一7eleven獅', '統一獅', 'unilions', 'lioncrew', '萊恩酷']
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -2000,7 +2004,8 @@ test('大型電商根網域子網域應直接視為可信 allowlist 並維持低
         'https://pxbox.es.pxmart.com.tw/product/path/deep?fbclid=abc&utm_campaign=promo',
         'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=123&utm_term=test',
         'https://ec-w.shopping.friday.tw/googleAI/product/deep/path?utm_source=google&gclid=abc',
-        'https://giftcard.uni-prosperity.com.tw/giftcard/LIbqV9Tt0m'
+        'https://giftcard.uni-prosperity.com.tw/giftcard/LIbqV9Tt0m',
+        'https://lioncrew.uni-lions.com.tw/products/ulc080800002603?utm_source=fb'
     ];
 
     trustedEcUrls.forEach(rawUrl => {
@@ -2045,6 +2050,39 @@ test('家樂福 Uni-Prosperity 官方禮物卡子網域應視為可信且跳過 
     assert.equal(pageBrandSignals.matched, false);
     assert.equal(fakeCarrefour.matched, true);
     assert.equal(fakeCarrefour.brandName, '家樂福');
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
+});
+
+test('統一獅 LION CREW 官方商城子網域應視為可信且不被統一超商品牌誤判', () => {
+    const hostname = 'lioncrew.uni-lions.com.tw';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname,
+        text: '<title>統一 7-ELEVEN 獅隊官方 LION CREW 萊恩酷商城</title><p>營業人名稱：統一棒球隊股份有限公司。統一編號：23534457。</p>'
+    });
+    const fakeLionsStore = checkBrandSimilarity('uni-lions-shop.example.com', []);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('uni-lions.com.tw'));
+    assert.ok(matchesDomainList(hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname, []), true);
+    assert.equal(isTrustedCoBrandCampaignHost(hostname, '統一超商'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(hostname, '7-ELEVEN'), true);
+    assert.equal(checkBrandSimilarity(hostname, []).matched, false);
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(fakeLionsStore.matched, true);
+    assert.equal(fakeLionsStore.brandName, '統一7-ELEVEN獅');
+    assert.match(brandApiSource, /"統一獅": \["uni-lions\.com\.tw"\]/);
+    assert.match(brandApiSource, /"LION CREW": \["uni-lions\.com\.tw"\]/);
     assert.equal(override.hasTrustedAllowlistOverride, true);
     assert.equal(override.riskScore, 0);
 });

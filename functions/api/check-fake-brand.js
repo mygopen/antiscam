@@ -23,6 +23,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: "uni-prosperity.com.tw",
             allowedBrandTokens: ["carrefour", "家樂福", "家福", "康達盛通", "uni-prosperity", "uniprosperity", "uniprosperitylifestyle"]
+        },
+        {
+            domain: "uni-lions.com.tw",
+            allowedBrandTokens: ["統一超商", "7-11", "711", "7eleven", "統一7eleven獅", "統一獅", "unilions", "lioncrew", "萊恩酷"]
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -63,6 +67,17 @@ const localBrandMap = {
         "Carrefour Taiwan": ["carrefour.com.tw", "uni-prosperity.com.tw"],
         "Uni-Prosperity": ["uni-prosperity.com.tw", "carrefour.com.tw"],
         "Uni-Prosperity Lifestyle Corp.": ["uni-prosperity.com.tw", "carrefour.com.tw"],
+        "統一獅": ["uni-lions.com.tw"],
+        "統一 7-ELEVEN 獅": ["uni-lions.com.tw"],
+        "統一7-ELEVEN獅": ["uni-lions.com.tw"],
+        "統一7ELEVEN獅": ["uni-lions.com.tw"],
+        "統一棒球隊": ["uni-lions.com.tw"],
+        "統一棒球隊股份有限公司": ["uni-lions.com.tw"],
+        "Uni-Lions": ["uni-lions.com.tw"],
+        "Unilions": ["uni-lions.com.tw"],
+        "LION CREW": ["uni-lions.com.tw"],
+        "萊恩酷": ["uni-lions.com.tw"],
+        "萊恩酷商城": ["uni-lions.com.tw"],
         "Apple": ["apple.com", "icloud.com"], "APPLE": ["apple.com", "icloud.com"],
         "蘋果": ["apple.com", "icloud.com"], "Apple ID": ["apple.com", "icloud.com"],
         "iCloud": ["icloud.com", "apple.com"], "App Store": ["apple.com"],
