@@ -23,7 +23,7 @@ window.RISK_CONFIG = {
     trustedEcommerceRootDomains: [
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
         'momoshop.com.tw', 'friday.tw', 'uni-prosperity.com.tw',
-        'uni-lions.com.tw', 'sunsetgoods.tw'
+        'uni-lions.com.tw', 'sunsetgoods.tw', 'theaxiomstore.com'
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
@@ -195,6 +195,7 @@ window.RISK_CONFIG = {
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
         { name: '統一7-ELEVEN獅', keywords: ['unilions', 'uni-lions', 'lioncrew', '統一獅', '萊恩酷'], domains: ['uni-lions.com.tw'] },
         { name: '日落小物', keywords: ['sunsetgoods', '日落小物'], domains: ['sunsetgoods.tw'] },
+        { name: '安德國際商貿', keywords: ['theaxiomstore', 'axiomstore', 'axiomretailpartners', '安德國際商貿', '安德家品'], domains: ['theaxiomstore.com'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
         { name: '家樂福', keywords: ['carrefour', 'uni-prosperity', 'uniprosperity'], domains: ['carrefour.com.tw', 'uni-prosperity.com.tw'] },

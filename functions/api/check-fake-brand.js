@@ -120,6 +120,15 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
         {
             domain: "sunsetgoods.tw",
             allowedBrandTokens: ["日落小物", "sunsetgoods", "蠟筆小新", "小新", "crayonshinchan", "shinchan"]
+        },
+        {
+            domain: "theaxiomstore.com",
+            allowedBrandTokens: [
+                "theaxiomstore", "axiomstore", "axiomretailpartners",
+                "安德國際商貿", "安德國際", "安德家品",
+                "jmgo", "堅果", "foodcycler", "廚餘大師",
+                "uwant", "mova", "ilife", "designnest", "foldstand"
+            ]
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -174,6 +183,16 @@ const localBrandMap = {
         "日落小物": ["sunsetgoods.tw"],
         "Sunset Goods": ["sunsetgoods.tw"],
         "sunsetgoods": ["sunsetgoods.tw"],
+        "The AXIOM": ["theaxiomstore.com"],
+        "The AXIOM 安德家品": ["theaxiomstore.com"],
+        "安德家品": ["theaxiomstore.com"],
+        "安德國際": ["theaxiomstore.com"],
+        "安德國際商貿": ["theaxiomstore.com"],
+        "安德國際商貿股份有限公司": ["theaxiomstore.com"],
+        "AXIOM RETAIL PARTNERS": ["theaxiomstore.com"],
+        "AXIOM RETAIL PARTNERS CO., LTD.": ["theaxiomstore.com"],
+        "theaxiomstore": ["theaxiomstore.com"],
+        "axiomstore": ["theaxiomstore.com"],
         "Apple": ["apple.com", "icloud.com"], "APPLE": ["apple.com", "icloud.com"],
         "蘋果": ["apple.com", "icloud.com"], "Apple ID": ["apple.com", "icloud.com"],
         "iCloud": ["icloud.com", "apple.com"], "App Store": ["apple.com"],
