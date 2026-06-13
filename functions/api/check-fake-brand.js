@@ -129,6 +129,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
                 "jmgo", "堅果", "foodcycler", "廚餘大師",
                 "uwant", "mova", "ilife", "designnest", "foldstand"
             ]
+        },
+        {
+            domain: "sunpay.com.tw",
+            allowedBrandTokens: [
+                "sunpay", "紅陽科技", "紅陽支付", "紅陽",
+                "電子發票", "電子發票整合服務", "財政部電子發票",
+                "einvoice", "einv", "統一發票"
+            ]
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -193,6 +201,11 @@ const localBrandMap = {
         "AXIOM RETAIL PARTNERS CO., LTD.": ["theaxiomstore.com"],
         "theaxiomstore": ["theaxiomstore.com"],
         "axiomstore": ["theaxiomstore.com"],
+        "紅陽科技": ["sunpay.com.tw"],
+        "紅陽科技股份有限公司": ["sunpay.com.tw"],
+        "紅陽支付": ["sunpay.com.tw"],
+        "SunPay": ["sunpay.com.tw"],
+        "sunpay": ["sunpay.com.tw"],
         "Apple": ["apple.com", "icloud.com"], "APPLE": ["apple.com", "icloud.com"],
         "蘋果": ["apple.com", "icloud.com"], "Apple ID": ["apple.com", "icloud.com"],
         "iCloud": ["icloud.com", "apple.com"], "App Store": ["apple.com"],

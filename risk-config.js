@@ -27,13 +27,13 @@ window.RISK_CONFIG = {
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
-        'mababy.com'
+        'mababy.com', 'sunpay.com.tw'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',
         'authorize.net', 'ecpay.com.tw', 'newebpay.com', 'spgateway.com',
-        'opay.tw', 'payuni.com.tw'
+        'opay.tw', 'payuni.com.tw', 'sunpay.com.tw'
     ],
     urlShorteners: [
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
@@ -200,6 +200,7 @@ window.RISK_CONFIG = {
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
         { name: '家樂福', keywords: ['carrefour', 'uni-prosperity', 'uniprosperity'], domains: ['carrefour.com.tw', 'uni-prosperity.com.tw'] },
         { name: '財政部電子發票', keywords: ['einvoice', 'invoicenat', 'einvoicenat'], domains: ['einvoice.nat.gov.tw', 'invoice.etax.nat.gov.tw', 'etax.nat.gov.tw', 'mof.gov.tw'] },
+        { name: '紅陽科技', keywords: ['sunpay', '紅陽科技', '紅陽支付'], domains: ['sunpay.com.tw'] },
         { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },
         { name: '遠通電收', keywords: ['fetc'], domains: ['fetc.net.tw'] },
         { name: 'DHL', keywords: ['dhl'], domains: ['dhl.com', 'dhl.com.tw'] },

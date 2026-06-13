@@ -303,6 +303,11 @@ const { useState, useEffect, useRef } = React;
                 riskyDomains.some(domain => isSameRootDomain(lowerHostname, domain));
         };
 
+        const isCloudflarePagesDevHostname = (hostname) => {
+            const cleanHostname = normalizeHostname(hostname);
+            return cleanHostname !== 'pages.dev' && isSameRootDomain(cleanHostname, 'pages.dev');
+        };
+
         const isEmailTrackingRedirector = (hostname) => {
             const trackers = getRiskList('emailTrackingRedirectors');
             return trackers.some(domain => isSameRootDomain(hostname, domain));
@@ -1788,7 +1793,8 @@ const { useState, useEffect, useRef } = React;
                 ? `Mobile 最終網址: ${traceData.mobileFinalUrl || '無法判定'}；Desktop 最終網址: ${traceData.desktopFinalUrl || '無法判定'}`
                 : 'Mobile 與 Desktop 檢測路徑未發現明顯差異';
             const freeHostingProviders = getRiskList('freeHostingProviders');
-            const isFreeHosting = freeHostingProviders.some(p => domain.endsWith(p));
+            const isFreeHosting = freeHostingProviders.some(p => isSameRootDomain(domain, p));
+            const isCloudflarePagesDev = isCloudflarePagesDevHostname(domain);
             const trancoRank = trancoData?.rank || null;
             const trancoStatus = trancoData?.status || 'unavailable';
             const trancoQueriedDomain = trancoData?.queriedDomain || domain;
@@ -1828,6 +1834,8 @@ const { useState, useEffect, useRef } = React;
                 trafficStatus = 'warning';
                 if (domain.endsWith('zeabur.app')) {
                     trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
+                } else if (isCloudflarePagesDev) {
+                    trafficDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，任何人都可建立專案頁；需視為使用者自建臨時站，而非 Cloudflare 官方內容。';
                 } else {
                     trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
                 }
@@ -1961,6 +1969,15 @@ const { useState, useEffect, useRef } = React;
                     return false;
                 }
             })();
+            const hasCloudflarePagesDevBaselineRisk = !isWhitelisted && isCloudflarePagesDev;
+            const hasCloudflarePagesDevRandomSubdomain = isHighEntropy ||
+                suspiciousSubdomain.reasons.some(reason =>
+                    reason.includes('短隨機') ||
+                    reason.includes('不易讀') ||
+                    reason.includes('純數字')
+                );
+            const hasCloudflarePagesDevRandomRisk = hasCloudflarePagesDevBaselineRisk &&
+                (hasCloudflarePagesDevRandomSubdomain || hasRandomizedPathToken || hasSuspiciousParams || hasNestedSuspiciousParams);
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
             const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
             const isTrustedPaymentGatewayOrApiEndpoint = hasTrustedAllowlistOverride &&
@@ -2266,6 +2283,7 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingScamSignal ||
                 hasSuspiciousTldAdLandingRisk ||
                 hasFreeHostingSensitiveLinkRisk ||
+                hasCloudflarePagesDevRandomRisk ||
                 hasRegulatedTobaccoSalesSignal ||
                 hasShoppingLineContactRisk;
 
@@ -2285,6 +2303,7 @@ const { useState, useEffect, useRef } = React;
                 hasDeepSubdomainPhishingPattern ||
                 hasUaCloakingRisk ||
                 hasSuspiciousTldAdLandingRisk ||
+                hasCloudflarePagesDevRandomRisk ||
                 hasDisposableShoppingLandingRisk ||
                 hasDisposableRootPhishingRisk ||
                 hasDisposableUnreadablePageRisk ||
@@ -2508,6 +2527,11 @@ const { useState, useEffect, useRef } = React;
                             riskScore += 30;
                         }
                     }
+                    if (hasCloudflarePagesDevRandomRisk) {
+                        riskScore = Math.max(riskScore, 75);
+                    } else if (hasCloudflarePagesDevBaselineRisk) {
+                        riskScore = Math.max(riskScore, 30);
+                    }
                 } // 👈 關閉 if (!isWhitelisted)
 
                 if (hasTrustedAllowlistOverride) {
@@ -2572,6 +2596,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousTldAdLandingRisk ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
+                hasCloudflarePagesDevRandomRisk ||
                 hasDisposableShoppingLandingRisk ||
                 hasDisposableUnreadablePageRisk ||
                 hasShoppingLandingUrlRisk ||
@@ -2583,7 +2608,7 @@ const { useState, useEffect, useRef } = React;
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
                 riskScore = 60;
             }
-            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
+            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && !hasCloudflarePagesDevBaselineRisk && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
                 riskScore = Math.min(riskScore, 25);
             }
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && hasCrawlerBlockedTrustedContext && riskScore > 25) {
@@ -2614,6 +2639,7 @@ const { useState, useEffect, useRef } = React;
                     hasSuspiciousTldAdLandingRisk ||
                     hasSuspiciousEmailTrackingHost ||
                     hasDeepSubdomainPhishingPattern ||
+                    hasCloudflarePagesDevRandomRisk ||
                     hasDisposableShoppingLandingRisk ||
                     hasDisposableUnreadablePageRisk ||
                     hasShoppingLandingUrlRisk ||
@@ -2761,6 +2787,9 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisDetails = hasEmbeddedTrustedTldLabel ?
                     '🚨 偵測到深層可疑子網域，且把 com.tw/gov.tw 等可信後綴嵌在子網域中，常見於假冒台灣網站。' :
                     '🚨 偵測到深層可疑子網域，並伴隨連字號、隨機片段或可疑參數等釣魚特徵。';
+            } else if (hasCloudflarePagesDevRandomRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到 Cloudflare Pages 免費部署子網域「${domain}」使用短亂碼/不可讀命名（${suspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}），常見於臨時釣魚或免洗詐騙頁。`;
             } else if (isSuspiciousTLD) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '網域使用較常被濫用的後綴，需搭配其他風險指標判斷';
@@ -2775,6 +2804,8 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'warning';
                 if (domain.endsWith('zeabur.app')) {
                     domainAnalysisDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
+                } else if (isCloudflarePagesDev) {
+                    domainAnalysisDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
                 } else {
                     domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
                 }
@@ -3016,8 +3047,39 @@ const { useState, useEffect, useRef } = React;
             const isFallbackSuspiciousAdLanding = !isVerifiedSafeRootDomain(targetDomain) &&
                 (suspiciousTlds.some(suffix => String(targetDomain || '').toLowerCase().endsWith(suffix)) || String(targetDomain || '').toLowerCase().endsWith('.info')) &&
                 removedTrackingParams.length > 0;
+            const fallbackDomain = normalizeHostname(targetDomain);
+            const isFallbackCloudflarePagesDev = isCloudflarePagesDevHostname(fallbackDomain);
+            const fallbackSubdomainPart = fallbackDomain.split('.')[0] || '';
+            const fallbackSuspiciousSubdomain = analyzeSuspiciousSubdomain(fallbackDomain);
+            const fallbackHighEntropySubdomain = fallbackSubdomainPart !== 'www' &&
+                (
+                    calculateEntropy(fallbackSubdomainPart) > 3.6 ||
+                    /^[a-z0-9]{12,30}$/i.test(fallbackSubdomainPart) ||
+                    (fallbackSubdomainPart.length >= 5 && !/[aeiou]/i.test(fallbackSubdomainPart)) ||
+                    /[bcdfghjklmnpqrstvwxz]{4,}/i.test(fallbackSubdomainPart)
+                );
+            const fallbackCloudflarePagesRandomSubdomain = fallbackHighEntropySubdomain ||
+                fallbackSuspiciousSubdomain.reasons.some(reason =>
+                    reason.includes('短隨機') ||
+                    reason.includes('不易讀') ||
+                    reason.includes('純數字')
+                );
+            const isFallbackCloudflarePagesRandomRisk = isFallbackCloudflarePagesDev &&
+                fallbackCloudflarePagesRandomSubdomain;
             const fallbackDetails = '檢測流程暫時中斷，系統已避免頁面當掉；請稍後重試，或先不要在此網址輸入個資。';
             const fallbackAdLandingDetails = `檢測流程逾時或中斷，但原始網址含 ${removedTrackingParams.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且網域使用可疑後綴；先以高風險處理。`;
+            const fallbackCloudflarePagesDetails = isFallbackCloudflarePagesRandomRisk
+                ? `🚨 檢測流程逾時或中斷，但 ${fallbackDomain} 是 Cloudflare Pages 免費部署子網域，且子網域呈現短亂碼/不可讀命名（${fallbackSuspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}）；先以高風險處理。`
+                : '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
+            const fallbackRiskScore = isFallbackSuspiciousAdLanding
+                ? 85
+                : (isFallbackCloudflarePagesRandomRisk ? 85 : (isFallbackCloudflarePagesDev ? 30 : 30));
+            const fallbackDomainStatus = isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk
+                ? 'danger'
+                : (isFallbackCloudflarePagesDev ? 'warning' : 'warning');
+            const fallbackDomainDetails = isFallbackSuspiciousAdLanding
+                ? fallbackAdLandingDetails
+                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : fallbackDetails);
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
@@ -3027,7 +3089,7 @@ const { useState, useEffect, useRef } = React;
                 removedVolatileParams,
                 removedParams,
                 traceChain: [],
-                riskScore: isFallbackSuspiciousAdLanding ? 85 : 30,
+                riskScore: fallbackRiskScore,
                 risk_flag: true,
                 riskFlags: { scanRuntimeError: true, errorMessage: err?.message || '' },
                 blocklistListed: false,
@@ -3045,8 +3107,8 @@ const { useState, useEffect, useRef } = React;
                 checks: {
                     googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
-                    siteContent: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'unknown', '網站內容狀態', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails),
-                    domainAnalysis: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'warning', '網域特徵分析', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails),
+                    siteContent: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails),
+                    domainAnalysis: createScanCheck(fallbackDomainStatus, '網域特徵分析', fallbackDomainDetails),
                     traffic: createScanCheck('unknown', 'Tranco 流量排名', '檢測流程未完整完成，無法取得流量排名'),
                     serverLocation: createScanCheck('unknown', '伺服器所在國家', '無法自動判定伺服器所在國家'),
                     validation: createScanCheck('unknown', '次要可信驗證', '檢測流程未完整完成，尚未取得可信佐證'),
@@ -3063,7 +3125,7 @@ const { useState, useEffect, useRef } = React;
                     registrar: createScanCheck('unknown', '註冊商信譽', '無法辨識註冊商'),
                     whoisPrivacy: createScanCheck('unknown', 'WHOIS 身份隱藏', '無法自動判定 WHOIS 身份隱藏狀態'),
                     subdomain: createScanCheck('safe', '子網域深度', '子網域層級正常'),
-                    subdomainPattern: createScanCheck('safe', '可疑子網域模式', '未偵測到異常子網域命名模式'),
+                    subdomainPattern: createScanCheck(fallbackSuspiciousSubdomain.matched ? 'warning' : 'safe', '可疑子網域模式', fallbackSuspiciousSubdomain.matched ? `偵測到可疑子網域「${fallbackSuspiciousSubdomain.label}」：${fallbackSuspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式'),
                     disposableDomain: createScanCheck('safe', '免洗亂碼網域', '未偵測到主網域亂碼免洗特徵'),
                     userAgentCloaking: createScanCheck('unknown', '裝置導向差異', '未完成 Mobile 與 Desktop User-Agent 比對'),
                     redirect: createScanCheck('unknown', '轉址/短網址', '檢測流程未完整完成，無法確認轉址狀態'),
@@ -3082,7 +3144,7 @@ const { useState, useEffect, useRef } = React;
                     urgency: createScanCheck('safe', '限時/恐嚇話術', '未偵測到常見限時或恐嚇話術'),
                     homograph: createScanCheck('safe', '相似字元網域', '未偵測到 Punycode 或 Unicode 混淆網域'),
                     params: createScanCheck('safe', '網址參數檢查', '未發現敏感追蹤或認證參數'),
-                    entropy: createScanCheck('safe', '亂碼/隨機網址', '網域名稱結構正常'),
+                    entropy: createScanCheck(isFallbackCloudflarePagesRandomRisk ? 'danger' : (fallbackHighEntropySubdomain ? 'warning' : 'safe'), '亂碼/隨機網址', fallbackHighEntropySubdomain ? '子網域名稱具短亂碼或機器生成特徵' : '網域名稱結構正常'),
                     iframe: createScanCheck('safe', 'Iframe 偽裝', '未偵測到異常框架'),
                     apkCheck: createScanCheck('safe', '可疑檔案下載', '未偵測到可疑 Android 應用程式')
                 }

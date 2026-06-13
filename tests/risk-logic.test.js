@@ -23,6 +23,11 @@ function matchesDomainList(domain, list) {
     });
 }
 
+function isCloudflarePagesDevHostname(hostname) {
+    const cleanHostname = normalizeInputHostname(hostname).replace(/^www\./, '');
+    return cleanHostname !== 'pages.dev' && matchesDomainList(cleanHostname, ['pages.dev']);
+}
+
 function sanitizeUrlInput(value) {
     return String(value || '')
         .normalize('NFKC')
@@ -171,6 +176,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
                 '安德國際商貿', '安德國際', '安德家品',
                 'jmgo', '堅果', 'foodcycler', '廚餘大師',
                 'uwant', 'mova', 'ilife', 'designnest', 'foldstand'
+            ]
+        },
+        {
+            domain: 'sunpay.com.tw',
+            allowedBrandTokens: [
+                'sunpay', '紅陽科技', '紅陽支付', '紅陽',
+                '電子發票', '電子發票整合服務', '財政部電子發票',
+                'einvoice', 'einv', '統一發票'
             ]
         }
     ];
@@ -538,9 +551,17 @@ function applyTrustedCommercialWeakSignalCap({
     hasStrongRiskSignal = false,
     isWhitelisted = false,
     isSocialMedia = false,
-    hasTrustedCommercialWeakSignalContext = false
+    hasTrustedCommercialWeakSignalContext = false,
+    hasCloudflarePagesDevBaselineRisk = false
 }) {
-    if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
+    if (
+        !hasStrongRiskSignal &&
+        !isWhitelisted &&
+        !isSocialMedia &&
+        !hasCloudflarePagesDevBaselineRisk &&
+        riskScore >= 30 &&
+        hasTrustedCommercialWeakSignalContext
+    ) {
         return Math.min(riskScore, 25);
     }
     return riskScore;
@@ -1274,6 +1295,19 @@ function analyzeSuspiciousSubdomain(hostname) {
     };
 }
 
+function hasCloudflarePagesDevRandomRisk(hostname) {
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain(hostname);
+    const hasRandomSubdomain = hasHighEntropySubdomain(hostname) ||
+        suspiciousSubdomain.reasons.some(reason =>
+            reason.includes('短隨機') ||
+            reason.includes('不易讀') ||
+            reason.includes('純數字')
+        );
+
+    return isCloudflarePagesDevHostname(hostname) &&
+        hasRandomSubdomain;
+}
+
 function hasDeepSubdomainPhishingPattern({
     hostname,
     isWhitelisted = false,
@@ -1899,6 +1933,50 @@ test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單'
     assert.equal(hasPageBrandMismatch, false);
     assert.equal(override.hasTrustedAllowlistOverride, true);
     assert.equal(override.riskScore, 0);
+});
+
+test('紅陽科技電子發票查詢子網域應視為可信支付與發票服務', () => {
+    const rawUrl = 'https://einv.sunpay.com.tw/search?invoiceDate=kiBAKD%2BpWYkUqbrO1pxzyg%3D%3D&invoiceNumber=RV8Xi3AsAXqInA3oOB6aRA%3D%3D&randomNumber=M2by%2BbmD6oJFbn8auN%2BsOA%3D%3D';
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname;
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname,
+        text: '<title>紅陽科技 | 電子發票整合服務</title><meta name="description" content="紅陽科技－電子發票系統平台提供最佳電子發票解決方案，協助企業輕鬆開立電子發票、管理發票數據。">'
+    });
+    const paramsStatus = getParamsCheckStatus({
+        hasSuspiciousParams: hasSensitiveUrlParam(rawUrl),
+        isWhitelisted: isVerifiedSafeRootDomain(hostname, [])
+    });
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('sunpay.com.tw'));
+    assert.ok(riskConfig.globalPaymentGatewayDomains.includes('sunpay.com.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isGlobalPaymentGatewayDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname, []), true);
+    assert.equal(hasSensitiveUrlParam(rawUrl), false);
+    assert.equal(parsed.searchParams.get('invoiceDate'), 'kiBAKD+pWYkUqbrO1pxzyg==');
+    assert.equal(parsed.searchParams.get('invoiceNumber'), 'RV8Xi3AsAXqInA3oOB6aRA==');
+    assert.equal(parsed.searchParams.get('randomNumber'), 'M2by+bmD6oJFbn8auN+sOA==');
+    assert.equal(paramsStatus, 'safe');
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(isTrustedCoBrandCampaignHost(hostname, '財政部電子發票'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(hostname, '電子發票整合服務'), true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.match(brandApiSource, /"紅陽科技股份有限公司": \["sunpay\.com\.tw"\]/);
+    assert.match(brandApiSource, /domain: "sunpay\.com\.tw"/);
 });
 
 test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網址白名單', () => {
@@ -3280,4 +3358,49 @@ test('zeabur.app 應被標記為中度風險且有專屬訊息', () => {
     assert.equal(isFreeHosting, true);
     assert.equal(trafficStatus, 'warning');
     assert.equal(trafficDetails.includes('Zeabur 雲端部署平台'), true);
+});
+
+test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應升為高風險', () => {
+    const readableDomain = 'brand-demo.pages.dev';
+    const suspiciousDomain = 'rm5cnx4l.pages.dev';
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain(suspiciousDomain);
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    const baselineScore = applyTrustedCommercialWeakSignalCap({
+        riskScore: 30,
+        hasTrustedCommercialWeakSignalContext: true,
+        hasCloudflarePagesDevBaselineRisk: isCloudflarePagesDevHostname(readableDomain)
+    });
+    const randomPagesRisk = hasCloudflarePagesDevRandomRisk(suspiciousDomain);
+    const randomScanData = enforceFinalRiskConsistency({
+        riskScore: randomPagesRisk ? 75 : 0,
+        checks: {
+            domainAnalysis: {
+                status: randomPagesRisk ? 'danger' : 'safe',
+                details: `Cloudflare Pages 免費部署子網域「${suspiciousDomain}」使用短亂碼/不可讀命名`
+            },
+            subdomainPattern: {
+                status: suspiciousSubdomain.matched ? 'warning' : 'safe',
+                details: suspiciousSubdomain.reasons.join('、')
+            },
+            entropy: {
+                status: hasHighEntropySubdomain(suspiciousDomain) ? 'danger' : 'safe',
+                details: '子網域名稱具短亂碼或機器生成特徵'
+            }
+        }
+    });
+
+    assert.equal(matchesDomainList(readableDomain, riskConfig.freeHostingProviders), true);
+    assert.equal(isCloudflarePagesDevHostname('pages.dev'), false);
+    assert.equal(isCloudflarePagesDevHostname(readableDomain), true);
+    assert.equal(matchesDomainList('notpages.dev', ['pages.dev']), false);
+    assert.equal(baselineScore, 30);
+    assert.equal(hasCloudflarePagesDevRandomRisk(readableDomain), false);
+    assert.equal(hasHighEntropySubdomain(suspiciousDomain), true);
+    assert.equal(suspiciousSubdomain.matched, true);
+    assert.equal(randomPagesRisk, true);
+    assert.equal(randomScanData.riskScore >= 70, true);
+    assert.ok(randomScanData.summaryReasons[0].includes('Cloudflare Pages'));
+    assert.match(appSource, /hasCloudflarePagesDevRandomRisk/);
+    assert.match(appSource, /isFallbackCloudflarePagesRandomRisk/);
 });
