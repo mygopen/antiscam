@@ -1499,13 +1499,22 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     const hasOrderForm = formCount > 0 && formFieldCount >= 2;
     const merchantInfoKeywords = ['統一編號', '公司名稱', '有限公司', '股份有限公司', '客服電話', '退換貨', '退貨政策', '隱私權政策', '服務條款', '聯絡地址'];
     const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
-    const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageCount >= 6 || hasOrderForm);
-    const hasCodSalesPitch = ['貨到付款', '免運', '限時', '限量', '立即搶購', '馬上訂購'].some(keyword => haystack.includes(keyword.toLowerCase()));
+    const imageHeavy = imageCount >= 6 && linkCount <= 3;
+    const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageHeavy || hasOrderForm);
+    const highPressureSalesKeywords = ['貨到付款', '免運', '限量', '立即搶購', '馬上訂購'];
+    const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時/i.test(haystack);
+    const hasCodSalesPitch = highPressureSalesKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) || hasLimitedPurchasePitch;
     const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
     const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const hasLineContactSignal = lineContactMatches.length > 0;
     const hasLineOrderContext = /(下單|訂單|訂購|購買|立即搶購|馬上訂購|貨到付款|限時|限量|截圖傳給客服|客服確認訂單)/i.test(haystack);
-    const imageHeavy = imageCount >= 6 && linkCount <= 3;
+    const courseKeywords = ['線上課程', '課程說明會', '課程簡介', '課程內容', '課程長度', '講師', '學員', '試閱', '所有課程', '報名'];
+    const courseKeywordMatches = courseKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const isTaiwanCourseProviderPage = new URL(url).hostname.toLowerCase().endsWith('.tw');
+    const hasCourseProviderTrust = isTaiwanCourseProviderPage &&
+        courseKeywordMatches.length >= 3 &&
+        hasMerchantInfo &&
+        linkCount >= 5;
 
     const reasons = [];
     if (hasOnePageStructure) reasons.push('一頁式購物頁結構');
@@ -1515,17 +1524,27 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     if (imageHeavy) reasons.push('商品圖片比例高且正常站內連結偏少');
     if (hasTrackingLandingParam) reasons.push('含廣告落地頁追蹤參數');
     if (hasLineContactSignal && hasLineOrderContext && (hasOnePageStructure || hasOrderForm || hasCodSalesPitch || hasTrackingLandingParam)) reasons.push('要求加入 LINE 聯絡或下單');
+    const courseSuppressedReasons = new Set([
+        '一頁式購物頁結構',
+        '頁面直接要求收件或訂購資料',
+        '貨到付款/限時優惠等銷售話術',
+        '含廣告落地頁追蹤參數'
+    ]);
+    const effectiveReasons = hasCourseProviderTrust
+        ? reasons.filter(reason => !courseSuppressedReasons.has(reason))
+        : reasons;
 
     return {
-        matched: reasons.length >= 2,
-        reasonCount: reasons.length,
-        reasons,
+        matched: effectiveReasons.length >= 2,
+        reasonCount: effectiveReasons.length,
+        reasons: effectiveReasons,
         keywordCount: matchedKeywords.length,
         formFieldCount,
         imageCount,
         linkCount,
         hasOrderForm,
         hasMerchantInfo,
+        hasCourseProviderTrust,
         hasLineContactSignal,
         hasLineOrderContext,
         lineContactExamples: lineContactMatches.slice(0, 3)
@@ -1587,22 +1606,31 @@ function analyzeEcommerceTrustSignals({ html = '', url }) {
         '退換貨政策', '退貨政策', '隱私權政策', '服務條款',
         '付款方式', '配送方式', '購物須知', '會員條款'
     ];
+    const courseCommerceFootprints = [
+        '線上課程', '課程說明會', '課程簡介', '課程內容', '課程長度',
+        '講師', '學員', '試閱', '所有課程', '報名'
+    ];
     const matchedPlatforms = platformFootprints.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const matchedCart = cartFootprints.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const matchedContact = contactKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const matchedPolicy = policyKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const matchedCourseCommerce = courseCommerceFootprints.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const hasMailOrTelLink = /(?:mailto:|tel:)/i.test(haystack);
     const hasTaiwanAddress = /(台北市|臺北市|新北市|桃園市|台中市|臺中市|台南市|臺南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣|澎湖縣|金門縣|連江縣).{0,24}(路|街|巷|弄|號)/.test(haystack);
+    const hasCourseCommerceFootprint = matchedCourseCommerce.length >= 3 ||
+        (/\/courses?\//i.test(url) && matchedCourseCommerce.length >= 2);
     const categories = [];
     if (matchedPlatforms.length > 0) categories.push('platform');
     if (matchedCart.length > 0) categories.push('cart');
     if (matchedContact.length >= 2 || hasMailOrTelLink || hasTaiwanAddress) categories.push('contact');
     if (matchedPolicy.length >= 2) categories.push('policy');
+    if (hasCourseCommerceFootprint) categories.push('course');
     const score = Math.min(100,
         (matchedPlatforms.length > 0 ? 30 : 0) +
         (matchedCart.length > 0 ? 25 : 0) +
         ((matchedContact.length >= 2 || hasMailOrTelLink || hasTaiwanAddress) ? 25 : 0) +
-        (matchedPolicy.length >= 2 ? 20 : 0)
+        (matchedPolicy.length >= 2 ? 20 : 0) +
+        (hasCourseCommerceFootprint ? 30 : 0)
     );
 
     return {
@@ -2776,6 +2804,57 @@ test('正規電商佐證會避免購物頁特徵直接升為高風險', () => {
     assert.ok(ecommerceSignals.categories.includes('platform'));
     assert.ok(ecommerceSignals.categories.includes('cart'));
     assert.equal(hasShoppingScamSignal, false);
+});
+
+test('有風造識與 Good Whale 正規課程頁不應因投資課程與 UTM 誤判為高風險', () => {
+    const url = 'https://goodwhale.withwind.tw/courses/is?utm_source=web&utm_medium=post&utm_campaign=sale';
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>個人財務逆向工程 線上課程說明會 - 〖有風造識〗</title>
+                <meta name="description" content="有風造識與 Good Whale 執行長黃士豪合作推出個人財務逆向工程課程說明會">
+            </head>
+            <body>
+                <main>
+                    <h1>個人財務逆向工程 線上課程說明會</h1>
+                    <p>有風造識與新加坡 Good Whale 執行長黃士豪合作推出，課程簡介、課程內容、講師介紹、學員評論與試閱完整揭露。</p>
+                    <p>共有 51,671 位學員參與此課程。課程長度約 2 小時，立即購買 NT$0，限時開放免費報名。</p>
+                    <p>報名需填寫姓名、Email、手機，說明會連結會寄至信箱。</p>
+                    <p>本課程由〖有風造識〗推出，智慧財產權歸屬「邁凱實業股份有限公司」所有。</p>
+                    <p>邁凱實業股份有限公司｜台北市松山區八德路 2 段 451 巷 1 號 3 樓｜客服信箱：goodwhale@withwind.tw</p>
+                    <p>隱私權政策、付款方式與退費政策完整揭露。</p>
+                    <img src="1.jpg"><img src="2.jpg"><img src="3.jpg"><img src="4.jpg"><img src="5.jpg"><img src="6.jpg">
+                    <a href="/courses">所有課程</a><a href="/courses/is/intro">課程簡介</a><a href="/courses/is/content">課程內容</a>
+                    <a href="/teachers/will">講師</a><a href="/privacy">隱私權政策</a><a href="/terms">服務條款</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url });
+    const urlOnlyLandingRisk = hasSuspiciousShoppingLandingUrlRisk(url, {
+        isLowTraffic: true,
+        isTrustedTLD: false
+    });
+    const effectiveLandingRisk = !ecommerceSignals.matched && urlOnlyLandingRisk;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: effectiveLandingRisk || shoppingSignals.matched ? 75 : 25,
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            shoppingLanding: { status: effectiveLandingRisk ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: 'safe', details: '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(shoppingSignals.hasCourseProviderTrust, true);
+    assert.equal(shoppingSignals.matched, false);
+    assert.equal(ecommerceSignals.matched, true);
+    assert.ok(ecommerceSignals.categories.includes('course'));
+    assert.ok(ecommerceSignals.categories.includes('contact'));
+    assert.equal(urlOnlyLandingRisk, true);
+    assert.equal(effectiveLandingRisk, false);
+    assert.equal(scanData.riskScore < 30, true);
+    assert.deepEqual(scanData.summaryReasons, []);
 });
 
 test('成熟 SEO、robots 與 sitemap 可作為可信佐證', () => {

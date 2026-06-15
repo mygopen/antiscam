@@ -951,13 +951,20 @@ const { useState, useEffect, useRef } = React;
                 '退換貨政策', '退貨政策', '隱私權政策', '服務條款',
                 '付款方式', '配送方式', '購物須知', '會員條款'
             ];
+            const courseCommerceFootprints = [
+                '線上課程', '課程說明會', '課程簡介', '課程內容', '課程長度',
+                '講師', '學員', '試閱', '所有課程', '報名'
+            ];
 
             const matchedPlatforms = platformFootprints.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const matchedCart = cartFootprints.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const matchedContact = contactKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const matchedPolicy = policyKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const matchedCourseCommerce = courseCommerceFootprints.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const hasMailOrTelLink = doc ? !!doc.querySelector('a[href^="mailto:"], a[href^="tel:"]') : /(?:mailto:|tel:)/i.test(haystack);
             const hasTaiwanAddress = /(台北市|臺北市|新北市|桃園市|台中市|臺中市|台南市|臺南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣|澎湖縣|金門縣|連江縣).{0,24}(路|街|巷|弄|號)/.test(haystack);
+            const hasCourseCommerceFootprint = matchedCourseCommerce.length >= 3 ||
+                (/\/courses?\//i.test(fullUrl) && matchedCourseCommerce.length >= 2);
             const hasSameDomainCheckout = doc ? Array.from(doc.querySelectorAll('a[href], form[action]')).some(el => {
                 const rawTarget = el.getAttribute('href') || el.getAttribute('action') || '';
                 if (!/(cart|checkout|order|payment|結帳|購物車)/i.test(rawTarget + ' ' + (el.textContent || ''))) return false;
@@ -987,12 +994,17 @@ const { useState, useEffect, useRef } = React;
                 categories.push('policy');
                 reasons.push('具備退換貨、隱私權或付款配送政策');
             }
+            if (hasCourseCommerceFootprint) {
+                categories.push('course');
+                reasons.push(`具備課程/知識商務頁足跡：${[...new Set(matchedCourseCommerce)].slice(0, 3).join('、')}`);
+            }
 
             const score = Math.min(100,
                 (matchedPlatforms.length > 0 ? 30 : 0) +
                 ((matchedCart.length > 0 || hasSameDomainCheckout) ? 25 : 0) +
                 ((matchedContact.length >= 2 || hasMailOrTelLink || hasTaiwanAddress) ? 25 : 0) +
-                (matchedPolicy.length >= 2 ? 20 : 0)
+                (matchedPolicy.length >= 2 ? 20 : 0) +
+                (hasCourseCommerceFootprint ? 30 : 0)
             );
             const uniqueCategories = [...new Set(categories)];
 
@@ -1038,13 +1050,28 @@ const { useState, useEffect, useRef } = React;
             const hasOrderForm = formCount > 0 && (formFieldCount >= 2 || keywordGroups.fields.some(keyword => haystack.includes(keyword.toLowerCase())));
             const merchantInfoKeywords = ['統一編號', '公司名稱', '有限公司', '股份有限公司', '客服電話', '退換貨', '退貨政策', '隱私權政策', '服務條款', '聯絡地址'];
             const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
-            const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageCount >= 6 || hasOrderForm);
-            const hasCodSalesPitch = keywordGroups.shopping.some(keyword => ['貨到付款', '免運', '限時', '限量', '立即搶購', '馬上訂購'].includes(keyword) && haystack.includes(keyword.toLowerCase()));
+            const imageHeavy = imageCount >= 6 && linkCount <= 3;
+            const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageHeavy || hasOrderForm);
+            const highPressureSalesKeywords = ['貨到付款', '免運', '限量', '立即搶購', '馬上訂購'];
+            const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時/i.test(haystack);
+            const hasCodSalesPitch = highPressureSalesKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) || hasLimitedPurchasePitch;
             const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
             const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const hasLineContactSignal = lineContactMatches.length > 0;
             const hasLineOrderContext = /(下單|訂單|訂購|購買|立即搶購|馬上訂購|貨到付款|限時|限量|截圖傳給客服|客服確認訂單)/i.test(haystack);
-            const imageHeavy = imageCount >= 6 && linkCount <= 3;
+            const courseKeywords = ['線上課程', '課程說明會', '課程簡介', '課程內容', '課程長度', '講師', '學員', '試閱', '所有課程', '報名'];
+            const courseKeywordMatches = courseKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const isTaiwanCourseProviderPage = (() => {
+                try {
+                    return new URL(fullUrl).hostname.toLowerCase().endsWith('.tw');
+                } catch (e) {
+                    return false;
+                }
+            })();
+            const hasCourseProviderTrust = isTaiwanCourseProviderPage &&
+                courseKeywordMatches.length >= 3 &&
+                hasMerchantInfo &&
+                linkCount >= 5;
 
             const reasons = [];
             if (hasOnePageStructure) reasons.push('一頁式購物頁結構');
@@ -1054,18 +1081,28 @@ const { useState, useEffect, useRef } = React;
             if (imageHeavy) reasons.push('商品圖片比例高且正常站內連結偏少');
             if (hasTrackingLandingParam) reasons.push('含廣告落地頁追蹤參數');
             if (hasLineContactSignal && hasLineOrderContext && (hasOnePageStructure || hasOrderForm || hasCodSalesPitch || hasTrackingLandingParam)) reasons.push('要求加入 LINE 聯絡或下單');
+            const courseSuppressedReasons = new Set([
+                '一頁式購物頁結構',
+                '頁面直接要求收件或訂購資料',
+                '貨到付款/限時優惠等銷售話術',
+                '含廣告落地頁追蹤參數'
+            ]);
+            const effectiveReasons = hasCourseProviderTrust
+                ? reasons.filter(reason => !courseSuppressedReasons.has(reason))
+                : reasons;
 
             return {
-                score: Math.min(100, reasons.length * 18 + Math.min(30, matchedKeywords.length * 3)),
-                matched: reasons.length >= 2,
-                reasonCount: reasons.length,
-                reasons,
+                score: Math.min(100, effectiveReasons.length * 18 + Math.min(30, matchedKeywords.length * 3)),
+                matched: effectiveReasons.length >= 2,
+                reasonCount: effectiveReasons.length,
+                reasons: effectiveReasons,
                 keywordCount: matchedKeywords.length,
                 formFieldCount,
                 imageCount,
                 linkCount,
                 hasOrderForm,
                 hasMerchantInfo,
+                hasCourseProviderTrust,
                 hasLineContactSignal,
                 hasLineOrderContext,
                 lineContactExamples: lineContactMatches.slice(0, 3)
