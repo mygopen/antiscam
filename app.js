@@ -277,6 +277,10 @@ const { useState, useEffect, useRef } = React;
             return getRiskList('globalPaymentGatewayDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const isConfirmedScamDomain = (hostname) => {
+            return getRiskList('confirmedScamDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
         const isVerifiedSafeRootDomain = (hostname, whitelist = []) => {
             return isOfficialTaiwanGovDomain(hostname) ||
                 isTrustedGlobalDomain(hostname) ||
@@ -1726,6 +1730,7 @@ const { useState, useEffect, useRef } = React;
 
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
             const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isConfiguredAllowlistDomain;
+            const isConfirmedScam = !isWhitelisted && isConfirmedScamDomain(domain);
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -2305,6 +2310,7 @@ const { useState, useEffect, useRef } = React;
                 trustValidationSignals.some(item => item.score >= 35);
 
             const hasConfirmedThreatSignal = blocklistListedForRisk ||
+                isConfirmedScam ||
                 hasOfficialAlert ||
                 isApkSite ||
                 isGoogleFlaggedForRisk ||
@@ -2367,6 +2373,8 @@ const { useState, useEffect, useRef } = React;
             let riskScore = 0;
 
             if (blocklistListedForRisk) {
+                riskScore = 100;
+            } else if (isConfirmedScam) {
                 riskScore = 100;
             } else if (hasOfficialAlertUrlMatch) {
                 riskScore = 100;
@@ -2604,6 +2612,7 @@ const { useState, useEffect, useRef } = React;
                 pageTrustSignals.matched;
 
             const hasStrongRiskSignal = blocklistListedForRisk ||
+                isConfirmedScam ||
                 hasOfficialAlert ||
                 isApkSite ||
                 isGoogleFlaggedForRisk ||
@@ -2654,6 +2663,7 @@ const { useState, useEffect, useRef } = React;
 
             if (!isWhitelisted && !isSocialMedia) {
                 const hasDangerDetail = hasBrandSimilarity ||
+                    isConfirmedScam ||
                     hasOfficialAlert ||
                     hasEmailTrackingPhishingPattern ||
                     hasFinancialPhishingSignal ||
@@ -2701,7 +2711,11 @@ const { useState, useEffect, useRef } = React;
             let domainAnalysisDetails = '網域命名結構無明顯異常';
 
             // 👇 新增 APK 專屬的紅色警告卡片
-            if (hasOfficialAlert) {
+            if (isConfirmedScam) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資。';
+                siteContentMsg = '危險：已確認為詐騙連結';
+            } else if (hasOfficialAlert) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 官方警示資料命中：${officialAlertMatch.source} 已公告「${officialAlertMatch.title}」，${officialAlertMatch.warning}`;
                 siteContentMsg = '危險：此網址已出現在官方警示資料';
@@ -2892,7 +2906,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain },
+                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -2913,6 +2927,11 @@ const { useState, useEffect, useRef } = React;
                             `${officialAlertMatch.source} 公告：${officialAlertMatch.category}「${officialAlertMatch.productName || officialAlertMatch.title}」。${officialAlertMatch.violationType}；${officialAlertMatch.warning}${officialAlertMatch.claimSummary ? ` ${officialAlertMatch.claimSummary}` : ''}` :
                             '未命中目前內建的官方警示資料',
                         link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
+                    },
+                    confirmedScam: {
+                        status: isConfirmedScam ? 'danger' : 'safe',
+                        label: '人工確認詐騙網域',
+                        details: isConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'
                     },
                     siteContent: { status: siteContentStatus, label: '網站內容狀態', details: siteContentMsg },
 
@@ -3085,6 +3104,7 @@ const { useState, useEffect, useRef } = React;
                 (suspiciousTlds.some(suffix => String(targetDomain || '').toLowerCase().endsWith(suffix)) || String(targetDomain || '').toLowerCase().endsWith('.info')) &&
                 removedTrackingParams.length > 0;
             const fallbackDomain = normalizeHostname(targetDomain);
+            const isFallbackConfirmedScam = isConfirmedScamDomain(fallbackDomain);
             const isFallbackCloudflarePagesDev = isCloudflarePagesDevHostname(fallbackDomain);
             const fallbackSubdomainPart = fallbackDomain.split('.')[0] || '';
             const fallbackSuspiciousSubdomain = analyzeSuspiciousSubdomain(fallbackDomain);
@@ -3104,19 +3124,24 @@ const { useState, useEffect, useRef } = React;
             const isFallbackCloudflarePagesRandomRisk = isFallbackCloudflarePagesDev &&
                 fallbackCloudflarePagesRandomSubdomain;
             const fallbackDetails = '檢測流程暫時中斷，系統已避免頁面當掉；請稍後重試，或先不要在此網址輸入個資。';
+            const fallbackConfirmedScamDetails = '此網域已由人工確認為詐騙連結；即使深度掃描暫時中斷，仍直接列為高度風險。';
             const fallbackAdLandingDetails = `檢測流程逾時或中斷，但原始網址含 ${removedTrackingParams.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且網域使用可疑後綴；先以高風險處理。`;
             const fallbackCloudflarePagesDetails = isFallbackCloudflarePagesRandomRisk
                 ? `🚨 檢測流程逾時或中斷，但 ${fallbackDomain} 是 Cloudflare Pages 免費部署子網域，且子網域呈現短亂碼/不可讀命名（${fallbackSuspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}）；先以高風險處理。`
                 : '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
-            const fallbackRiskScore = isFallbackSuspiciousAdLanding
+            const fallbackRiskScore = isFallbackConfirmedScam
+                ? 100
+                : (isFallbackSuspiciousAdLanding
                 ? 85
-                : (isFallbackCloudflarePagesRandomRisk ? 85 : (isFallbackCloudflarePagesDev ? 30 : 30));
-            const fallbackDomainStatus = isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk
+                : (isFallbackCloudflarePagesRandomRisk ? 85 : (isFallbackCloudflarePagesDev ? 30 : 30)));
+            const fallbackDomainStatus = isFallbackConfirmedScam || isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk
                 ? 'danger'
                 : (isFallbackCloudflarePagesDev ? 'warning' : 'warning');
-            const fallbackDomainDetails = isFallbackSuspiciousAdLanding
+            const fallbackDomainDetails = isFallbackConfirmedScam
+                ? fallbackConfirmedScamDetails
+                : (isFallbackSuspiciousAdLanding
                 ? fallbackAdLandingDetails
-                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : fallbackDetails);
+                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : fallbackDetails));
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
@@ -3128,7 +3153,7 @@ const { useState, useEffect, useRef } = React;
                 traceChain: [],
                 riskScore: fallbackRiskScore,
                 risk_flag: true,
-                riskFlags: { scanRuntimeError: true, errorMessage: err?.message || '' },
+                riskFlags: { scanRuntimeError: true, confirmedScamDomain: isFallbackConfirmedScam, errorMessage: err?.message || '' },
                 blocklistListed: false,
                 isSocialMedia: false,
                 isWhitelisted: false,
@@ -3144,8 +3169,9 @@ const { useState, useEffect, useRef } = React;
                 checks: {
                     googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
-                    siteContent: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails),
+                    siteContent: createScanCheck(isFallbackConfirmedScam || isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackConfirmedScam ? fallbackConfirmedScamDetails : (isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails)),
                     domainAnalysis: createScanCheck(fallbackDomainStatus, '網域特徵分析', fallbackDomainDetails),
+                    confirmedScam: createScanCheck(isFallbackConfirmedScam ? 'danger' : 'safe', '人工確認詐騙網域', isFallbackConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'),
                     traffic: createScanCheck('unknown', 'Tranco 流量排名', '檢測流程未完整完成，無法取得流量排名'),
                     serverLocation: createScanCheck('unknown', '伺服器所在國家', '無法自動判定伺服器所在國家'),
                     validation: createScanCheck('unknown', '次要可信驗證', '檢測流程未完整完成，尚未取得可信佐證'),
@@ -3231,6 +3257,7 @@ const { useState, useEffect, useRef } = React;
             };
 
             addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+            addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
             addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');

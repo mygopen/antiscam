@@ -689,6 +689,7 @@ function getHighRiskSummaryReasons(scanData) {
     };
 
     addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+    addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
     addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
     addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
     addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
@@ -3437,6 +3438,30 @@ test('zeabur.app 應被標記為中度風險且有專屬訊息', () => {
     assert.equal(isFreeHosting, true);
     assert.equal(trafficStatus, 'warning');
     assert.equal(trafficDetails.includes('Zeabur 雲端部署平台'), true);
+});
+
+test('人工確認詐騙的 web.app 子網域應直接升為高風險', () => {
+    const domain = 'jinguan.web.app';
+    const isFreeHosting = matchesDomainList(domain, riskConfig.freeHostingProviders);
+    const isConfirmedScam = matchesDomainList(domain, riskConfig.confirmedScamDomains);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : (isFreeHosting ? 30 : 0),
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為詐騙連結'
+            },
+            domainAnalysis: {
+                status: isConfirmedScam ? 'danger' : 'warning',
+                details: isConfirmedScam ? '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資' : '使用免費架站平台'
+            }
+        }
+    });
+
+    assert.equal(isFreeHosting, true);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(scanData.riskScore, 100);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資']);
 });
 
 test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應升為高風險', () => {

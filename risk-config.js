@@ -29,6 +29,9 @@ window.RISK_CONFIG = {
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
         'mababy.com', 'sunpay.com.tw'
     ],
+    confirmedScamDomains: [
+        'jinguan.web.app'
+    ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',
