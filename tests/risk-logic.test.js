@@ -2858,6 +2858,64 @@ test('有風造識與 Good Whale 正規課程頁不應因投資課程與 UTM 誤
     assert.deepEqual(scanData.summaryReasons, []);
 });
 
+test('xLab/xlearn 正規課程活動頁不應因 liveform 與 UTM 誤判為高風險', () => {
+    const rawUrl = 'https://xlearn.tw/liveform?p=aifirst&version=babycode&utm_medium=paid&utm_source=an&utm_id=120247218609650379_v2_s07&utm_content=120247218609640379&utm_term=120247218609650379&utm_campaign=120246955483620379';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>次世代商用實戰體驗課 - xLab</title>
+                <meta name="description" content="xLab by xlearn 提供 AI 工具應用、n8n 工作流、網頁前端與設計等線上技能課程">
+            </head>
+            <body>
+                <main>
+                    <h1>次世代商用實戰體驗課</h1>
+                    <p>xLab 帶你按下 A.I. 開機鍵，課程簡介、課程內容、講師介紹、學員案例與報名資訊完整揭露。</p>
+                    <p>平台由無限學股份有限公司營運，提供 AI 工具應用、n8n 工作流、網頁前端、設計與投資理財等線上技能課程與講座。</p>
+                    <p>報名需填寫姓名、Email、手機，講座連結會寄至信箱。</p>
+                    <p>客服信箱：support@xlearn.tw。隱私權政策、服務條款與退費政策完整揭露。</p>
+                    <a href="/">xLab 首頁</a><a href="/courses">所有課程</a><a href="/teachers">講師</a>
+                    <a href="/privacy">隱私權政策</a><a href="/terms">服務條款</a><a href="/contact">聯絡我們</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url: rawUrl });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: rawUrl });
+    const isTrustedServiceRoot = isTrustedTaiwanServiceDomain('xlearn.tw');
+    const isWhitelisted = isVerifiedSafeRootDomain('xlearn.tw');
+    const urlOnlyLandingRisk = hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
+        isLowTraffic: true,
+        isTrustedTLD: true
+    });
+    const effectiveLandingRisk = !isWhitelisted && !ecommerceSignals.matched && urlOnlyLandingRisk;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : (effectiveLandingRisk || shoppingSignals.matched ? 75 : 25),
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            shoppingLanding: { status: effectiveLandingRisk ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: isWhitelisted ? 'safe' : 'warning', details: isWhitelisted ? '受信賴台灣民營服務官方網域：xlearn.tw' : '網域命名結構無明顯異常' }
+        }
+    });
+
+    assert.equal(isTrustedServiceRoot, true);
+    assert.equal(isWhitelisted, true);
+    assert.equal(shouldSkipAiBrandAnalysis('xlearn.tw'), true);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_content', 'utm_id', 'utm_medium', 'utm_source', 'utm_term'].sort());
+    assert.equal(parsed.searchParams.has('utm_source'), false);
+    assert.equal(parsed.searchParams.get('p'), 'aifirst');
+    assert.equal(parsed.searchParams.get('version'), 'babycode');
+    assert.equal(shoppingSignals.hasCourseProviderTrust, true);
+    assert.equal(shoppingSignals.matched, false);
+    assert.equal(ecommerceSignals.matched, true);
+    assert.ok(ecommerceSignals.categories.includes('course'));
+    assert.ok(ecommerceSignals.categories.includes('contact'));
+    assert.equal(effectiveLandingRisk, false);
+    assert.equal(scanData.riskScore < 30, true);
+    assert.deepEqual(scanData.summaryReasons, []);
+});
+
 test('成熟 SEO、robots 與 sitemap 可作為可信佐證', () => {
     const html = `
         <html lang="zh-TW">

@@ -27,7 +27,7 @@ window.RISK_CONFIG = {
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
-        'mababy.com', 'sunpay.com.tw'
+        'mababy.com', 'sunpay.com.tw', 'xlearn.tw'
     ],
     confirmedScamDomains: [
         'jinguan.web.app'
