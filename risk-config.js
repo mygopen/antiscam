@@ -23,7 +23,8 @@ window.RISK_CONFIG = {
     trustedEcommerceRootDomains: [
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
         'momoshop.com.tw', 'friday.tw', 'uni-prosperity.com.tw',
-        'uni-lions.com.tw', 'sunsetgoods.tw', 'theaxiomstore.com'
+        'uni-lions.com.tw', 'sunsetgoods.tw', 'theaxiomstore.com',
+        'shopee.tw', 'shp.ee'
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
@@ -42,12 +43,12 @@ window.RISK_CONFIG = {
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
-        'aka.ms', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
+        'aka.ms', 'shp.ee', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
-        'bitly.com', 'aka.ms', 'cmy.tw'
+        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee'
     ],
     emailTrackingRedirectors: [
         'awstrack.me', 'sendgrid.net', 'ct.sendgrid.net', 'u.ct.sendgrid.net',
