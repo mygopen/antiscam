@@ -139,6 +139,10 @@ function isTrustedTaiwanServiceDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.trustedTaiwanServiceDomains);
 }
 
+function isTrustedFinancialServiceDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.trustedFinancialServiceDomains);
+}
+
 function isGlobalPaymentGatewayDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
 }
@@ -205,6 +209,7 @@ function isVerifiedSafeRootDomain(hostname, whitelist = []) {
         isTrustedGlobalDomain(hostname) ||
         isTrustedEcommerceDomain(hostname) ||
         isTrustedTaiwanServiceDomain(hostname) ||
+        isTrustedFinancialServiceDomain(hostname) ||
         matchesDomainList(hostname, whitelist);
 }
 
@@ -1778,6 +1783,34 @@ test('全球頂級可信根網域即使白名單載入失敗也應保留 root ov
     assert.equal(isVerifiedSafeRootDomain('evil-paypal.com'), false);
 });
 
+test('Axi 官方金融服務網域不應因外匯或交易語意誤判為高風險', () => {
+    const hostname = 'www.axi.com';
+    const url = 'https://www.axi.com/int/markets/forex';
+    const financialText = `${url} forex broker trading account credit card transaction verification`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const hasFinancialPhishingSignal = !isVerifiedSafeRootDomain(hostname) &&
+        hasFinancialPhishingText(financialText);
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('axi.com'));
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(hasFinancialPhishingSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(isVerifiedSafeRootDomain('axi.com.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-axi.com'), false);
+    assert.equal(isVerifiedSafeRootDomain('axitrading.biz'), false);
+});
+
 test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('500.gov.tw'), true);
     assert.equal(isOfficialTaiwanGovDomain('www.gsp.gov.tw'), true);
@@ -2057,6 +2090,31 @@ test('Shopee 官方短網址 tw.shp.ee 應視為可信安全縮網址', () => {
     assert.equal(isVerifiedSafeRootDomain('tw.shp.ee'), true);
     assert.equal(isVerifiedSafeRootDomain('shopee.tw'), true);
     assert.equal(shortenerOverride.hasTrustedAllowlistOverride, true);
+    assert.equal(shortenerOverride.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+});
+
+test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', () => {
+    const rawUrl = 'https://cht.tw/x/aec30?utm_source=sms&utm_medium=message';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+        hostname: 'cht.tw',
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('cht.tw'));
+    assert.ok(riskConfig.urlShorteners.includes('cht.tw'));
+    assert.ok(riskConfig.safeShorteners.includes('cht.tw'));
+    assert.equal(matchesDomainList('cht.tw', riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList('cht.tw', riskConfig.safeShorteners), true);
+    assert.equal(isTrustedTaiwanServiceDomain('cht.tw'), true);
+    assert.equal(isVerifiedSafeRootDomain('cht.tw'), true);
+    assert.equal(shouldSkipAiBrandAnalysis('cht.tw'), true);
+    assert.equal(shortenerOverride.hasTrustedAllowlistOverride, true);
+    assert.equal(shortenerOverride.blocklistListedForRisk, false);
+    assert.equal(shortenerOverride.googleFlaggedForRisk, false);
     assert.equal(shortenerOverride.riskScore, 0);
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
 });

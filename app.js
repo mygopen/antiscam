@@ -273,6 +273,10 @@ const { useState, useEffect, useRef } = React;
             return getRiskList('trustedTaiwanServiceDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const isTrustedFinancialServiceDomain = (hostname) => {
+            return getRiskList('trustedFinancialServiceDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
         const isGlobalPaymentGatewayDomain = (hostname) => {
             return getRiskList('globalPaymentGatewayDomains').some(domain => isSameRootDomain(hostname, domain));
         };
@@ -286,6 +290,7 @@ const { useState, useEffect, useRef } = React;
                 isTrustedGlobalDomain(hostname) ||
                 isTrustedEcommerceDomain(hostname) ||
                 isTrustedTaiwanServiceDomain(hostname) ||
+                isTrustedFinancialServiceDomain(hostname) ||
                 whitelist.some(domain => isSameRootDomain(hostname, domain));
         };
 
@@ -1727,9 +1732,10 @@ const { useState, useEffect, useRef } = React;
             const registrableDomain = domainParts.registrableDomain || domain;
             const isTrustedEcommerceRootDomain = isTrustedEcommerceDomain(domain);
             const isTrustedTaiwanServiceRootDomain = isTrustedTaiwanServiceDomain(domain);
+            const isTrustedFinancialServiceRootDomain = isTrustedFinancialServiceDomain(domain);
 
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
-            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isConfiguredAllowlistDomain;
+            const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isTrustedFinancialServiceRootDomain || isConfiguredAllowlistDomain;
             const isConfirmedScam = !isWhitelisted && isConfirmedScamDomain(domain);
 
             // 👇 判斷是否為社群平台
@@ -1844,7 +1850,7 @@ const { useState, useEffect, useRef } = React;
             const hasRankedRootDomainFallback = trancoRank !== null &&
                 normalizeHostname(trancoQueriedDomain) !== domain &&
                 isSameRootDomain(domain, trancoQueriedDomain);
-            const hasRootDomainTrustBaseline = hasRankedRootDomainFallback || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain;
+            const hasRootDomainTrustBaseline = hasRankedRootDomainFallback || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isTrustedFinancialServiceRootDomain;
 
             // Tranco 查詢失敗不等於低信任；只有明確查無排名才視為低流量。
             const isHighTraffic = (trancoRank !== null || (isWhitelisted && !isFreeHosting) || isTrustedEcommerceRootDomain);
@@ -1867,6 +1873,8 @@ const { useState, useEffect, useRef } = React;
                     trafficDetails = '全球頂級可信根網域，Tranco 暫時無法取得時不以低流量扣分';
                 } else if (isTrustedTaiwanServiceRootDomain) {
                     trafficDetails = '受信賴台灣民營服務官方網域，流量排名不足不作為風險加權';
+                } else if (isTrustedFinancialServiceRootDomain) {
+                    trafficDetails = '受信賴金融服務官方網域，流量排名不足不作為風險加權';
                 } else if (isConfiguredAllowlistDomain) {
                     trafficDetails = '受信賴白名單網域，流量排名不足不作為風險加權';
                 } else {
@@ -2283,6 +2291,7 @@ const { useState, useEffect, useRef } = React;
             addTrustSignal(isTrustedGlobalRootDomain, 80, '全球頂級可信根網域');
             addTrustSignal(isTrustedEcommerceRootDomain, 90, `Trusted E-commerce Root Domain：${registrableDomain}`);
             addTrustSignal(isTrustedTaiwanServiceRootDomain, 80, `可信台灣民營服務網域：${registrableDomain}`);
+            addTrustSignal(isTrustedFinancialServiceRootDomain, 80, `可信金融服務官方網域：${registrableDomain}`);
             addTrustSignal(isConfiguredAllowlistDomain && !isOfficialTaiwanGov, 70, 'Trusted Allowlist Domain');
             addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
             addTrustSignal(hasRankedRootDomainFallback, 35, `Tranco 根網域 ${trancoQueriedDomain} 可查得排名，子網域繼承基線信任`);
@@ -2703,7 +2712,7 @@ const { useState, useEffect, useRef } = React;
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
-            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : (isTrustedEcommerceRootDomain ? `受信賴大型電商根網域：${registrableDomain}` : (isTrustedTaiwanServiceRootDomain ? `受信賴台灣民營服務官方網域：${registrableDomain}` : '受信賴的白名單網域'));
+            if (isWhitelisted) siteContentMsg = isOfficialTaiwanGov ? '受信賴的台灣政府官方網域' : (isTrustedEcommerceRootDomain ? `受信賴大型電商根網域：${registrableDomain}` : (isTrustedTaiwanServiceRootDomain ? `受信賴台灣民營服務官方網域：${registrableDomain}` : (isTrustedFinancialServiceRootDomain ? `受信賴金融服務官方網域：${registrableDomain}` : '受信賴的白名單網域')));
             else if (hasCrawlerBlockedTrustedContext) siteContentMsg = `頁面可能啟用 WAF/Anti-bot，已改以可信根網域 ${registrableDomain} 的排名/電商基線判斷，不因爬蟲阻擋扣為高風險`;
 
             // 決定網域特徵卡片的 UI 文字
@@ -2906,7 +2915,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain },
+                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3159,7 +3168,7 @@ const { useState, useEffect, useRef } = React;
                 isWhitelisted: false,
                 isTrustedAllowlist: false,
                 crawlerBlockedTrustedContext: false,
-                rootDomainTrust: { registrableDomain: targetDomain, hasRankedRootDomainFallback: false, isTrustedEcommerceRootDomain: false, isTrustedTaiwanServiceRootDomain: false },
+                rootDomainTrust: { registrableDomain: targetDomain, hasRankedRootDomainFallback: false, isTrustedEcommerceRootDomain: false, isTrustedTaiwanServiceRootDomain: false, isTrustedFinancialServiceRootDomain: false },
                 details: {
                     serverCountry: '隱藏/無法偵測',
                     serverIp: null,

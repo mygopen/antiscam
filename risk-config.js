@@ -28,7 +28,10 @@ window.RISK_CONFIG = {
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
-        'mababy.com', 'sunpay.com.tw', 'xlearn.tw'
+        'mababy.com', 'sunpay.com.tw', 'xlearn.tw', 'cht.tw'
+    ],
+    trustedFinancialServiceDomains: [
+        'axi.com'
     ],
     confirmedScamDomains: [
         'jinguan.web.app'
@@ -43,12 +46,12 @@ window.RISK_CONFIG = {
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
-        'aka.ms', 'shp.ee', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
+        'aka.ms', 'shp.ee', 'cht.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
-        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee'
+        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw'
     ],
     emailTrackingRedirectors: [
         'awstrack.me', 'sendgrid.net', 'ct.sendgrid.net', 'u.ct.sendgrid.net',
