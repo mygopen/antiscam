@@ -28,7 +28,8 @@ window.RISK_CONFIG = {
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
-        'mababy.com', 'sunpay.com.tw', 'xlearn.tw', 'cht.tw'
+        'mababy.com', 'sunpay.com.tw', 'xlearn.tw', 'cht.tw',
+        'niceday.tw'
     ],
     trustedFinancialServiceDomains: [
         'axi.com'
