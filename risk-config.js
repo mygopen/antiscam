@@ -32,7 +32,7 @@ window.RISK_CONFIG = {
         'niceday.tw'
     ],
     trustedFinancialServiceDomains: [
-        'axi.com'
+        'axi.com', 'twlife.tw', 'taiwanlife.com'
     ],
     confirmedScamDomains: [
         'jinguan.web.app'
