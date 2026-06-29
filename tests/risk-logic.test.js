@@ -2029,6 +2029,46 @@ test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單'
     assert.equal(override.riskScore, 0);
 });
 
+test('雲端發票生活小幫手官方專屬網域應視為可信服務與安全短網址', () => {
+    const rawUrl = 'https://ecloud.life/i/Y8ZSFj5k?utm_source=line&utm_medium=sms';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const hostname = 'ecloud.life';
+    const mainHostname = 'www.ecloudlife.com';
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname,
+        text: '雲端發票-生活小幫手可管理雲端發票、載具、對獎通知與消費紀錄。'
+    });
+    const isWhitelisted = isVerifiedSafeRootDomain(hostname, []);
+    const hasPageBrandMismatch = !isWhitelisted && !checkBrandSimilarity(hostname, []).matched && pageBrandSignals.matched;
+    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('ecloud.life'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('ecloudlife.com'));
+    assert.ok(riskConfig.urlShorteners.includes('ecloud.life'));
+    assert.ok(riskConfig.safeShorteners.includes('ecloud.life'));
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.safeShorteners), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isTrustedTaiwanServiceDomain(mainHostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain(mainHostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname, []), true);
+    assert.equal(hasRandomizedPathToken(rawUrl), true);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(hasPageBrandMismatch, false);
+    assert.equal(shortenerOverride.hasTrustedAllowlistOverride, true);
+    assert.equal(shortenerOverride.blocklistListedForRisk, false);
+    assert.equal(shortenerOverride.googleFlaggedForRisk, false);
+    assert.equal(shortenerOverride.riskScore, 0);
+    assert.equal(isVerifiedSafeRootDomain('ecloud.life.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-ecloud.life', []), false);
+});
+
 test('紅陽科技電子發票查詢子網域應視為可信支付與發票服務', () => {
     const rawUrl = 'https://einv.sunpay.com.tw/search?invoiceDate=kiBAKD%2BpWYkUqbrO1pxzyg%3D%3D&invoiceNumber=RV8Xi3AsAXqInA3oOB6aRA%3D%3D&randomNumber=M2by%2BbmD6oJFbn8auN%2BsOA%3D%3D';
     const parsed = new URL(rawUrl);
