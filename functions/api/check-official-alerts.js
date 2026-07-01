@@ -3,10 +3,15 @@ import {
     officialPenaltySyncMetadata,
     syncedOfficialPenaltyRecords
 } from './synced-official-penalty-records.js';
+import {
+    fdaAdSyncMetadata,
+    syncedFdaAdAlerts
+} from './synced-fda-ad-alerts.js';
 
 const officialAlerts = mergeOfficialAlerts([
     ...manualOfficialAlerts,
-    ...syncedOfficialPenaltyRecords
+    ...syncedOfficialPenaltyRecords,
+    ...syncedFdaAdAlerts
 ]);
 
 function normalizeHostname(value) {
@@ -94,7 +99,9 @@ export async function onRequest(context) {
         sources: {
             manualCount: manualOfficialAlerts.length,
             syncedPenaltyCount: syncedOfficialPenaltyRecords.length,
-            officialPenaltySync: officialPenaltySyncMetadata
+            syncedFdaAdCount: syncedFdaAdAlerts.length,
+            officialPenaltySync: officialPenaltySyncMetadata,
+            fdaAdSync: fdaAdSyncMetadata
         }
     }), {
         headers: {
