@@ -744,6 +744,21 @@ const officialAlertFixtures = [
     },
     {
         source: '衛生福利部食品藥物管理署',
+        category: '年度十大違規食藥廣告產品',
+        title: '113 年十大違規食藥廣告產品：活化勝',
+        productName: '活化勝',
+        rootDomain: 'healthezgo.com',
+        matchScope: 'url-prefix-only',
+        urls: [],
+        urlPrefixes: [
+            'https://tw.healthezgo.com/sale/57/1572'
+        ],
+        sourceUrl: 'https://www.mohw.gov.tw/dl-93967-6e2f6f68-83bf-4ac3-bcdc-2ffdb743d1fa.html',
+        violationType: '違反食品安全衛生管理法第28條第2項規定（涉醫療效能）',
+        warning: '衛福部新聞稿附件列「活化勝」為 113 年度十大違規食藥廣告產品之一。'
+    },
+    {
+        source: '衛生福利部食品藥物管理署',
         category: '涉嫌違規廣告產品',
         title: '國外網站涉嫌違規廣告產品：潤姬桃子',
         rootDomain: 'special-newseeds.com',
@@ -773,17 +788,36 @@ function normalizeOfficialAlertUrl(value) {
     }
 }
 
+function isOfficialAlertUrlPrefixMatch(targetUrl, urlPrefix) {
+    const normalizedPrefix = normalizeOfficialAlertUrl(urlPrefix);
+    if (!targetUrl || !normalizedPrefix) return false;
+    return targetUrl === normalizedPrefix ||
+        targetUrl.startsWith(`${normalizedPrefix}?`) ||
+        targetUrl.startsWith(`${normalizedPrefix}/`);
+}
+
+function allowsOfficialAlertDomainMatch(alert) {
+    const scope = String(alert.matchScope || '').toLowerCase();
+    return !['url-prefix', 'url-prefix-only', 'product', 'product-only'].includes(scope);
+}
+
 function findOfficialAlertFixture({ domain, targetUrl }) {
     const normalizedDomain = normalizeOfficialAlertHostname(domain);
     const normalizedTargetUrl = normalizeOfficialAlertUrl(targetUrl);
     return officialAlertFixtures
         .map(alert => {
-            const root = normalizeOfficialAlertHostname(alert.rootDomain);
             const fullUrlMatched = normalizedTargetUrl &&
-                alert.urls.some(url => normalizeOfficialAlertUrl(url) === normalizedTargetUrl);
-            const domainMatched = normalizedDomain === root || normalizedDomain.endsWith(`.${root}`);
-            if (!fullUrlMatched && !domainMatched) return null;
-            return { ...alert, matchType: fullUrlMatched ? 'url' : 'domain' };
+                (alert.urls || []).some(url => normalizeOfficialAlertUrl(url) === normalizedTargetUrl);
+            const urlPrefixMatched = normalizedTargetUrl &&
+                (alert.urlPrefixes || []).some(prefix => isOfficialAlertUrlPrefixMatch(normalizedTargetUrl, prefix));
+            const roots = [
+                alert.rootDomain,
+                ...(Array.isArray(alert.rootDomains) ? alert.rootDomains : [])
+            ].map(normalizeOfficialAlertHostname).filter(Boolean);
+            const domainMatched = allowsOfficialAlertDomainMatch(alert) &&
+                roots.some(root => normalizedDomain === root || normalizedDomain.endsWith(`.${root}`));
+            if (!fullUrlMatched && !urlPrefixMatched && !domainMatched) return null;
+            return { ...alert, matchType: fullUrlMatched ? 'url' : (urlPrefixMatched ? 'url-prefix' : 'domain') };
         })
         .filter(Boolean);
 }
@@ -3616,6 +3650,38 @@ test('官方警示資料完整網址命中應直接升為最高風險', () => {
     assert.equal(matches[0].source, '衛生福利部食品藥物管理署');
     assert.equal(hasOfficialAlertUrlMatch, true);
     assert.equal(riskScore, 100);
+});
+
+test('官方商品警示 URL 前綴命中應忽略廣告追蹤參數並升為最高風險', () => {
+    const rawUrl = 'https://tw.healthezgo.com/sale/57/1572/?gad_source=1&gad_campaignid=19710886073&gbraid=0AAAAACrFmzd_1Whm6nfGUt8-EUdjyH3zQ&gclid=EAIaIQobChMIibaJ1O2wlQMVbGsPAh2uTwxhEAAYASAAEgIBS_D_BwE';
+    const matches = findOfficialAlertFixture({
+        domain: 'tw.healthezgo.com',
+        targetUrl: rawUrl
+    });
+    const hasOfficialAlertUrlMatch = matches.some(item => ['url', 'url-prefix'].includes(item.matchType));
+    const riskScore = hasOfficialAlertUrlMatch ? 100 : 0;
+    const apiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-official-alerts.js'), 'utf8');
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const manualSource = fs.readFileSync(path.join(repoRoot, 'functions/api/manual-official-alerts.js'), 'utf8');
+
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].productName, '活化勝');
+    assert.equal(matches[0].matchType, 'url-prefix');
+    assert.equal(matches[0].matchScope, 'url-prefix-only');
+    assert.equal(hasOfficialAlertUrlMatch, true);
+    assert.equal(riskScore, 100);
+    assert.match(apiSource, /urlPrefixMatched/);
+    assert.match(appSource, /url-prefix/);
+    assert.match(manualSource, /活化勝/);
+});
+
+test('官方商品警示 URL 前綴紀錄不應擴大成整個網域命中', () => {
+    const matches = findOfficialAlertFixture({
+        domain: 'tw.healthezgo.com',
+        targetUrl: 'https://tw.healthezgo.com/sale/normal-product'
+    });
+
+    assert.equal(matches.length, 0);
 });
 
 test('官方警示資料 root domain 命中應升為高風險並拉高 summary', () => {

@@ -34,6 +34,15 @@ function normalizeUrl(value) {
     }
 }
 
+function isUrlPrefixMatch(targetUrl, urlPrefix) {
+    const normalizedPrefix = normalizeUrl(urlPrefix);
+    if (!targetUrl || !normalizedPrefix) return false;
+
+    return targetUrl === normalizedPrefix ||
+        targetUrl.startsWith(`${normalizedPrefix}?`) ||
+        targetUrl.startsWith(`${normalizedPrefix}/`);
+}
+
 function isSameOrSubdomain(hostname, rootDomain) {
     const host = normalizeHostname(hostname);
     const root = normalizeHostname(rootDomain);
@@ -53,12 +62,18 @@ function hasDomainMatch(hostname, alert) {
     return getAlertRootDomains(alert).some(rootDomain => isSameOrSubdomain(hostname, rootDomain));
 }
 
+function allowsDomainMatch(alert) {
+    const scope = String(alert.matchScope || '').toLowerCase();
+    return !['url-prefix', 'url-prefix-only', 'product', 'product-only'].includes(scope);
+}
+
 function mergeOfficialAlerts(alerts) {
     const seen = new Set();
     return alerts.filter(alert => {
         const rootKey = getAlertRootDomains(alert).join(',');
         const urlKey = (alert.urls || []).map(normalizeUrl).join(',');
-        const key = `${alert.sourceUrl || ''}|${rootKey}|${urlKey}|${alert.title || ''}`;
+        const urlPrefixKey = (alert.urlPrefixes || []).map(normalizeUrl).join(',');
+        const key = `${alert.sourceUrl || ''}|${rootKey}|${urlKey}|${urlPrefixKey}|${alert.matchScope || ''}|${alert.title || ''}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -73,13 +88,17 @@ function findOfficialAlerts({ domain, targetUrl }) {
         .map(alert => {
             const fullUrlMatched = normalizedTargetUrl &&
                 (alert.urls || []).some(url => normalizeUrl(url) === normalizedTargetUrl);
-            const domainMatched = normalizedDomain && hasDomainMatch(normalizedDomain, alert);
+            const urlPrefixMatched = normalizedTargetUrl &&
+                (alert.urlPrefixes || []).some(prefix => isUrlPrefixMatch(normalizedTargetUrl, prefix));
+            const domainMatched = allowsDomainMatch(alert) &&
+                normalizedDomain &&
+                hasDomainMatch(normalizedDomain, alert);
 
-            if (!fullUrlMatched && !domainMatched) return null;
+            if (!fullUrlMatched && !urlPrefixMatched && !domainMatched) return null;
 
             return {
                 ...alert,
-                matchType: fullUrlMatched ? 'url' : 'domain'
+                matchType: fullUrlMatched ? 'url' : (urlPrefixMatched ? 'url-prefix' : 'domain')
             };
         })
         .filter(Boolean);

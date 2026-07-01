@@ -16,6 +16,23 @@ export const manualOfficialAlerts = [
     },
     {
         source: '衛生福利部食品藥物管理署',
+        category: '年度十大違規食藥廣告產品',
+        title: '113 年十大違規食藥廣告產品：活化勝',
+        productName: '活化勝',
+        rootDomain: 'healthezgo.com',
+        matchScope: 'url-prefix-only',
+        urls: [],
+        urlPrefixes: [
+            'https://tw.healthezgo.com/sale/57/1572'
+        ],
+        publishedDate: '2025-03-19',
+        violationType: '違反食品安全衛生管理法第28條第2項規定（涉醫療效能）',
+        warning: '衛福部新聞稿附件列「活化勝」為 113 年度十大違規食藥廣告產品之一，裁罰總額新臺幣 308 萬元；此筆警示限定命中特定商品頁，不代表整個 healthezgo.com 網域均經公告。',
+        claimSummary: '官方名單為產品層級紀錄；命中特定商品頁時提高消費警示，並建議查證廣告宣稱與交易條件。',
+        sourceUrl: 'https://www.mohw.gov.tw/dl-93967-6e2f6f68-83bf-4ac3-bcdc-2ffdb743d1fa.html'
+    },
+    {
+        source: '衛生福利部食品藥物管理署',
         category: '涉嫌違規廣告產品',
         title: '國外網站涉嫌違規廣告產品：潤姬桃子',
         productName: '潤姬桃子',

@@ -2062,7 +2062,7 @@ const { useState, useEffect, useRef } = React;
             const officialAlertMatches = officialAlertData?.matches || [];
             const officialAlertMatch = officialAlertMatches[0] || null;
             const hasOfficialAlert = !isWhitelisted && !!officialAlertData?.matched;
-            const hasOfficialAlertUrlMatch = hasOfficialAlert && officialAlertMatches.some(item => item.matchType === 'url');
+            const hasOfficialAlertUrlMatch = hasOfficialAlert && officialAlertMatches.some(item => ['url', 'url-prefix'].includes(item.matchType));
             const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
             const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount > 0 || suspiciousDownloadPath);
             const hasSuspiciousDownloadLanding = suspiciousDownloadPath &&
