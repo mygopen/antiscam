@@ -1,21 +1,13 @@
-const officialAlerts = [
-    {
-        source: '衛生福利部食品藥物管理署',
-        category: '涉嫌違規廣告產品',
-        title: '國外網站涉嫌違規廣告產品：潤姬桃子',
-        productName: '潤姬桃子',
-        rootDomain: 'special-newseeds.com',
-        urls: [
-            'https://special-newseeds.com/uhmk/item/uhmktwit240704v104hcn.php?waxc=UHdg52anNXbGSzHy.7whg4cn'
-        ],
-        publishedDate: '2024-07-18',
-        monitoredDate: '2024-07-05',
-        violationType: '違反食品安全衛生管理法第28條規定',
-        warning: '食藥署公告此網址涉嫌違規廣告產品，提醒消費者勿信勿購買。',
-        claimSummary: '宣稱消除痘疤、斑點、法令紋、臨床實驗確認等誇大療效或易生誤解詞句。',
-        sourceUrl: 'https://www.fda.gov.tw/tc/newsContent.aspx?cid=5085&id=113P1066&type=pmds'
-    }
-];
+import { manualOfficialAlerts } from './manual-official-alerts.js';
+import {
+    officialPenaltySyncMetadata,
+    syncedOfficialPenaltyRecords
+} from './synced-official-penalty-records.js';
+
+const officialAlerts = mergeOfficialAlerts([
+    ...manualOfficialAlerts,
+    ...syncedOfficialPenaltyRecords
+]);
 
 function normalizeHostname(value) {
     const input = String(value || '').trim().toLowerCase();
@@ -43,6 +35,31 @@ function isSameOrSubdomain(hostname, rootDomain) {
     return host === root || host.endsWith(`.${root}`);
 }
 
+function getAlertRootDomains(alert) {
+    const roots = [
+        alert.rootDomain,
+        ...(Array.isArray(alert.rootDomains) ? alert.rootDomains : [])
+    ];
+
+    return [...new Set(roots.map(normalizeHostname).filter(Boolean))];
+}
+
+function hasDomainMatch(hostname, alert) {
+    return getAlertRootDomains(alert).some(rootDomain => isSameOrSubdomain(hostname, rootDomain));
+}
+
+function mergeOfficialAlerts(alerts) {
+    const seen = new Set();
+    return alerts.filter(alert => {
+        const rootKey = getAlertRootDomains(alert).join(',');
+        const urlKey = (alert.urls || []).map(normalizeUrl).join(',');
+        const key = `${alert.sourceUrl || ''}|${rootKey}|${urlKey}|${alert.title || ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 function findOfficialAlerts({ domain, targetUrl }) {
     const normalizedDomain = normalizeHostname(domain);
     const normalizedTargetUrl = normalizeUrl(targetUrl);
@@ -50,8 +67,8 @@ function findOfficialAlerts({ domain, targetUrl }) {
     return officialAlerts
         .map(alert => {
             const fullUrlMatched = normalizedTargetUrl &&
-                alert.urls.some(url => normalizeUrl(url) === normalizedTargetUrl);
-            const domainMatched = normalizedDomain && isSameOrSubdomain(normalizedDomain, alert.rootDomain);
+                (alert.urls || []).some(url => normalizeUrl(url) === normalizedTargetUrl);
+            const domainMatched = normalizedDomain && hasDomainMatch(normalizedDomain, alert);
 
             if (!fullUrlMatched && !domainMatched) return null;
 
@@ -73,7 +90,12 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({
         matched: matches.length > 0,
         count: matches.length,
-        matches
+        matches,
+        sources: {
+            manualCount: manualOfficialAlerts.length,
+            syncedPenaltyCount: syncedOfficialPenaltyRecords.length,
+            officialPenaltySync: officialPenaltySyncMetadata
+        }
     }), {
         headers: {
             'Content-Type': 'application/json',

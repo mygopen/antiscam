@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const { pathToFileURL } = require('node:url');
 const vm = require('node:vm');
 
 const repoRoot = path.resolve(__dirname, '..');
@@ -728,6 +729,19 @@ function enforceFinalRiskConsistency(scanData) {
 }
 
 const officialAlertFixtures = [
+    {
+        source: '中華民國公平交易委員會',
+        category: '廣告不實處分',
+        title: '秦龍國際有限公司小老闆網路商城一頁式廣告銷售商品處分案',
+        productName: '小老闆網路商城一頁式廣告',
+        rootDomain: 'smallbossstore.com',
+        urls: [
+            'https://www.smallbossstore.com'
+        ],
+        sourceUrl: 'https://www.ftc.gov.tw/uploadDecision/6d358c1d-2b8c-49fc-b44a-39c7f1f96f9a.pdf',
+        violationType: '違反公平交易法第21條第1項規定',
+        warning: '公平交易委員會處分書記載，該公司使用 www.smallbossstore.com 及一頁式廣告銷售商品時，涉有虛偽不實及引人錯誤之表示，曾處新臺幣 5 萬元罰鍰。'
+    },
     {
         source: '衛生福利部食品藥物管理署',
         category: '涉嫌違規廣告產品',
@@ -3621,6 +3635,83 @@ test('官方警示資料 root domain 命中應升為高風險並拉高 summary',
     assert.equal(matches[0].matchType, 'domain');
     assert.equal(scanData.riskScore, 70);
     assert.deepEqual(scanData.summaryReasons, ['官方機關已公告警示']);
+});
+
+test('公平會處分紀錄命中的小老闆商城一頁式廣告頁應列為高風險消費警示', () => {
+    const rawUrl = 'https://www.smallbossstore.com/WaterresistantSiameseRaincoat?fbclid=sample&utm_medium=paid&utm_source=fb&utm_campaign=120225737453880369';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const matches = findOfficialAlertFixture({
+        domain: parsed.hostname,
+        targetUrl: sanitized.href
+    });
+    const hasOfficialAlert = matches.length > 0;
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: hasOfficialAlert ? 40 : 0,
+        checks: {
+            officialAlerts: {
+                status: hasOfficialAlert ? 'danger' : 'safe',
+                details: `${matches[0].source} 公告：${matches[0].category}「${matches[0].productName}」。${matches[0].violationType}；${matches[0].warning}`,
+                link: matches[0].sourceUrl
+            },
+            domainAnalysis: { status: hasOfficialAlert ? 'danger' : 'safe', details: '官方裁罰紀錄命中' }
+        }
+    });
+    const apiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-official-alerts.js'), 'utf8');
+    const manualSource = fs.readFileSync(path.join(repoRoot, 'functions/api/manual-official-alerts.js'), 'utf8');
+
+    assert.equal(parsed.hostname, 'www.smallbossstore.com');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_campaign', 'utm_medium', 'utm_source'].sort());
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].source, '中華民國公平交易委員會');
+    assert.equal(matches[0].matchType, 'domain');
+    assert.equal(matches[0].rootDomain, 'smallbossstore.com');
+    assert.equal(matches[0].sourceUrl, 'https://www.ftc.gov.tw/uploadDecision/6d358c1d-2b8c-49fc-b44a-39c7f1f96f9a.pdf');
+    assert.match(matches[0].warning, /5 萬元罰鍰/);
+    assert.equal(scanData.riskScore, 70);
+    assert.deepEqual(scanData.summaryReasons, ['官方機關已公告警示', '官方裁罰紀錄命中']);
+    assert.match(apiSource, /manual-official-alerts/);
+    assert.match(apiSource, /synced-official-penalty-records/);
+    assert.match(manualSource, /smallbossstore\.com/);
+    assert.match(manualSource, /公平交易委員會/);
+});
+
+test('公平會同步腳本可解析行政決定列表並產生可查詢網域索引', async () => {
+    const syncModule = await import(pathToFileURL(path.join(repoRoot, 'scripts/sync-ftc-decisions.mjs')).href);
+    const sampleHtml = `
+        <ul class="result-list">
+            <li><span>發文日期</span><p>2026/06/18</p></li>
+            <li><span>類型</span><p>處分書及不處分決議書</p></li>
+            <li><span>相關法條</span><p>公平交易法第21條<br></p></li>
+            <li class="result-reason">
+                <span>案由</span>
+                <a href="https://www.ftc.gov.tw/uploadDecision/example.pdf" target="_blank" title="範例商店廣告不實處分案.pdf">
+                    <p>範例商店於網路銷售商品，廣告刊載內容涉虛偽不實及引人錯誤，違反公平交易法處分案。</p>
+                </a>
+            </li>
+        </ul>
+    `;
+    const rows = syncModule.parseDecisionRows(sampleHtml);
+    const pdfTextsByUrl = new Map([
+        ['https://www.ftc.gov.tw/uploadDecision/example.pdf', '處分書記載網址：https://promo.example-shop.com.tw/sale?page=1，另有 www.example-shop.com.tw 官方商城。']
+    ]);
+    const records = syncModule.toOfficialAlertRecords(rows, pdfTextsByUrl);
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].date, '2026-06-18');
+    assert.equal(rows[0].law, '公平交易法第21條');
+    assert.equal(rows[0].sourceUrl, 'https://www.ftc.gov.tw/uploadDecision/example.pdf');
+    assert.deepEqual(syncModule.extractDomainsFromText(pdfTextsByUrl.get(rows[0].sourceUrl)), [
+        'example-shop.com.tw',
+        'promo.example-shop.com.tw',
+    ]);
+    assert.equal(syncModule.toRootDomain('promo.example-shop.com.tw'), 'example-shop.com.tw');
+    assert.equal(records.length, 1);
+    assert.equal(records[0].source, '中華民國公平交易委員會');
+    assert.equal(records[0].rootDomain, 'example-shop.com.tw');
+    assert.deepEqual(records[0].rootDomains, ['example-shop.com.tw']);
+    assert.equal(records[0].category, '廣告不實處分');
+    assert.equal(records[0].sourceUrl, rows[0].sourceUrl);
 });
 
 test('免洗 root 亂碼偵測會命中 kforgmamgeq 並避開常見可讀品牌字串', () => {
