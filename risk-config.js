@@ -35,7 +35,8 @@ window.RISK_CONFIG = {
         'axi.com', 'twlife.tw', 'taiwanlife.com'
     ],
     confirmedScamDomains: [
-        'jinguan.web.app'
+        'jinguan.web.app',
+        'lineeshopping.weebly.com'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',

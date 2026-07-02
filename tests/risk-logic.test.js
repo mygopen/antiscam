@@ -3936,6 +3936,38 @@ test('人工確認詐騙的 web.app 子網域應直接升為高風險', () => {
     assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資']);
 });
 
+test('人工確認詐騙的 Weebly 子網域應直接高風險，一般 Weebly 子網域保留免費架站警示', () => {
+    const scamDomain = 'lineeshopping.weebly.com';
+    const genericDomain = 'brand-demo.weebly.com';
+    const isFreeHosting = matchesDomainList(scamDomain, riskConfig.freeHostingProviders);
+    const isGenericFreeHosting = matchesDomainList(genericDomain, riskConfig.freeHostingProviders);
+    const isConfirmedScam = matchesDomainList(scamDomain, riskConfig.confirmedScamDomains);
+    const isGenericConfirmedScam = matchesDomainList(genericDomain, riskConfig.confirmedScamDomains);
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : (isFreeHosting ? 30 : 0),
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為詐騙連結'
+            },
+            domainAnalysis: {
+                status: isConfirmedScam ? 'danger' : 'warning',
+                details: isConfirmedScam ? '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資' : '使用 Weebly 免費架站平台'
+            }
+        }
+    });
+
+    assert.equal(isFreeHosting, true);
+    assert.equal(isGenericFreeHosting, true);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(isGenericConfirmedScam, false);
+    assert.equal(scanData.riskScore, 100);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資']);
+    assert.match(appSource, /isWeeblyHostedSite/);
+    assert.match(appSource, /Weebly 免費\/低門檻架站子網域/);
+});
+
 test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應升為高風險', () => {
     const readableDomain = 'brand-demo.pages.dev';
     const suspiciousDomain = 'rm5cnx4l.pages.dev';

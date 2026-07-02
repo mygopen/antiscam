@@ -1843,6 +1843,7 @@ const { useState, useEffect, useRef } = React;
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => isSameRootDomain(domain, p));
             const isCloudflarePagesDev = isCloudflarePagesDevHostname(domain);
+            const isWeeblyHostedSite = domain !== 'weebly.com' && isSameRootDomain(domain, 'weebly.com');
             const trancoRank = trancoData?.rank || null;
             const trancoStatus = trancoData?.status || 'unavailable';
             const trancoQueriedDomain = trancoData?.queriedDomain || domain;
@@ -1886,6 +1887,8 @@ const { useState, useEffect, useRef } = React;
                     trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
                     trafficDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，任何人都可建立專案頁；需視為使用者自建臨時站，而非 Cloudflare 官方內容。';
+                } else if (isWeeblyHostedSite) {
+                    trafficDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，代表使用者自建網站而非 Weebly 官方內容；需確認品牌、付款與客服資訊是否可信。';
                 } else {
                     trafficDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於詐騙免洗網站`;
                 }
@@ -2866,6 +2869,8 @@ const { useState, useEffect, useRef } = React;
                     domainAnalysisDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
                     domainAnalysisDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
+                } else if (isWeeblyHostedSite) {
+                    domainAnalysisDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，常被用於快速建立一次性活動頁；未取得品牌與交易佐證前至少列為中度風險。';
                 } else {
                     domainAnalysisDetails = `使用免費架站平台 (${domain.split('.').slice(-2).join('.')})，常見於免洗詐騙網站`;
                 }
