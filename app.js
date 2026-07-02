@@ -2023,6 +2023,8 @@ const { useState, useEffect, useRef } = React;
                 }
             })();
             const hasCloudflarePagesDevBaselineRisk = !isWhitelisted && isCloudflarePagesDev;
+            const hasWeeblyHostedBaselineRisk = !isWhitelisted && isWeeblyHostedSite;
+            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasWeeblyHostedBaselineRisk;
             const hasCloudflarePagesDevRandomSubdomain = isHighEntropy ||
                 suspiciousSubdomain.reasons.some(reason =>
                     reason.includes('短隨機') ||
@@ -2586,7 +2588,7 @@ const { useState, useEffect, useRef } = React;
                     }
                     if (hasCloudflarePagesDevRandomRisk) {
                         riskScore = Math.max(riskScore, 75);
-                    } else if (hasCloudflarePagesDevBaselineRisk) {
+                    } else if (hasFreeHostingPlatformBaselineRisk) {
                         riskScore = Math.max(riskScore, 30);
                     }
                 } // 👈 關閉 if (!isWhitelisted)
@@ -2601,7 +2603,7 @@ const { useState, useEffect, useRef } = React;
                 }
             } // 👈 關閉最外層的 if (!blocklistListed) else 區塊
 
-            if (hasTrustedValidation && !hasConfirmedThreatSignal && !blocklistListedForRisk && !isGoogleFlaggedForRisk && !isApkSite && !isWhitelisted && !isSocialMedia) {
+            if (hasTrustedValidation && !hasConfirmedThreatSignal && !blocklistListedForRisk && !isGoogleFlaggedForRisk && !isApkSite && !isWhitelisted && !isSocialMedia && !hasFreeHostingPlatformBaselineRisk) {
                 if (riskScore >= 70) {
                     riskScore = Math.min(riskScore, 60);
                 } else if (riskScore >= 30) {
@@ -2666,7 +2668,7 @@ const { useState, useEffect, useRef } = React;
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
                 riskScore = 60;
             }
-            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && !hasCloudflarePagesDevBaselineRisk && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
+            if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && !hasFreeHostingPlatformBaselineRisk && riskScore >= 30 && hasTrustedCommercialWeakSignalContext) {
                 riskScore = Math.min(riskScore, 25);
             }
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && hasCrawlerBlockedTrustedContext && riskScore > 25) {
@@ -3120,6 +3122,7 @@ const { useState, useEffect, useRef } = React;
             const fallbackDomain = normalizeHostname(targetDomain);
             const isFallbackConfirmedScam = isConfirmedScamDomain(fallbackDomain);
             const isFallbackCloudflarePagesDev = isCloudflarePagesDevHostname(fallbackDomain);
+            const isFallbackWeeblyHostedSite = fallbackDomain !== 'weebly.com' && isSameRootDomain(fallbackDomain, 'weebly.com');
             const fallbackSubdomainPart = fallbackDomain.split('.')[0] || '';
             const fallbackSuspiciousSubdomain = analyzeSuspiciousSubdomain(fallbackDomain);
             const fallbackHighEntropySubdomain = fallbackSubdomainPart !== 'www' &&
@@ -3143,19 +3146,20 @@ const { useState, useEffect, useRef } = React;
             const fallbackCloudflarePagesDetails = isFallbackCloudflarePagesRandomRisk
                 ? `🚨 檢測流程逾時或中斷，但 ${fallbackDomain} 是 Cloudflare Pages 免費部署子網域，且子網域呈現短亂碼/不可讀命名（${fallbackSuspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}）；先以高風險處理。`
                 : '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
+            const fallbackWeeblyDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，代表使用者自建網站而非 Weebly 官方內容；即使深度掃描暫時中斷，也先維持中度風險並建議查證品牌、付款與客服資訊。';
             const fallbackRiskScore = isFallbackConfirmedScam
                 ? 100
                 : (isFallbackSuspiciousAdLanding
                 ? 85
-                : (isFallbackCloudflarePagesRandomRisk ? 85 : (isFallbackCloudflarePagesDev ? 30 : 30)));
+                : (isFallbackCloudflarePagesRandomRisk ? 85 : 30));
             const fallbackDomainStatus = isFallbackConfirmedScam || isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk
                 ? 'danger'
-                : (isFallbackCloudflarePagesDev ? 'warning' : 'warning');
+                : 'warning';
             const fallbackDomainDetails = isFallbackConfirmedScam
                 ? fallbackConfirmedScamDetails
                 : (isFallbackSuspiciousAdLanding
                 ? fallbackAdLandingDetails
-                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : fallbackDetails));
+                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : (isFallbackWeeblyHostedSite ? fallbackWeeblyDetails : fallbackDetails)));
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,

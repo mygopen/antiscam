@@ -29,6 +29,11 @@ function isCloudflarePagesDevHostname(hostname) {
     return cleanHostname !== 'pages.dev' && matchesDomainList(cleanHostname, ['pages.dev']);
 }
 
+function isWeeblyHostedHostname(hostname) {
+    const cleanHostname = normalizeInputHostname(hostname).replace(/^www\./, '');
+    return cleanHostname !== 'weebly.com' && matchesDomainList(cleanHostname, ['weebly.com']);
+}
+
 function sanitizeUrlInput(value) {
     return String(value || '')
         .normalize('NFKC')
@@ -539,9 +544,10 @@ function applyTrustedValidationCap({
     hasTrustedValidation = false,
     hasConfirmedThreatSignal = false,
     isWhitelisted = false,
-    isSocialMedia = false
+    isSocialMedia = false,
+    hasFreeHostingPlatformBaselineRisk = false
 }) {
-    if (hasTrustedValidation && !hasConfirmedThreatSignal && !isWhitelisted && !isSocialMedia) {
+    if (hasTrustedValidation && !hasConfirmedThreatSignal && !isWhitelisted && !isSocialMedia && !hasFreeHostingPlatformBaselineRisk) {
         if (riskScore >= 70) return Math.min(riskScore, 60);
         if (riskScore >= 30) return Math.max(20, riskScore - 15);
     }
@@ -558,13 +564,15 @@ function applyTrustedCommercialWeakSignalCap({
     isWhitelisted = false,
     isSocialMedia = false,
     hasTrustedCommercialWeakSignalContext = false,
-    hasCloudflarePagesDevBaselineRisk = false
+    hasCloudflarePagesDevBaselineRisk = false,
+    hasWeeblyHostedBaselineRisk = false
 }) {
     if (
         !hasStrongRiskSignal &&
         !isWhitelisted &&
         !isSocialMedia &&
         !hasCloudflarePagesDevBaselineRisk &&
+        !hasWeeblyHostedBaselineRisk &&
         riskScore >= 30 &&
         hasTrustedCommercialWeakSignalContext
     ) {
@@ -3944,6 +3952,16 @@ test('人工確認詐騙的 Weebly 子網域應直接高風險，一般 Weebly �
     const isConfirmedScam = matchesDomainList(scamDomain, riskConfig.confirmedScamDomains);
     const isGenericConfirmedScam = matchesDomainList(genericDomain, riskConfig.confirmedScamDomains);
     const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const weeblyBaselineScoreAfterTrustedCap = applyTrustedValidationCap({
+        riskScore: 30,
+        hasTrustedValidation: true,
+        hasFreeHostingPlatformBaselineRisk: isWeeblyHostedHostname(genericDomain)
+    });
+    const weeblyBaselineScoreAfterWeakCap = applyTrustedCommercialWeakSignalCap({
+        riskScore: weeblyBaselineScoreAfterTrustedCap,
+        hasTrustedCommercialWeakSignalContext: true,
+        hasWeeblyHostedBaselineRisk: isWeeblyHostedHostname(genericDomain)
+    });
     const scanData = enforceFinalRiskConsistency({
         riskScore: isConfirmedScam ? 100 : (isFreeHosting ? 30 : 0),
         checks: {
@@ -3960,12 +3978,19 @@ test('人工確認詐騙的 Weebly 子網域應直接高風險，一般 Weebly �
 
     assert.equal(isFreeHosting, true);
     assert.equal(isGenericFreeHosting, true);
+    assert.equal(isWeeblyHostedHostname(genericDomain), true);
+    assert.equal(isWeeblyHostedHostname('weebly.com'), false);
     assert.equal(isConfirmedScam, true);
     assert.equal(isGenericConfirmedScam, false);
+    assert.equal(weeblyBaselineScoreAfterTrustedCap, 30);
+    assert.equal(weeblyBaselineScoreAfterWeakCap, 30);
     assert.equal(scanData.riskScore, 100);
     assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資']);
+    assert.match(appSource, /hasWeeblyHostedBaselineRisk/);
+    assert.match(appSource, /hasFreeHostingPlatformBaselineRisk/);
     assert.match(appSource, /isWeeblyHostedSite/);
     assert.match(appSource, /Weebly 免費\/低門檻架站子網域/);
+    assert.match(appSource, /fallbackWeeblyDetails/);
 });
 
 test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應升為高風險', () => {
