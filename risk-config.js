@@ -36,7 +36,10 @@ window.RISK_CONFIG = {
     ],
     confirmedScamDomains: [
         'jinguan.web.app',
-        'lineeshopping.weebly.com'
+        'lineeshopping.weebly.com',
+        'usa.fastgetmove.com',
+        'kk78lin.org',
+        'a-family-tw.geatzs.link'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',

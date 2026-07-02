@@ -3978,6 +3978,88 @@ test('人工確認詐騙的 web.app 子網域應直接升為高風險', () => {
     assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資']);
 });
 
+test('人工確認高風險的 fastgetmove H5 店鋪管理頁應直接升為高風險', () => {
+    const rawUrl = 'https://usa.fastgetmove.com/h5/#/pages/user/my_shop/my_shop_data?shop_supplier_id=13121&app_id=10001';
+    const parsed = new URL(rawUrl);
+    const isConfirmedScam = matchesDomainList(parsed.hostname, riskConfig.confirmedScamDomains);
+    const isRootConfirmedScam = matchesDomainList('fastgetmove.com', riskConfig.confirmedScamDomains);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : 0,
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為高風險連結'
+            },
+            domainAnalysis: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: isConfirmedScam ? '此 H5 店鋪管理頁已列入人工確認高風險網域，請勿輸入帳密、店鋪或付款資料' : '網域命名結構無明顯異常'
+            }
+        }
+    });
+
+    assert.equal(parsed.hostname, 'usa.fastgetmove.com');
+    assert.equal(parsed.hash, '#/pages/user/my_shop/my_shop_data?shop_supplier_id=13121&app_id=10001');
+    assert.equal(isConfirmedScam, true);
+    assert.equal(isRootConfirmedScam, false);
+    assert.equal(scanData.riskScore, 100);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此 H5 店鋪管理頁已列入人工確認高風險網域，請勿輸入帳密、店鋪或付款資料']);
+});
+
+test('人工確認高風險的 kk78lin.org root domain 應直接升為高風險', () => {
+    const rawUrl = 'https://kk78lin.org';
+    const parsed = new URL(rawUrl);
+    const isConfirmedScam = matchesDomainList(parsed.hostname, riskConfig.confirmedScamDomains);
+    const subdomainAlsoMatched = matchesDomainList('login.kk78lin.org', riskConfig.confirmedScamDomains);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : 0,
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為高風險連結'
+            },
+            domainAnalysis: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: isConfirmedScam ? '此網域已列入人工確認高風險清單，請勿輸入個資、帳密或付款資料' : '網域命名結構無明顯異常'
+            }
+        }
+    });
+
+    assert.equal(parsed.hostname, 'kk78lin.org');
+    assert.equal(isConfirmedScam, true);
+    assert.equal(subdomainAlsoMatched, true);
+    assert.equal(scanData.riskScore, 100);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已列入人工確認高風險清單，請勿輸入個資、帳密或付款資料']);
+});
+
+test('人工確認高風險的 geatzs family-tw 付款頁應直接升為高風險', () => {
+    const rawUrl = 'https://a-family-tw.geatzs.link/ht3/tx.php?ClickID=hm12968&qty=1&total=0.00&paymentType=2';
+    const parsed = new URL(rawUrl);
+    const isConfirmedScam = matchesDomainList(parsed.hostname, riskConfig.confirmedScamDomains);
+    const isRootConfirmedScam = matchesDomainList('geatzs.link', riskConfig.confirmedScamDomains);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : 0,
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為高風險連結'
+            },
+            domainAnalysis: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: isConfirmedScam ? '此付款交易頁已列入人工確認高風險網域，請勿輸入個資、帳密或付款資料' : '網域命名結構無明顯異常'
+            }
+        }
+    });
+
+    assert.equal(parsed.hostname, 'a-family-tw.geatzs.link');
+    assert.equal(parsed.pathname, '/ht3/tx.php');
+    assert.equal(parsed.searchParams.get('ClickID'), 'hm12968');
+    assert.equal(parsed.searchParams.get('paymentType'), '2');
+    assert.equal(isConfirmedScam, true);
+    assert.equal(isRootConfirmedScam, false);
+    assert.equal(scanData.riskScore, 100);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此付款交易頁已列入人工確認高風險網域，請勿輸入個資、帳密或付款資料']);
+});
+
 test('人工確認詐騙的 Weebly 子網域應直接高風險，一般 Weebly 子網域保留免費架站警示', () => {
     const scamDomain = 'lineeshopping.weebly.com';
     const genericDomain = 'brand-demo.weebly.com';
