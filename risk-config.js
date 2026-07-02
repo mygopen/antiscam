@@ -72,7 +72,7 @@ window.RISK_CONFIG = {
     safeCommercePlatforms: [
         'shoplineapp.com', 'cyberbiz.co', 'meepshoper.com', 'waca.tw',
         'waca.ec', 'waca.store', 'easystore.co', '91app.com', 'qdm.tw',
-        'boutir.com', 'myshopify.com'
+        'boutir.com', 'myshopify.com', 'quickper.com'
     ],
     highRiskRegistrars: [
         'namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy',
@@ -194,7 +194,7 @@ window.RISK_CONFIG = {
         'cdnjs.com', 'hotjar.com', 'clarity.ms', 'yandex.ru',
         'ecpay.com.tw', 'newebpay.com', 'spgateway.com', 'opay.tw',
         'payuni.com.tw', 'paypal.com', 'shoplineapp.com', 'myshopify.com',
-        'woocommerce.com'
+        'quickper.com', 'woocommerce.com'
     ],
     protectedBrands: [
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },

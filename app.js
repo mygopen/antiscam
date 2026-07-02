@@ -945,7 +945,7 @@ const { useState, useEffect, useRef } = React;
                 'woocommerce', 'wc-cart-fragments', 'wp-content/plugins/woocommerce',
                 'shopify', 'cdn.shopify.com', 'shopline', 'shoplineapp', 'cyberbiz',
                 '91app', 'waca', 'qdm', 'meepshop', 'easystore', 'opencart',
-                'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
+                'quickper', 'cdn.quickper.com', 'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
             ];
             const cartFootprints = [
                 'add-to-cart', 'add_to_cart', 'wc_add_to_cart', 'cart-fragments',
@@ -1916,10 +1916,10 @@ const { useState, useEffect, useRef } = React;
             // 只要符合任一項特徵，且不是常見的 www 等，就判定為高風險亂碼
             const isHighEntropy = (isLongGibberish || lacksVowels || hasConsecutiveConsonants) && subdomainPart !== 'www';
             const isSuspiciousRootLabel = rootLabel.length >= 8 &&
-                !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
+                !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify', 'quickper'].includes(rootLabel) &&
                 (!hasReadableVowelPattern(rootLabel) || rootEntropy > 3.2 || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(rootLabel));
             const isSuspiciousLandingRootLabel = rootLabel.length >= 10 &&
-                !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
+                !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify', 'quickper'].includes(rootLabel) &&
                 (rootEntropy > 3.0 || /[qxzj]/i.test(rootLabel) || /[bcdfghjklmnpqrstvwxz]{3,}/i.test(rootLabel));
             const disposableRoot = analyzeDisposableRootLabel(rootLabel);
             const hasDisposableRootLabel = !isWhitelisted && disposableRoot.matched;

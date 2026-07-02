@@ -1439,10 +1439,10 @@ function hasSuspiciousShoppingLandingUrlRisk(rawUrl, {
     const rootEntropy = calculateEntropy(rootLabel);
     const disposableRoot = analyzeDisposableRootLabel(rootLabel);
     const isSuspiciousRootLabel = rootLabel.length >= 8 &&
-        !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
+        !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify', 'quickper'].includes(rootLabel) &&
         (!hasReadableVowelPattern(rootLabel) || rootEntropy > 3.2 || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(rootLabel));
     const isSuspiciousLandingRootLabel = rootLabel.length >= 10 &&
-        !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify'].includes(rootLabel) &&
+        !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify', 'quickper'].includes(rootLabel) &&
         (rootEntropy > 3.0 || /[qxzj]/i.test(rootLabel) || /[bcdfghjklmnpqrstvwxz]{3,}/i.test(rootLabel));
     const suspiciousSubdomain = analyzeSuspiciousSubdomain(domain);
     const defaultLandingParams = ['ldtag_cl=', 'lt_r=', 'fbclid=', 'gclid=', 'utm_', 'click_id=', 'campaign=', 'ad_id=', 'clickid=', 'cid=', 'aff_id='];
@@ -1653,7 +1653,7 @@ function analyzeEcommerceTrustSignals({ html = '', url }) {
         'woocommerce', 'wc-cart-fragments', 'wp-content/plugins/woocommerce',
         'shopify', 'cdn.shopify.com', 'shopline', 'shoplineapp', 'cyberbiz',
         '91app', 'waca', 'qdm', 'meepshop', 'easystore', 'opencart',
-        'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
+        'quickper', 'cdn.quickper.com', 'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
     ];
     const cartFootprints = [
         'add-to-cart', 'add_to_cart', 'wc_add_to_cart', 'cart-fragments',
@@ -2512,6 +2512,40 @@ test('The AXIOM 安德家品官方 SHOPLINE 購物站應視為可信電商且不
     assert.equal(override.riskScore, 0);
     assert.match(brandApiSource, /"安德國際商貿股份有限公司": \["theaxiomstore\.com"\]/);
     assert.match(brandApiSource, /domain: "theaxiomstore\.com"/);
+});
+
+test('Quickper 快電商應作為正規電商平台足跡，但不作無條件硬白名單', () => {
+    const merchantUrl = 'https://andy-c2cbuy.quickper.com/products/example?utm_source=facebook&fbclid=abc';
+    const sanitized = sanitizeUrlForRiskScoring(merchantUrl);
+    const parsed = new URL(sanitized.href);
+    const platformPage = `
+        <title>Quickper Inc. 超級電商｜快電商 C2C BUY</title>
+        <meta name="description" content="Quickper Checkout 是社交電商系統與網路開店服務">
+        <script src="https://cdn.quickper.com/static/js/app.js"></script>
+        <a href="/cart">購物車</a>
+        <a href="/checkout">結帳</a>
+        <a href="/contact">聯絡我們</a>
+        <p>公司名稱 朝星國際有限公司 客服信箱 service@example.com</p>
+        <p>退換貨政策 服務條款 隱私權政策 付款方式 配送方式</p>
+    `;
+    const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: platformPage });
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_source'].sort());
+    assert.equal(parsed.hostname, 'andy-c2cbuy.quickper.com');
+    assert.equal(matchesDomainList(parsed.hostname, riskConfig.safeCommercePlatforms), true);
+    assert.equal(riskConfig.safeCommercePlatforms.includes('quickper.com'), true);
+    assert.equal(riskConfig.trustedResourceDomains.includes('quickper.com'), true);
+    assert.equal(riskConfig.trustedEcommerceRootDomains.includes('quickper.com'), false);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), false);
+    assert.equal(ecommerce.matched, true);
+    assert.ok(ecommerce.score >= 50);
+    assert.ok(ecommerce.categories.includes('platform'));
+    assert.ok(ecommerce.categories.includes('cart'));
+    assert.ok(ecommerce.categories.includes('contact'));
+    assert.ok(ecommerce.categories.includes('policy'));
+    assert.match(appSource, /cdn\.quickper\.com/);
+    assert.match(appSource, /quickper/);
 });
 
 test('風險評分前應移除標準行銷追蹤參數並保留必要商品與交易參數', () => {
