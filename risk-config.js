@@ -40,7 +40,8 @@ window.RISK_CONFIG = {
         'lineeshopping.weebly.com',
         'usa.fastgetmove.com',
         'kk78lin.org',
-        'a-family-tw.geatzs.link'
+        'a-family-tw.geatzs.link',
+        'calm-quokka-a2fe57.netlify.app'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',

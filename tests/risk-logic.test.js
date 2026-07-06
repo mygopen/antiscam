@@ -29,6 +29,18 @@ function isCloudflarePagesDevHostname(hostname) {
     return cleanHostname !== 'pages.dev' && matchesDomainList(cleanHostname, ['pages.dev']);
 }
 
+function isNetlifyAppHostname(hostname) {
+    const cleanHostname = normalizeInputHostname(hostname).replace(/^www\./, '');
+    return cleanHostname !== 'netlify.app' && matchesDomainList(cleanHostname, ['netlify.app']);
+}
+
+function hasGeneratedNetlifySubdomain(hostname) {
+    if (!isNetlifyAppHostname(hostname)) return false;
+    const projectLabel = normalizeInputHostname(hostname).split('.')[0] || '';
+    return /^[a-z]+-[a-z]+-[a-z0-9]{5,}$/i.test(projectLabel) ||
+        /^[a-z0-9]+-[a-z0-9]+-[a-z0-9]{5,}$/i.test(projectLabel);
+}
+
 function isWeeblyHostedHostname(hostname) {
     const cleanHostname = normalizeInputHostname(hostname).replace(/^www\./, '');
     return cleanHostname !== 'weebly.com' && matchesDomainList(cleanHostname, ['weebly.com']);
@@ -565,6 +577,7 @@ function applyTrustedCommercialWeakSignalCap({
     isSocialMedia = false,
     hasTrustedCommercialWeakSignalContext = false,
     hasCloudflarePagesDevBaselineRisk = false,
+    hasNetlifyAppBaselineRisk = false,
     hasWeeblyHostedBaselineRisk = false
 }) {
     if (
@@ -572,6 +585,7 @@ function applyTrustedCommercialWeakSignalCap({
         !isWhitelisted &&
         !isSocialMedia &&
         !hasCloudflarePagesDevBaselineRisk &&
+        !hasNetlifyAppBaselineRisk &&
         !hasWeeblyHostedBaselineRisk &&
         riskScore >= 30 &&
         hasTrustedCommercialWeakSignalContext
@@ -1367,6 +1381,20 @@ function hasCloudflarePagesDevRandomRisk(hostname) {
         );
 
     return isCloudflarePagesDevHostname(hostname) &&
+        hasRandomSubdomain;
+}
+
+function hasNetlifyAppRandomRisk(hostname) {
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain(hostname);
+    const hasRandomSubdomain = hasGeneratedNetlifySubdomain(hostname) ||
+        hasHighEntropySubdomain(hostname) ||
+        suspiciousSubdomain.reasons.some(reason =>
+            reason.includes('短隨機') ||
+            reason.includes('不易讀') ||
+            reason.includes('純數字')
+        );
+
+    return isNetlifyAppHostname(hostname) &&
         hasRandomSubdomain;
 }
 
@@ -4308,4 +4336,52 @@ test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應
     assert.ok(randomScanData.summaryReasons[0].includes('Cloudflare Pages'));
     assert.match(appSource, /hasCloudflarePagesDevRandomRisk/);
     assert.match(appSource, /isFallbackCloudflarePagesRandomRisk/);
+});
+
+test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認案例應升為高風險', () => {
+    const readableDomain = 'brand-demo.netlify.app';
+    const suspiciousDomain = 'calm-quokka-a2fe57.netlify.app';
+    const suspiciousSubdomain = analyzeSuspiciousSubdomain(suspiciousDomain);
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    const baselineScore = applyTrustedCommercialWeakSignalCap({
+        riskScore: 30,
+        hasTrustedCommercialWeakSignalContext: true,
+        hasNetlifyAppBaselineRisk: isNetlifyAppHostname(readableDomain)
+    });
+    const randomNetlifyRisk = hasNetlifyAppRandomRisk(suspiciousDomain);
+    const isConfirmedScam = matchesDomainList(suspiciousDomain, riskConfig.confirmedScamDomains);
+    const randomScanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : (randomNetlifyRisk ? 75 : 0),
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此 Netlify 預設子網域已由人工確認為高風險連結'
+            },
+            domainAnalysis: {
+                status: randomNetlifyRisk ? 'danger' : 'safe',
+                details: `Netlify 免費/預設託管子網域「${suspiciousDomain}」使用隨機字詞與代碼組合`
+            },
+            entropy: {
+                status: hasHighEntropySubdomain(suspiciousDomain) ? 'danger' : 'safe',
+                details: '子網域名稱具臨時專案或機器生成特徵'
+            }
+        }
+    });
+
+    assert.equal(matchesDomainList(readableDomain, riskConfig.freeHostingProviders), true);
+    assert.equal(isNetlifyAppHostname('netlify.app'), false);
+    assert.equal(isNetlifyAppHostname(readableDomain), true);
+    assert.equal(matchesDomainList('notnetlify.app', ['netlify.app']), false);
+    assert.equal(baselineScore, 30);
+    assert.equal(hasNetlifyAppRandomRisk(readableDomain), false);
+    assert.equal(hasGeneratedNetlifySubdomain(suspiciousDomain), true);
+    assert.equal(randomNetlifyRisk, true);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(randomScanData.riskScore, 100);
+    assert.deepEqual(randomScanData.summaryReasons, ['人工確認詐騙網域', `Netlify 免費/預設託管子網域「${suspiciousDomain}」使用隨機字詞與代碼組合`, '網址含高隨機亂碼特徵']);
+    assert.equal(suspiciousSubdomain.matched, true);
+    assert.match(appSource, /hasNetlifyAppRandomRisk/);
+    assert.match(appSource, /isFallbackNetlifyAppRandomRisk/);
+    assert.match(appSource, /Netlify 免費\/預設託管子網域/);
 });

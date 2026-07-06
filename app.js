@@ -317,6 +317,18 @@ const { useState, useEffect, useRef } = React;
             return cleanHostname !== 'pages.dev' && isSameRootDomain(cleanHostname, 'pages.dev');
         };
 
+        const isNetlifyAppHostname = (hostname) => {
+            const cleanHostname = normalizeHostname(hostname);
+            return cleanHostname !== 'netlify.app' && isSameRootDomain(cleanHostname, 'netlify.app');
+        };
+
+        const hasGeneratedNetlifySubdomain = (hostname) => {
+            if (!isNetlifyAppHostname(hostname)) return false;
+            const projectLabel = normalizeHostname(hostname).split('.')[0] || '';
+            return /^[a-z]+-[a-z]+-[a-z0-9]{5,}$/i.test(projectLabel) ||
+                /^[a-z0-9]+-[a-z0-9]+-[a-z0-9]{5,}$/i.test(projectLabel);
+        };
+
         const isEmailTrackingRedirector = (hostname) => {
             const trackers = getRiskList('emailTrackingRedirectors');
             return trackers.some(domain => isSameRootDomain(hostname, domain));
@@ -1843,6 +1855,7 @@ const { useState, useEffect, useRef } = React;
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => isSameRootDomain(domain, p));
             const isCloudflarePagesDev = isCloudflarePagesDevHostname(domain);
+            const isNetlifyApp = isNetlifyAppHostname(domain);
             const isWeeblyHostedSite = domain !== 'weebly.com' && isSameRootDomain(domain, 'weebly.com');
             const trancoRank = trancoData?.rank || null;
             const trancoStatus = trancoData?.status || 'unavailable';
@@ -1887,6 +1900,8 @@ const { useState, useEffect, useRef } = React;
                     trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
                     trafficDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，任何人都可建立專案頁；需視為使用者自建臨時站，而非 Cloudflare 官方內容。';
+                } else if (isNetlifyApp) {
+                    trafficDetails = '「netlify.app」是 Netlify 免費/預設託管子網域，代表使用者自建臨時站而非 Netlify 官方內容；若專案名呈現隨機字詞與代碼組合，需提高警覺。';
                 } else if (isWeeblyHostedSite) {
                     trafficDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，代表使用者自建網站而非 Weebly 官方內容；需確認品牌、付款與客服資訊是否可信。';
                 } else {
@@ -2023,8 +2038,9 @@ const { useState, useEffect, useRef } = React;
                 }
             })();
             const hasCloudflarePagesDevBaselineRisk = !isWhitelisted && isCloudflarePagesDev;
+            const hasNetlifyAppBaselineRisk = !isWhitelisted && isNetlifyApp;
             const hasWeeblyHostedBaselineRisk = !isWhitelisted && isWeeblyHostedSite;
-            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasWeeblyHostedBaselineRisk;
+            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasNetlifyAppBaselineRisk || hasWeeblyHostedBaselineRisk;
             const hasCloudflarePagesDevRandomSubdomain = isHighEntropy ||
                 suspiciousSubdomain.reasons.some(reason =>
                     reason.includes('短隨機') ||
@@ -2033,6 +2049,15 @@ const { useState, useEffect, useRef } = React;
                 );
             const hasCloudflarePagesDevRandomRisk = hasCloudflarePagesDevBaselineRisk &&
                 (hasCloudflarePagesDevRandomSubdomain || hasRandomizedPathToken || hasSuspiciousParams || hasNestedSuspiciousParams);
+            const hasNetlifyAppRandomSubdomain = hasGeneratedNetlifySubdomain(domain) ||
+                isHighEntropy ||
+                suspiciousSubdomain.reasons.some(reason =>
+                    reason.includes('短隨機') ||
+                    reason.includes('不易讀') ||
+                    reason.includes('純數字')
+                );
+            const hasNetlifyAppRandomRisk = hasNetlifyAppBaselineRisk &&
+                (hasNetlifyAppRandomSubdomain || hasRandomizedPathToken || hasSuspiciousParams || hasNestedSuspiciousParams);
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
             const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
             const isTrustedPaymentGatewayOrApiEndpoint = hasTrustedAllowlistOverride &&
@@ -2341,6 +2366,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousTldAdLandingRisk ||
                 hasFreeHostingSensitiveLinkRisk ||
                 hasCloudflarePagesDevRandomRisk ||
+                hasNetlifyAppRandomRisk ||
                 hasRegulatedTobaccoSalesSignal ||
                 hasShoppingLineContactRisk;
 
@@ -2361,6 +2387,7 @@ const { useState, useEffect, useRef } = React;
                 hasUaCloakingRisk ||
                 hasSuspiciousTldAdLandingRisk ||
                 hasCloudflarePagesDevRandomRisk ||
+                hasNetlifyAppRandomRisk ||
                 hasDisposableShoppingLandingRisk ||
                 hasDisposableRootPhishingRisk ||
                 hasDisposableUnreadablePageRisk ||
@@ -2586,7 +2613,7 @@ const { useState, useEffect, useRef } = React;
                             riskScore += 30;
                         }
                     }
-                    if (hasCloudflarePagesDevRandomRisk) {
+                    if (hasCloudflarePagesDevRandomRisk || hasNetlifyAppRandomRisk) {
                         riskScore = Math.max(riskScore, 75);
                     } else if (hasFreeHostingPlatformBaselineRisk) {
                         riskScore = Math.max(riskScore, 30);
@@ -2657,6 +2684,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
                 hasCloudflarePagesDevRandomRisk ||
+                hasNetlifyAppRandomRisk ||
                 hasDisposableShoppingLandingRisk ||
                 hasDisposableUnreadablePageRisk ||
                 hasShoppingLandingUrlRisk ||
@@ -2701,6 +2729,7 @@ const { useState, useEffect, useRef } = React;
                     hasSuspiciousEmailTrackingHost ||
                     hasDeepSubdomainPhishingPattern ||
                     hasCloudflarePagesDevRandomRisk ||
+                    hasNetlifyAppRandomRisk ||
                     hasDisposableShoppingLandingRisk ||
                     hasDisposableUnreadablePageRisk ||
                     hasShoppingLandingUrlRisk ||
@@ -2855,6 +2884,9 @@ const { useState, useEffect, useRef } = React;
             } else if (hasCloudflarePagesDevRandomRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到 Cloudflare Pages 免費部署子網域「${domain}」使用短亂碼/不可讀命名（${suspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}），常見於臨時釣魚或免洗詐騙頁。`;
+            } else if (hasNetlifyAppRandomRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到 Netlify 免費/預設託管子網域「${domain}」使用隨機字詞與代碼組合（${suspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱具臨時專案特徵'}），正常知名企業、銀行、政府機關或大型電商通常不會用這類臨時網址服務客戶。`;
             } else if (isSuspiciousTLD) {
                 domainAnalysisStatus = 'warning';
                 domainAnalysisDetails = '網域使用較常被濫用的後綴，需搭配其他風險指標判斷';
@@ -2871,6 +2903,8 @@ const { useState, useEffect, useRef } = React;
                     domainAnalysisDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
                     domainAnalysisDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
+                } else if (isNetlifyApp) {
+                    domainAnalysisDetails = '「netlify.app」是 Netlify 免費/預設託管子網域，代表使用者自建臨時站而非 Netlify 官方網站；未取得更多可信佐證前至少列為中度風險。';
                 } else if (isWeeblyHostedSite) {
                     domainAnalysisDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，常被用於快速建立一次性活動頁；未取得品牌與交易佐證前至少列為中度風險。';
                 } else {
@@ -3122,6 +3156,7 @@ const { useState, useEffect, useRef } = React;
             const fallbackDomain = normalizeHostname(targetDomain);
             const isFallbackConfirmedScam = isConfirmedScamDomain(fallbackDomain);
             const isFallbackCloudflarePagesDev = isCloudflarePagesDevHostname(fallbackDomain);
+            const isFallbackNetlifyApp = isNetlifyAppHostname(fallbackDomain);
             const isFallbackWeeblyHostedSite = fallbackDomain !== 'weebly.com' && isSameRootDomain(fallbackDomain, 'weebly.com');
             const fallbackSubdomainPart = fallbackDomain.split('.')[0] || '';
             const fallbackSuspiciousSubdomain = analyzeSuspiciousSubdomain(fallbackDomain);
@@ -3140,26 +3175,31 @@ const { useState, useEffect, useRef } = React;
                 );
             const isFallbackCloudflarePagesRandomRisk = isFallbackCloudflarePagesDev &&
                 fallbackCloudflarePagesRandomSubdomain;
+            const isFallbackNetlifyAppRandomRisk = isFallbackNetlifyApp &&
+                (hasGeneratedNetlifySubdomain(fallbackDomain) || fallbackCloudflarePagesRandomSubdomain);
             const fallbackDetails = '檢測流程暫時中斷，系統已避免頁面當掉；請稍後重試，或先不要在此網址輸入個資。';
             const fallbackConfirmedScamDetails = '此網域已由人工確認為詐騙連結；即使深度掃描暫時中斷，仍直接列為高度風險。';
             const fallbackAdLandingDetails = `檢測流程逾時或中斷，但原始網址含 ${removedTrackingParams.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且網域使用可疑後綴；先以高風險處理。`;
             const fallbackCloudflarePagesDetails = isFallbackCloudflarePagesRandomRisk
                 ? `🚨 檢測流程逾時或中斷，但 ${fallbackDomain} 是 Cloudflare Pages 免費部署子網域，且子網域呈現短亂碼/不可讀命名（${fallbackSuspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}）；先以高風險處理。`
                 : '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
+            const fallbackNetlifyDetails = isFallbackNetlifyAppRandomRisk
+                ? `🚨 檢測流程逾時或中斷，但 ${fallbackDomain} 是 Netlify 免費/預設託管子網域，且專案名呈現隨機字詞與代碼組合（${fallbackSuspiciousSubdomain.reasons.slice(0, 3).join('、') || '臨時專案命名特徵'}）；先以高風險處理。`
+                : '「netlify.app」是 Netlify 免費/預設託管子網域，代表使用者自建臨時站而非 Netlify 官方網站；未取得更多可信佐證前至少列為中度風險。';
             const fallbackWeeblyDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，代表使用者自建網站而非 Weebly 官方內容；即使深度掃描暫時中斷，也先維持中度風險並建議查證品牌、付款與客服資訊。';
             const fallbackRiskScore = isFallbackConfirmedScam
                 ? 100
                 : (isFallbackSuspiciousAdLanding
                 ? 85
-                : (isFallbackCloudflarePagesRandomRisk ? 85 : 30));
-            const fallbackDomainStatus = isFallbackConfirmedScam || isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk
+                : ((isFallbackCloudflarePagesRandomRisk || isFallbackNetlifyAppRandomRisk) ? 85 : 30));
+            const fallbackDomainStatus = isFallbackConfirmedScam || isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk || isFallbackNetlifyAppRandomRisk
                 ? 'danger'
                 : 'warning';
             const fallbackDomainDetails = isFallbackConfirmedScam
                 ? fallbackConfirmedScamDetails
                 : (isFallbackSuspiciousAdLanding
                 ? fallbackAdLandingDetails
-                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : (isFallbackWeeblyHostedSite ? fallbackWeeblyDetails : fallbackDetails)));
+                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : (isFallbackNetlifyApp ? fallbackNetlifyDetails : (isFallbackWeeblyHostedSite ? fallbackWeeblyDetails : fallbackDetails))));
             return {
                 domain: targetDomain,
                 scannedUrl: fullUrl,
