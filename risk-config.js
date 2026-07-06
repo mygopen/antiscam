@@ -30,7 +30,7 @@ window.RISK_CONFIG = {
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
         'mababy.com', 'sunpay.com.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
-        'ntpcart-sy2026.com'
+        'ntpcart-sy2026.com', 'pxmartevent.com.tw'
     ],
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com'
