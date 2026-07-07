@@ -161,6 +161,10 @@ function isTrustedFinancialServiceDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.trustedFinancialServiceDomains);
 }
 
+function isTrustedGovernmentServiceDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.trustedGovernmentServiceDomains);
+}
+
 function isGlobalPaymentGatewayDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
 }
@@ -228,6 +232,7 @@ function isVerifiedSafeRootDomain(hostname, whitelist = []) {
         isTrustedEcommerceDomain(hostname) ||
         isTrustedTaiwanServiceDomain(hostname) ||
         isTrustedFinancialServiceDomain(hostname) ||
+        isTrustedGovernmentServiceDomain(hostname) ||
         matchesDomainList(hostname, whitelist);
 }
 
@@ -1988,6 +1993,45 @@ test('台灣 gov.tw 憑證近期核發不應被註冊時間卡片拉高風險', 
     assert.equal(ageStatus, 'safe');
     assert.equal(scanData.riskScore, 0);
     assert.deepEqual(scanData.summaryReasons, []);
+});
+
+test('印尼移民局 All Indonesia 官方入境系統應視為可信政府服務', () => {
+    const rawUrl = 'https://allindonesia.imigrasi.go.id/arrival-card-submission/retrieve';
+    const parsed = new URL(rawUrl);
+    const isTrustedGovernmentRoot = isTrustedGovernmentServiceDomain(parsed.hostname);
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname);
+    const hasOfficialFlowSignal = hasOfficialFlowPath(rawUrl);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : 80,
+        isTrustedAllowlist: isWhitelisted,
+        checks: {
+            domainAnalysis: {
+                status: isWhitelisted ? 'safe' : 'warning',
+                details: isWhitelisted ? '受信賴政府官方服務網域：imigrasi.go.id' : '網域命名結構無明顯異常'
+            },
+            officialFlowPath: {
+                status: hasOfficialFlowSignal ? 'info' : 'safe',
+                details: hasOfficialFlowSignal ? '官方入境申報流程頁面，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑'
+            },
+            formFields: {
+                status: isWhitelisted ? 'info' : 'warning',
+                details: '頁面可能要求護照、Email OTP 或入境申報資料'
+            },
+            siteContent: {
+                status: 'safe',
+                details: isWhitelisted ? '受信賴政府官方服務網域：imigrasi.go.id' : '網站內容具高風險特徵'
+            }
+        }
+    });
+
+    assert.ok(riskConfig.trustedGovernmentServiceDomains.includes('imigrasi.go.id'));
+    assert.equal(isTrustedGovernmentRoot, true);
+    assert.equal(isWhitelisted, true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname), true);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('imigrasi.go.id.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-imigrasi.go.id'), false);
 });
 
 test('社群平台使用設定檔清單做完全符合與子網域符合', () => {

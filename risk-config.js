@@ -35,6 +35,9 @@ window.RISK_CONFIG = {
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com'
     ],
+    trustedGovernmentServiceDomains: [
+        'imigrasi.go.id'
+    ],
     confirmedScamDomains: [
         'jinguan.web.app',
         'lineeshopping.weebly.com',
