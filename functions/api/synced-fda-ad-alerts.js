@@ -4,14 +4,38 @@ export const fdaAdSyncMetadata = {
     "schemaVersion": 1,
     "source": "衛生福利部食品藥物管理署",
     "sourceUrl": "https://www.fda.gov.tw/TC/news.aspx?cid=5085",
-    "generatedAt": "2026-07-01T06:40:07.345Z",
+    "generatedAt": "2026-07-07T21:12:56.638Z",
     "maxPages": 20,
     "recordsFetched": 200,
     "detailsFetched": 200,
-    "recordsWithDomains": 147
+    "recordsWithDomains": 146
 };
 
 export const syncedFdaAdAlerts = [
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.cbdnatureforce.com/all-products)涉嫌違規廣告產品：含CBD之食品",
+        "productName": "含CBD之食品",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "cbdnatureforce.com",
+        "rootDomains": [
+            "cbdnatureforce.com"
+        ],
+        "urls": [
+            "https://www.cbdnatureforce.com/all-products"
+        ],
+        "publishedDate": "2026-07-02",
+        "monitoredDate": "",
+        "issuingUnit": "食品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31592",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31592"
+    },
     {
         "source": "衛生福利部食品藥物管理署",
         "category": "涉嫌違規廣告產品",
@@ -3491,53 +3515,5 @@ export const syncedFdaAdAlerts = [
         "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30676",
         "syncedFrom": "fda-puffery-ads",
         "recordId": "30676"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：潤姬桃子",
-        "productName": "潤姬桃子",
-        "productCategory": "食品",
-        "siteName": "無",
-        "rootDomain": "special-newseeds.com",
-        "rootDomains": [
-            "special-newseeds.com"
-        ],
-        "urls": [
-            "https://special-newseeds.com/uhmk/item/uhmktwit240704v104hcn.php?waxc=UHdg52anNXbGSzHy.7whg4cn"
-        ],
-        "publishedDate": "2024-07-18",
-        "monitoredDate": "2024-07-05",
-        "issuingUnit": "新北市政府衛生局",
-        "violationType": "違反食品安全衛生管理法第28條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "......凹凸的痘疤 色素沉澱的斑點 臉頰的汗斑......除不掉的暗沉......法令紋 皺紋．下垂......擁有臨床試驗證明....只要服用潤澤有效成分的新世代肌膚保養......臨床實驗確認",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113P1066&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113P1066"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：日本骨痛片",
-        "productName": "日本骨痛片",
-        "productCategory": "食品",
-        "siteName": "https://aiowoo.com/home#",
-        "rootDomain": "aiowoo.com",
-        "rootDomains": [
-            "aiowoo.com"
-        ],
-        "urls": [
-            "https://aiowoo.com/1664000875?fbclid=lwAR2lu97m3jdi16QdXjlErf-pq70tT_AAIYvgp9qaxXyYcYctzi7irbYyS4c"
-        ],
-        "publishedDate": "2024-06-27",
-        "monitoredDate": "2024-06-20",
-        "issuingUnit": "桃園市政府衛生局",
-        "violationType": "違反食品安全衛生管理法第28條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "……治骨新療法/全球網路首發，不論風濕、類風濕、頸椎病、腰間盤凸出、肩周炎、骨質增生、膝關節炎病等百萬種骨病，一用即靈!……",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W5095&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W5095"
     }
 ];
