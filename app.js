@@ -962,7 +962,8 @@ const { useState, useEffect, useRef } = React;
                 'woocommerce', 'wc-cart-fragments', 'wp-content/plugins/woocommerce',
                 'shopify', 'cdn.shopify.com', 'shopline', 'shoplineapp', 'cyberbiz',
                 '91app', 'waca', 'qdm', 'meepshop', 'easystore', 'opencart',
-                'quickper', 'cdn.quickper.com', 'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
+                'quickper', 'cdn.quickper.com', '1shop', '1shop一頁購物',
+                'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
             ];
             const cartFootprints = [
                 'add-to-cart', 'add_to_cart', 'wc_add_to_cart', 'cart-fragments',

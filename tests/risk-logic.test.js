@@ -205,6 +205,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
             ]
         },
         {
+            domain: 'tristahandmade.com',
+            allowedBrandTokens: ['trista', 'tristahandmade', '微笑女孩手作革物', '手作革物', '登峯皮飾']
+        },
+        {
+            domain: 'szshop.com.tw',
+            allowedBrandTokens: ['szshop', 'sz shop', '富影貿易', '攝影器材', '攝影主機']
+        },
+        {
             domain: 'sunpay.com.tw',
             allowedBrandTokens: [
                 'sunpay', '紅陽科技', '紅陽支付', '紅陽',
@@ -1686,7 +1694,8 @@ function analyzeEcommerceTrustSignals({ html = '', url }) {
         'woocommerce', 'wc-cart-fragments', 'wp-content/plugins/woocommerce',
         'shopify', 'cdn.shopify.com', 'shopline', 'shoplineapp', 'cyberbiz',
         '91app', 'waca', 'qdm', 'meepshop', 'easystore', 'opencart',
-        'quickper', 'cdn.quickper.com', 'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
+        'quickper', 'cdn.quickper.com', '1shop', '1shop一頁購物',
+        'magento', 'prestashop', 'ecpay', 'newebpay', '綠界', '藍新'
     ];
     const cartFootprints = [
         'add-to-cart', 'add_to_cart', 'wc_add_to_cart', 'cart-fragments',
@@ -2410,7 +2419,8 @@ test('大型電商根網域子網域應直接視為可信 allowlist 並維持低
         'https://giftcard.uni-prosperity.com.tw/giftcard/LIbqV9Tt0m',
         'https://lioncrew.uni-lions.com.tw/products/ulc080800002603?utm_source=fb',
         'https://www.sunsetgoods.tw/SalePage/Index/11682153?utm_medium=ads&utm_source=facebook&utm_campaign=0420_%E5%B0%8F%E6%96%B0%E5%8D%8A%E6%A9%9F%E6%A2%B0%E7%A9%8D%E6%9C%A8&fbclid=IwdGRjcASR13pleHRuA2FlbQIxMQBzcnRjBmFwcF9pZAo2NjI4NTY4Mzc5AAEet5ADCFi3U68SO2IQKkom8d3kZJfjwFoKOs-sk6DbyUyK1EWgHMhLyJOd6VA_aem_QqY-u0aI0sNz0rX2btxnEA',
-        'https://www.theaxiomstore.com/?utm_source=facebook&fbclid=abc123'
+        'https://www.theaxiomstore.com/?utm_source=facebook&fbclid=abc123',
+        'https://www.szshop.com.tw/products/insta360?utm_source=facebook&fbclid=abc123'
     ];
 
     trustedEcUrls.forEach(rawUrl => {
@@ -2584,6 +2594,137 @@ test('The AXIOM 安德家品官方 SHOPLINE 購物站應視為可信電商且不
     assert.equal(override.riskScore, 0);
     assert.match(brandApiSource, /"安德國際商貿股份有限公司": \["theaxiomstore\.com"\]/);
     assert.match(brandApiSource, /domain: "theaxiomstore\.com"/);
+});
+
+test('Trista 微笑女孩手作革物官方 1shop 購物站應視為可信台灣電商', () => {
+    const rawUrl = 'https://www.tristahandmade.com/products/trista%E5%BE%AE%E7%AC%91%E5%A5%B3%E5%AD%A9%E6%89%8B%E4%BD%9C%E9%9D%A9%E7%89%A9%E8%AB%BE%E4%BA%9E%E9%80%9A%E5%8B%A4%E5%8C%85?utm_source=facebook&fbclid=abc123';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const parts = getDomainParts(parsed.hostname);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageText = `
+        <title>Trista微笑女孩手作革物｜諾亞通勤包</title>
+        <meta name="description" content="Trista 首頁集結真皮包包、真皮皮夾與台灣製手工皮件">
+        <link rel="canonical" href="https://www.tristahandmade.com/products/trista">
+        <a href="/home">首頁</a><a href="/products">所有商品</a><a href="/cart">購物車</a>
+        <button>加入購物車</button><button>直接結帳</button>
+        <p>付款方式 配送方式 退換貨政策 服務條款 隱私權政策 門市資訊</p>
+        <p>登峯皮飾企業社 統編:85598514。Trista微笑女孩手作革物 All Rights Reserved.</p>
+        <p>本系統由 1shop一頁購物 維護</p>
+        <form><input placeholder="收件人"><input placeholder="聯絡電話"><input placeholder="Email"><button>送出</button></form>
+    `;
+    const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: pageText });
+    const shoppingSignals = analyzeShoppingScamSignals({ html: pageText, url: sanitized.href });
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname: parsed.hostname,
+        text: pageText
+    });
+    const fakeTrista = checkBrandSimilarity('tristahandmade-discount.example.shop', []);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isVerifiedSafeRootDomain(parsed.hostname, []) ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isVerifiedSafeRootDomain(parsed.hostname, []),
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerce.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: 'safe', details: '受信賴台灣手作皮件官方購物網域：tristahandmade.com' }
+        }
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.equal(sanitized.href, 'https://www.tristahandmade.com/products/trista%E5%BE%AE%E7%AC%91%E5%A5%B3%E5%AD%A9%E6%89%8B%E4%BD%9C%E9%9D%A9%E7%89%A9%E8%AB%BE%E4%BA%9E%E9%80%9A%E5%8B%A4%E5%8C%85');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_source'].sort());
+    assert.equal(parts.registrableDomain, 'tristahandmade.com');
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('tristahandmade.com'));
+    assert.ok(matchesDomainList(parsed.hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, 'Trista微笑女孩手作革物'), true);
+    assert.equal(ecommerce.matched, true);
+    assert.ok(ecommerce.categories.includes('platform'));
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(fakeTrista.matched, true);
+    assert.equal(fakeTrista.brandName, 'Trista微笑女孩手作革物');
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('tristahandmade.com.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-tristahandmade.com'), false);
+    assert.match(brandApiSource, /"Trista微笑女孩手作革物": \["tristahandmade\.com"\]/);
+    assert.match(brandApiSource, /domain: "tristahandmade\.com"/);
+});
+
+test('SZ SHOP 官方 SHOPLINE 3C 攝影配件購物站應視為可信台灣電商', () => {
+    const rawUrl = 'https://www.szshop.com.tw/products/insta360-x5-accessory?utm_source=facebook&fbclid=abc123';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const parts = getDomainParts(parsed.hostname);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageText = `
+        <title>SZ SHOP｜攝影器材/攝影主機與 3C 攝影配件</title>
+        <meta name="description" content="SZ SHOP 專賣攝影器材、攝影主機、Insta360、DJI、GoPro 與運動相機配件">
+        <link rel="canonical" href="https://www.szshop.com.tw/products/insta360-x5-accessory">
+        <script src="https://cdn.shoplineapp.com/assets/storefront.js"></script>
+        <a href="/products">所有商品</a><a href="/cart">購物車</a><a href="/pages/about-us">關於我們</a>
+        <button>加入購物車</button><button>前往結帳</button>
+        <p>付款方式 配送方式 退換貨政策 隱私權政策 服務條款 客服中心</p>
+        <p>SZ SHOP專賣攝影器材/攝影主機。公司名稱：富影貿易有限公司。統一編號：90193773。</p>
+        <p>門市地址：新北市中和區中山路三段114巷19號1樓。客服電話：0920792599。</p>
+    `;
+    const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: pageText });
+    const shoppingSignals = analyzeShoppingScamSignals({ html: pageText, url: sanitized.href });
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname: parsed.hostname,
+        text: pageText
+    });
+    const fakeSzShop = checkBrandSimilarity('szshop-discount.example.shop', []);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isVerifiedSafeRootDomain(parsed.hostname, []) ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isVerifiedSafeRootDomain(parsed.hostname, []),
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerce.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: 'safe', details: '受信賴台灣 3C 攝影配件官方購物網域：szshop.com.tw' }
+        }
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.equal(sanitized.href, 'https://www.szshop.com.tw/products/insta360-x5-accessory');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_source'].sort());
+    assert.equal(parts.registrableDomain, 'szshop.com.tw');
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('szshop.com.tw'));
+    assert.ok(matchesDomainList(parsed.hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, 'SZ SHOP'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, '富影貿易有限公司'), true);
+    assert.equal(ecommerce.matched, true);
+    assert.ok(ecommerce.categories.includes('platform'));
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(fakeSzShop.matched, true);
+    assert.equal(fakeSzShop.brandName, 'SZ SHOP');
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('szshop.com.tw.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-szshop.com.tw'), false);
+    assert.match(brandApiSource, /"富影貿易有限公司": \["szshop\.com\.tw"\]/);
+    assert.match(brandApiSource, /domain: "szshop\.com\.tw"/);
 });
 
 test('Quickper 快電商應作為正規電商平台足跡，但不作無條件硬白名單', () => {

@@ -131,6 +131,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
             ]
         },
         {
+            domain: "tristahandmade.com",
+            allowedBrandTokens: ["trista", "tristahandmade", "微笑女孩手作革物", "手作革物", "登峯皮飾"]
+        },
+        {
+            domain: "szshop.com.tw",
+            allowedBrandTokens: ["szshop", "sz shop", "富影貿易", "攝影器材", "攝影主機"]
+        },
+        {
             domain: "sunpay.com.tw",
             allowedBrandTokens: [
                 "sunpay", "紅陽科技", "紅陽支付", "紅陽",
@@ -201,6 +209,17 @@ const localBrandMap = {
         "AXIOM RETAIL PARTNERS CO., LTD.": ["theaxiomstore.com"],
         "theaxiomstore": ["theaxiomstore.com"],
         "axiomstore": ["theaxiomstore.com"],
+        "Trista": ["tristahandmade.com"],
+        "Trista微笑女孩手作革物": ["tristahandmade.com"],
+        "微笑女孩手作革物": ["tristahandmade.com"],
+        "tristahandmade": ["tristahandmade.com"],
+        "登峯皮飾": ["tristahandmade.com"],
+        "登峯皮飾企業社": ["tristahandmade.com"],
+        "SZ SHOP": ["szshop.com.tw"],
+        "SZSHOP": ["szshop.com.tw"],
+        "szshop": ["szshop.com.tw"],
+        "富影貿易": ["szshop.com.tw"],
+        "富影貿易有限公司": ["szshop.com.tw"],
         "紅陽科技": ["sunpay.com.tw"],
         "紅陽科技股份有限公司": ["sunpay.com.tw"],
         "紅陽支付": ["sunpay.com.tw"],
