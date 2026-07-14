@@ -1877,6 +1877,30 @@ test('白名單包含 PayPal 官方網域並支援 www 子網域', () => {
     assert.equal(matchesDomainList('www.paypal.com', whitelist), true);
 });
 
+test('中央通訊社官方網域應視為可信台灣服務且不被誤判為高風險', () => {
+    const hostname = 'www.cna.com.tw';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 100
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('cna.com.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(isVerifiedSafeRootDomain('cna.com.tw.evil.shop'), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-cna.com.tw'), false);
+});
+
 test('全球頂級可信根網域即使白名單載入失敗也應保留 root override', () => {
     assert.equal(isVerifiedSafeRootDomain('www.paypal.com'), true);
     assert.equal(isVerifiedSafeRootDomain('www.google.com'), true);
