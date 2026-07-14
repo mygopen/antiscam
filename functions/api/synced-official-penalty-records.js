@@ -4,7 +4,7 @@ export const officialPenaltySyncMetadata = {
     "schemaVersion": 1,
     "source": "中華民國公平交易委員會",
     "sourceUrl": "https://www.ftc.gov.tw/internet/main/decision/decisionlist.aspx?mid=11",
-    "generatedAt": "2026-07-06T21:06:13.642Z",
+    "generatedAt": "2026-07-13T20:37:01.053Z",
     "maxPages": 12,
     "recordsFetched": 120,
     "consumerFacingCandidates": 62,
