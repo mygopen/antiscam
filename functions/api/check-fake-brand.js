@@ -139,6 +139,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
             allowedBrandTokens: ["szshop", "sz shop", "富影貿易", "攝影器材", "攝影主機"]
         },
         {
+            domain: "shenghongpaper.com",
+            allowedBrandTokens: ["shenghongpaper", "聖弘紙藝", "聖弘紙藝專賣店", "紙紮屋", "紙紮車"]
+        },
+        {
             domain: "ls-love.org",
             allowedBrandTokens: ["ls-love", "lslove", "磊山慈愛社", "中華磊山慈愛社", "讓愛看見希望"]
         },
@@ -224,6 +228,9 @@ const localBrandMap = {
         "szshop": ["szshop.com.tw"],
         "富影貿易": ["szshop.com.tw"],
         "富影貿易有限公司": ["szshop.com.tw"],
+        "聖弘紙藝": ["shenghongpaper.com"],
+        "聖弘紙藝專賣店": ["shenghongpaper.com"],
+        "shenghongpaper": ["shenghongpaper.com"],
         "DJI": ["dji.com"],
         "DJI Store": ["dji.com"],
         "大疆": ["dji.com"],

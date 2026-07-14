@@ -24,7 +24,8 @@ window.RISK_CONFIG = {
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
         'momoshop.com.tw', 'friday.tw', 'uni-prosperity.com.tw',
         'uni-lions.com.tw', 'sunsetgoods.tw', 'theaxiomstore.com',
-        'tristahandmade.com', 'szshop.com.tw', 'dji.com', 'shopee.tw', 'shp.ee'
+        'tristahandmade.com', 'szshop.com.tw', 'shenghongpaper.com',
+        'dji.com', 'shopee.tw', 'shp.ee'
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
@@ -217,6 +218,7 @@ window.RISK_CONFIG = {
         { name: '安德國際商貿', keywords: ['theaxiomstore', 'axiomstore', 'axiomretailpartners', '安德國際商貿', '安德家品'], domains: ['theaxiomstore.com'] },
         { name: 'Trista微笑女孩手作革物', keywords: ['trista', 'tristahandmade', '微笑女孩手作革物', '手作革物'], domains: ['tristahandmade.com'] },
         { name: 'SZ SHOP', keywords: ['szshop', 'sz shop', '富影貿易', '攝影器材', '攝影主機'], domains: ['szshop.com.tw'] },
+        { name: '聖弘紙藝', keywords: ['shenghongpaper', '聖弘紙藝', '聖弘紙藝專賣店'], domains: ['shenghongpaper.com'] },
         { name: '中華磊山慈愛社', keywords: ['ls-love', 'lslove', '磊山慈愛社', '中華磊山慈愛社', '讓愛看見希望'], domains: ['ls-love.org'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },

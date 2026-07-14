@@ -1823,7 +1823,7 @@ const { useState, useEffect, useRef } = React;
             const trustedEcommerceSiteStatus = {
                 status: 'trusted',
                 code: 200,
-                msg: `受信賴大型電商根網域：${registrableDomain}，略過深度爬取與追蹤參數扣分`,
+                msg: `已驗證電商官方根網域：${registrableDomain}，略過深度爬取與追蹤參數扣分`,
                 hasIframe: false,
                 finalUrl: fullUrl,
                 linkStats: { total: 0, internal: 0, external: 0 },
@@ -2342,7 +2342,7 @@ const { useState, useEffect, useRef } = React;
             addTrustSignal(isConfiguredAllowlistDomain && !isOfficialTaiwanGov, 70, 'Trusted Allowlist Domain');
             addTrustSignal(isHighTraffic, 40, 'Tranco 可查得流量排名');
             addTrustSignal(hasRankedRootDomainFallback, 35, `Tranco 根網域 ${trancoQueriedDomain} 可查得排名，子網域繼承基線信任`);
-            addTrustSignal(isTrustedEcommerceRootDomain, 35, `可信大型電商根網域：${registrableDomain}`);
+            addTrustSignal(isTrustedEcommerceRootDomain, 35, `已驗證電商官方根網域：${registrableDomain}`);
             addTrustSignal(domain.endsWith('.com.tw'), 20, '.com.tw 商業網域具 TWNIC 註冊審核脈絡');
             addTrustSignal((isTrustedTLD || domain.endsWith('.tw')) && domainAgeDays !== null && domainAgeDays >= 365, 25, '台灣常見網域且註冊已超過 1 年');
             addTrustSignal(hasMatureSeoSignals, 25, `成熟 SEO 訊號：${[
@@ -3537,9 +3537,105 @@ const { useState, useEffect, useRef } = React;
             const [input, setInput] = useState('');
             const [isTyping, setIsTyping] = useState(false);
             const messagesEndRef = useRef(null);
+            const floatingBubbleRef = useRef(null);
+            const bubbleDragRef = useRef(null);
+            const bubbleWasDraggedRef = useRef(false);
+            const [bubbleOffset, setBubbleOffset] = useState({ x: 0, y: 0 });
+            const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 767px)').matches);
 
             // 自動捲動到最新訊息
             useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+            useEffect(() => {
+                const mediaQuery = window.matchMedia('(max-width: 767px)');
+                const keepBubbleInsideViewport = () => {
+                    const isMobile = mediaQuery.matches;
+                    setIsMobileViewport(isMobile);
+                    if (!isMobile) {
+                        setBubbleOffset({ x: 0, y: 0 });
+                        return;
+                    }
+
+                    requestAnimationFrame(() => {
+                        const bubble = floatingBubbleRef.current;
+                        if (!bubble) return;
+                        const rect = bubble.getBoundingClientRect();
+                        const margin = 8;
+                        const clampedLeft = Math.min(Math.max(rect.left, margin), Math.max(margin, window.innerWidth - rect.width - margin));
+                        const clampedTop = Math.min(Math.max(rect.top, margin), Math.max(margin, window.innerHeight - rect.height - margin));
+                        if (clampedLeft !== rect.left || clampedTop !== rect.top) {
+                            setBubbleOffset(current => ({
+                                x: current.x + clampedLeft - rect.left,
+                                y: current.y + clampedTop - rect.top
+                            }));
+                        }
+                    });
+                };
+
+                keepBubbleInsideViewport();
+                mediaQuery.addEventListener?.('change', keepBubbleInsideViewport);
+                window.addEventListener('resize', keepBubbleInsideViewport);
+                return () => {
+                    mediaQuery.removeEventListener?.('change', keepBubbleInsideViewport);
+                    window.removeEventListener('resize', keepBubbleInsideViewport);
+                };
+            }, []);
+
+            const handleBubblePointerDown = (event) => {
+                if (!isMobileViewport) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                bubbleWasDraggedRef.current = false;
+                bubbleDragRef.current = {
+                    pointerId: event.pointerId,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    startLeft: rect.left,
+                    startTop: rect.top,
+                    startOffsetX: bubbleOffset.x,
+                    startOffsetY: bubbleOffset.y,
+                    width: rect.width,
+                    height: rect.height
+                };
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+            };
+
+            const handleBubblePointerMove = (event) => {
+                const drag = bubbleDragRef.current;
+                if (!isMobileViewport || !drag || drag.pointerId !== event.pointerId) return;
+                const deltaX = event.clientX - drag.startX;
+                const deltaY = event.clientY - drag.startY;
+                if (Math.hypot(deltaX, deltaY) >= 4) bubbleWasDraggedRef.current = true;
+
+                const margin = 8;
+                const maxLeft = Math.max(margin, window.innerWidth - drag.width - margin);
+                const maxTop = Math.max(margin, window.innerHeight - drag.height - margin);
+                const nextLeft = Math.min(Math.max(drag.startLeft + deltaX, margin), maxLeft);
+                const nextTop = Math.min(Math.max(drag.startTop + deltaY, margin), maxTop);
+                setBubbleOffset({
+                    x: drag.startOffsetX + nextLeft - drag.startLeft,
+                    y: drag.startOffsetY + nextTop - drag.startTop
+                });
+                event.preventDefault();
+            };
+
+            const handleBubblePointerEnd = (event) => {
+                const drag = bubbleDragRef.current;
+                if (!drag || drag.pointerId !== event.pointerId) return;
+                event.currentTarget.releasePointerCapture?.(event.pointerId);
+                bubbleDragRef.current = null;
+                if (bubbleWasDraggedRef.current) {
+                    window.setTimeout(() => { bubbleWasDraggedRef.current = false; }, 0);
+                }
+            };
+
+            const handleBubbleClick = (event) => {
+                if (bubbleWasDraggedRef.current) {
+                    event.preventDefault();
+                    bubbleWasDraggedRef.current = false;
+                    return;
+                }
+                setView('welcome');
+            };
 
             // 聊天室專屬的檢舉狀態與功能
             const [isReportingBot, setIsReportingBot] = useState(false);
@@ -3944,12 +4040,20 @@ const { useState, useEffect, useRef } = React;
                     )}
 
                     {view === 'closed' && (
-                        <div className="relative group flex flex-col items-center">
+                        <div
+                            ref={floatingBubbleRef}
+                            className="relative group flex flex-col items-center touch-none select-none md:touch-auto"
+                            style={isMobileViewport ? { transform: `translate3d(${bubbleOffset.x}px, ${bubbleOffset.y}px, 0)` } : undefined}
+                            onPointerDown={handleBubblePointerDown}
+                            onPointerMove={handleBubblePointerMove}
+                            onPointerUp={handleBubblePointerEnd}
+                            onPointerCancel={handleBubblePointerEnd}
+                        >
                             <div className="relative bg-white text-gray-800 px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap font-bold mb-4 opacity-95 group-hover:opacity-100 transition-opacity animate-bubble-bounce">
                                 問我問我
                                 <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
                             </div>
-                            <button onClick={() => setView('welcome')} className="w-16 h-16 md:w-24 md:h-24 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white p-1 bg-white focus:outline-none z-50">
+                            <button onClick={handleBubbleClick} aria-label="開啟聊天小幫手" className="w-[4.8rem] h-[4.8rem] md:w-24 md:h-24 rounded-full shadow-2xl hover:scale-110 transition-all border-4 border-white p-1 bg-white focus:outline-none z-50">
                                 <img src="https://ik.imagekit.io/mygopen/callme.png" alt="MyGoPen Cute Lion" className="w-full h-full rounded-full object-contain" />
                             </button>
                         </div>
