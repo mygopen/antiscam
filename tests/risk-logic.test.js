@@ -445,6 +445,25 @@ test('前端會把 User-Agent cloaking 接入風險旗標與報告卡片', () =>
     assert.match(source, /裝置導向差異/);
 });
 
+test('TWNIC 網域年齡查詢應使用 IANA bootstrap、正確官方 RDAP 與 WHOIS 備援', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'functions/api/rdap.js'), 'utf8');
+
+    assert.match(source, /fetchIanaRdapServer\(tld\)/);
+    assert.match(source, /https:\/\/ccrdap\.twnic\.tw\/tw\/domain\//);
+    assert.match(source, /whois\.twnic\.net\.tw/);
+    assert.doesNotMatch(source, /https:\/\/rdap\.twnic\.tw\/rdap\/domain\//);
+    assert.doesNotMatch(source, /"tw":\s*"whois\.twnic\.net"/);
+});
+
+test('網域註冊年齡不得使用 TLS 憑證日或 RDAP 最後更新日代替', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    assert.doesNotMatch(source, /rdapData\.date\s*\|\|\s*certData\?\.notBefore/);
+    assert.doesNotMatch(source, /events\.find\(e => e\.eventAction === 'last changed' \|\| e\.eventAction === 'last update'\)/);
+    assert.match(source, /RDAP\/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替/);
+    assert.match(source, /憑證會定期續發，此日期不代表網域新註冊，且不單獨加權/);
+});
+
 function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {
     const isGov = isOfficialTaiwanGovDomain(hostname);
     const blocklistListedForRisk = blocklistListed && !isGov;
@@ -505,11 +524,42 @@ function getBusinessIdentityStatus({ isTrustedPaymentGatewayOrApiEndpoint = fals
 
 function getAgeCheckStatus({ isWhitelisted = false, rdapDate = null, domainAgeDays = null }) {
     if (isWhitelisted) return 'safe';
-    if (rdapDate && domainAgeDays !== null && domainAgeDays < 90) return 'danger';
-    if (!rdapDate) return 'unknown';
-    const ageMs = Math.abs(new Date() - new Date(rdapDate));
-    if (ageMs < 365 * 86400000) return 'warning';
+    if (!rdapDate || domainAgeDays === null) return 'unknown';
+    if (domainAgeDays < 90) return 'warning';
+    if (domainAgeDays < 365) return 'warning';
     return 'safe';
+}
+
+function getPastAgeDays(dateValue, now = Date.now()) {
+    if (!dateValue) return null;
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return null;
+    const elapsedMs = now - date.getTime();
+    if (elapsedMs < 0) return null;
+    return Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+}
+
+function getDomainAgeRiskScore(domainAgeDays) {
+    if (domainAgeDays === null) return 0;
+    if (domainAgeDays < 90) return 35;
+    if (domainAgeDays < 180) return 20;
+    if (domainAgeDays < 365) return 10;
+    return 0;
+}
+
+function getExplicitRdapRegistrationDate(data = {}) {
+    const events = Array.isArray(data.events) ? data.events : [];
+    const regEvent =
+        events.find(event => event.eventAction === 'registration') ||
+        events.find(event => event.eventAction === 'created') ||
+        events.find(event => /registration|created|creation/i.test(event.eventAction || ''));
+    return regEvent?.eventDate ||
+        data.registrationDate ||
+        data.createdDate ||
+        data.creationDate ||
+        data.created ||
+        data.registered ||
+        null;
 }
 
 function getDaysBetweenDates(startDate, endDate) {
@@ -527,13 +577,11 @@ function isOneYearRegistrationPeriod(periodDays) {
 function hasNewOneYearRegistrationRisk({
     isWhitelisted = false,
     isOfficialTaiwanGov = false,
-    isRegistrationDateFromCertificate = false,
     domainAgeDays = null,
     registrationPeriodDays = null
 }) {
     return !isWhitelisted &&
         !isOfficialTaiwanGov &&
-        !isRegistrationDateFromCertificate &&
         domainAgeDays !== null &&
         domainAgeDays < 183 &&
         isOneYearRegistrationPeriod(registrationPeriodDays);
@@ -3038,24 +3086,65 @@ test('Punycode 或 Unicode 混淆網域會被偵測', () => {
     assert.equal(hasPunycodeOrUnicodeHostname('paypal.com', 'https://paypal.com'), false);
 });
 
-test('新網域搭配 3 個月內新核發 HTTPS 憑證應升高風險', () => {
+test('新網域搭配新憑證屬相關訊號，不應重複加權成高風險', () => {
     const domainAgeDays = 30;
     const certAgeDays = 20;
     const isVeryNewDomain = domainAgeDays < 90;
     const isVeryNewCertificate = certAgeDays < 90;
     const isNewDomainWithNewCertificate = isVeryNewDomain && isVeryNewCertificate;
+    const riskScore = getDomainAgeRiskScore(domainAgeDays);
 
     assert.equal(isNewDomainWithNewCertificate, true);
+    assert.equal(riskScore, 35);
+    assert.equal(riskScore < 70, true);
 });
 
-test('缺少註冊時間時應以 HTTPS 憑證最近核發日代入', () => {
+test('缺少註冊時間時不得以新憑證誤判為新網域', () => {
+    const now = Date.parse('2026-07-14T12:00:00.000Z');
     const rdapDate = null;
-    const certNotBefore = '2026-05-07T00:00:00.000Z';
-    const effectiveRegistrationDate = rdapDate || certNotBefore || null;
-    const isRegistrationDateFromCertificate = !rdapDate && !!certNotBefore;
+    const certNotBefore = '2026-07-13T08:44:44.000Z';
+    const domainAgeDays = getPastAgeDays(rdapDate, now);
+    const certAgeDays = getPastAgeDays(certNotBefore, now);
+    const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
+    const isVeryNewCertificate = certAgeDays !== null && certAgeDays < 90;
+    const isNewDomainWithNewCertificate = isVeryNewDomain && isVeryNewCertificate;
+    const ageStatus = getAgeCheckStatus({ rdapDate, domainAgeDays });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: 0,
+        checks: {
+            age: { status: ageStatus, details: 'RDAP/WHOIS 未提供明確註冊日' },
+            certificate: { status: 'info', details: '憑證會定期續發，不代表網域新註冊' }
+        }
+    });
 
-    assert.equal(effectiveRegistrationDate, certNotBefore);
-    assert.equal(isRegistrationDateFromCertificate, true);
+    assert.equal(domainAgeDays, null);
+    assert.equal(isVeryNewCertificate, true);
+    assert.equal(isVeryNewDomain, false);
+    assert.equal(isNewDomainWithNewCertificate, false);
+    assert.equal(ageStatus, 'unknown');
+    assert.equal(scanData.riskScore, 0);
+    assert.deepEqual(scanData.summaryReasons, []);
+});
+
+test('RDAP 最後更新日不得冒充註冊日，CNA 明確註冊日應判定為老網域', () => {
+    const lastChangedOnly = getExplicitRdapRegistrationDate({
+        events: [
+            { eventAction: 'last changed', eventDate: '2026-07-13T00:00:00Z' },
+            { eventAction: 'last update of RDAP database', eventDate: '2026-07-14T00:00:00Z' }
+        ]
+    });
+    const cnaRegistrationDate = getExplicitRdapRegistrationDate({
+        events: [
+            { eventAction: 'registration', eventDate: '1997-05-01T03:57:29Z' },
+            { eventAction: 'last changed', eventDate: '2023-03-31T01:20:09Z' }
+        ]
+    });
+    const cnaAgeDays = getPastAgeDays(cnaRegistrationDate, Date.parse('2026-07-14T12:00:00Z'));
+
+    assert.equal(lastChangedOnly, null);
+    assert.equal(cnaRegistrationDate, '1997-05-01T03:57:29Z');
+    assert.ok(cnaAgeDays > 10_000);
+    assert.equal(getAgeCheckStatus({ rdapDate: cnaRegistrationDate, domainAgeDays: cnaAgeDays }), 'safe');
 });
 
 test('可疑子網域模式會抓到 hyphen、短隨機片段與難讀命名', () => {
@@ -4014,13 +4103,26 @@ test('DHL 物流品牌仿冒應升為高風險並排除官方網域', () => {
     assert.equal(riskScore >= 70, true);
 });
 
-test('3 個月內新註冊網域應視為強風險訊號', () => {
+test('3 個月內新註冊網域單獨只應是中度背景風險', () => {
     const domainAgeDays = 45;
     const isVeryNewDomain = domainAgeDays < 90;
-    const riskScore = isVeryNewDomain ? 95 : 0;
+    const riskScore = getDomainAgeRiskScore(domainAgeDays);
+    const ageStatus = getAgeCheckStatus({
+        rdapDate: '2026-06-01T00:00:00Z',
+        domainAgeDays
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore,
+        checks: {
+            age: { status: ageStatus, details: '網域註冊未滿 3 個月' }
+        }
+    });
 
     assert.equal(isVeryNewDomain, true);
-    assert.equal(riskScore >= 70, true);
+    assert.equal(riskScore, 35);
+    assert.equal(ageStatus, 'warning');
+    assert.equal(scanData.riskScore, 35);
+    assert.deepEqual(scanData.summaryReasons, []);
 });
 
 test('6 個月內新網域且註冊週期 1 年應設定風險旗標', () => {
@@ -4031,18 +4133,19 @@ test('6 個月內新網域且註冊週期 1 年應設定風險旗標', () => {
         domainAgeDays: 120,
         registrationPeriodDays
     });
+    const riskScore = getDomainAgeRiskScore(120) + (riskFlag ? 15 : 0);
     const scanData = enforceFinalRiskConsistency({
-        riskScore: riskFlag ? 50 : 0,
+        riskScore,
         checks: {
-            registrationPeriod: { status: riskFlag ? 'danger' : 'safe', details: '新網域搭配 1 年短期註冊' },
-            age: { status: riskFlag ? 'danger' : 'safe', details: '未滿 6 個月且註冊週期約 1 年' }
+            registrationPeriod: { status: riskFlag ? 'warning' : 'safe', details: '新網域搭配 1 年短期註冊' },
+            age: { status: riskFlag ? 'warning' : 'safe', details: '未滿 6 個月且註冊週期約 1 年' }
         }
     });
 
     assert.equal(registrationPeriodDays, 365);
     assert.equal(riskFlag, true);
-    assert.equal(scanData.riskScore >= 70, true);
-    assert.deepEqual(scanData.summaryReasons, ['新網域搭配 1 年短期註冊']);
+    assert.equal(scanData.riskScore, 35);
+    assert.deepEqual(scanData.summaryReasons, []);
 });
 
 test('超過 6 個月或非 1 年註冊週期不應命中新規則', () => {

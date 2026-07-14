@@ -28,7 +28,7 @@ function getWhoisServer(tld) {
         "xyz": "whois.nic.xyz",
         "site": "whois.nic.site",
         "cn": "whois.cnnic.cn",
-        "tw": "whois.twnic.net",
+        "tw": "whois.twnic.net.tw",
         "com": "whois.verisign-grs.com",
         "net": "whois.verisign-grs.com",
         "org": "whois.publicinterestregistry.org",
@@ -486,21 +486,20 @@ export async function onRequest(context) {
   const rootDomain = getRegisteredDomain(domain);
   const tld = rootDomain.split('.').pop();
 
-  // 1. 決定目標 RDAP URL
-  let targetUrl;
-  const DIRECT_RDAP_SERVERS = {
+  // 優先採用 IANA RDAP bootstrap，避免各註冊局更換端點後持續查詢舊網址。
+  // fallback 僅在 IANA bootstrap 暫時無法取得時使用。
+  const FALLBACK_RDAP_ENDPOINTS = {
     "cn": "https://rdap.cnnic.cn/domain/",
-    "tw": "https://rdap.twnic.tw/rdap/domain/",
+    "tw": "https://ccrdap.twnic.tw/tw/domain/",
     "jp": "https://rdap.jprs.jp/rdap/domain/",
     "sg": "https://rdap.sgnic.sg/rdap/domain/"
   };
-
-  if (DIRECT_RDAP_SERVERS[tld]) {
-      targetUrl = `${DIRECT_RDAP_SERVERS[tld]}${rootDomain}`;
-  } else {
-      const ianaServer = await fetchIanaRdapServer(tld);
-      targetUrl = ianaServer ? `${ianaServer.endsWith('/') ? ianaServer : ianaServer + '/'}domain/${rootDomain}` : `https://rdap.org/domain/${rootDomain}`;
-  }
+  const ianaServer = await fetchIanaRdapServer(tld);
+  const targetUrl = ianaServer
+    ? `${ianaServer.endsWith('/') ? ianaServer : ianaServer + '/'}domain/${rootDomain}`
+    : (FALLBACK_RDAP_ENDPOINTS[tld]
+      ? `${FALLBACK_RDAP_ENDPOINTS[tld]}${rootDomain}`
+      : `https://rdap.org/domain/${rootDomain}`);
 
   try {
     // 策略 A: 直連官方 RDAP

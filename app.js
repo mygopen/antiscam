@@ -1522,8 +1522,26 @@ const { useState, useEffect, useRef } = React;
             return Math.round((end - start) / (1000 * 60 * 60 * 24));
         };
 
+        const getPastAgeDays = (dateValue) => {
+            if (!dateValue) return null;
+            const date = new Date(dateValue);
+            if (Number.isNaN(date.getTime())) return null;
+            const elapsedMs = Date.now() - date.getTime();
+            if (elapsedMs < 0) return null;
+            return Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+        };
+
         const isOneYearRegistrationPeriod = (periodDays) => {
             return periodDays !== null && periodDays >= 330 && periodDays <= 400;
+        };
+
+        // 網域年齡是背景風險，不是詐騙證據；單獨最高只到中度提醒。
+        const getDomainAgeRiskScore = (domainAgeDays) => {
+            if (domainAgeDays === null) return 0;
+            if (domainAgeDays < 90) return 35;
+            if (domainAgeDays < 180) return 20;
+            if (domainAgeDays < 365) return 10;
+            return 0;
         };
 
         const fetchRDAPData = async (domain) => {
@@ -1535,8 +1553,7 @@ const { useState, useEffect, useRef } = React;
                 let regEvent =
                     events.find(e => e.eventAction === 'registration') ||
                     events.find(e => e.eventAction === 'created') ||
-                    events.find(e => /registration|created|creation/i.test(e.eventAction || '')) ||
-                    events.find(e => e.eventAction === 'last changed' || e.eventAction === 'last update');
+                    events.find(e => /registration|created|creation/i.test(e.eventAction || ''));
                 const expirationEvent = events.find(e => /expiration|expiry|expires|renewal/i.test(e.eventAction || ''));
                 const date = (regEvent && regEvent.eventDate)
                     ? regEvent.eventDate
@@ -1836,8 +1853,9 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] })
             ]);
 
-            const isRegistrationDateFromCertificate = !rdapData.date && !!certData?.notBefore;
-            const rdapDate = rdapData.date || certData?.notBefore || null;
+            // TLS 憑證會定期續發，核發日不能代表網域註冊日。
+            // 註冊年齡只接受 RDAP/WHOIS 明確的 registration/creation 日期。
+            const rdapDate = rdapData.date || null;
             const rdapExpirationDate = rdapData.expirationDate || null;
             const privacyDetected = rdapData.privacyDetected;
             const registrarName = rdapData.registrarName || '';
@@ -2111,11 +2129,7 @@ const { useState, useEffect, useRef } = React;
             const nestedBrandSimilarity = nestedDomains.map(item => checkBrandSimilarity(item, currentWhitelist)).find(item => item.matched) || { matched: false };
             const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : (finalBrandSimilarity.matched ? finalBrandSimilarity : nestedBrandSimilarity);
             const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
-            let domainAgeDays = null;
-            if (rdapDate) {
-                const regDate = new Date(rdapDate);
-                domainAgeDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
-            }
+            const domainAgeDays = getPastAgeDays(rdapDate);
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
             const isNewDomainUnderSixMonths = domainAgeDays !== null && domainAgeDays < 183;
             const registrationPeriodDays = rdapData.registrationPeriodDays !== null && rdapData.registrationPeriodDays !== undefined
@@ -2124,16 +2138,9 @@ const { useState, useEffect, useRef } = React;
             const hasOneYearRegistrationPeriod = isOneYearRegistrationPeriod(registrationPeriodDays);
             const hasNewOneYearRegistrationRisk = !isWhitelisted &&
                 !isOfficialTaiwanGov &&
-                !isRegistrationDateFromCertificate &&
                 isNewDomainUnderSixMonths &&
                 hasOneYearRegistrationPeriod;
-            let certAgeDays = null;
-            if (certData?.notBefore) {
-                const certDate = new Date(certData.notBefore);
-                if (!Number.isNaN(certDate.getTime())) {
-                    certAgeDays = Math.ceil(Math.abs(new Date() - certDate) / (1000 * 60 * 60 * 24));
-                }
-            }
+            const certAgeDays = getPastAgeDays(certData?.notBefore);
             const isVeryNewCertificate = certAgeDays !== null && certAgeDays < 90;
             const certIssuerText = certData?.issuerName ? `；簽發者: ${certData.issuerName}` : '';
             const certExpiryText = certData?.notAfter ? `；有效至: ${new Date(certData.notAfter).toISOString().split('T')[0]}` : '';
@@ -2463,18 +2470,8 @@ const { useState, useEffect, useRef } = React;
                 }
 
                 // 2. 網域年齡與信譽分析
-                if (rdapData.date) {
-                    const diffDays = domainAgeDays;
-
-                    if (diffDays < 90) {
-                        riskScore += 95;
-                    } else if (diffDays < 120) {
-                        riskScore += 85;
-                    } else if (diffDays < 180) {
-                        riskScore += 50;
-                    } else if (diffDays < 365) {
-                        riskScore += 25;
-                    }
+                if (domainAgeDays !== null) {
+                    riskScore += getDomainAgeRiskScore(domainAgeDays);
                 } else {
                     // 無法取得日期時，若非高流量網站，則視為潛在風險
                     if (isLowTraffic && isVeryHighRiskTLD) {
@@ -2486,7 +2483,7 @@ const { useState, useEffect, useRef } = React;
                         riskScore += 10; 
                     }
                 }
-                if (hasNewOneYearRegistrationRisk) riskScore += 45;
+                if (hasNewOneYearRegistrationRisk) riskScore += 15;
                 if (hasMissingAllSecurityHeadersRaw) riskScore += hasMissingAllSecurityHeaders ? 45 : 15;
                 if (hasMissingMxRecordsRaw) riskScore += hasMissingMxRecords ? 45 : 15;
 
@@ -2550,7 +2547,6 @@ const { useState, useEffect, useRef } = React;
                     else if (hasUrgencyScamSignal) riskScore += 10;
                     if (hasHomographSignal) riskScore += 85;
                     if (hasOfficialAlert) riskScore += hasOfficialAlertUrlMatch ? 100 : 90;
-                    if (isNewDomainWithNewCertificate) riskScore += 60;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -2681,11 +2677,8 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousExternalTrustedRedirect ||
                 hasHomographSignal ||
                 hasUaCloakingRisk ||
-                isNewDomainWithNewCertificate ||
-                hasNewOneYearRegistrationRisk ||
                 hasMissingAllSecurityHeaders ||
                 hasMissingMxRecords ||
-                isVeryNewDomain ||
                 hasBrandSimilarity ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
@@ -2725,8 +2718,6 @@ const { useState, useEffect, useRef } = React;
                     hasSuspiciousExternalTrustedRedirect ||
                     hasHomographSignal ||
                     hasUaCloakingRisk ||
-                    isNewDomainWithNewCertificate ||
-                    isVeryNewDomain ||
                     isFakeGov ||
                     isFinalFakeGov ||
                     isFakeService ||
@@ -2841,11 +2832,11 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑購物/廣告落地頁網址：含 ${matchedLandingParams.slice(0, 3).join('、')} 等追蹤參數，且網域名稱隨機度高或缺乏信任訊號。`;
             } else if (isNewDomainWithNewCertificate) {
-                domainAnalysisStatus = 'danger';
-                domainAnalysisDetails = '🚨 網域與 HTTPS 憑證都在 3 個月內建立，常見於短期釣魚或免洗網站。';
+                domainAnalysisStatus = 'warning';
+                domainAnalysisDetails = '⚠️ RDAP/WHOIS 顯示網域註冊未滿 3 個月；新憑證屬正常建站流程，兩者不視為獨立證據，需搭配其他可疑行為判斷。';
             } else if (hasNewOneYearRegistrationRisk) {
-                domainAnalysisStatus = riskScore >= 70 ? 'danger' : 'warning';
-                domainAnalysisDetails = `${riskScore >= 70 ? '🚨' : '⚠️'} 網域註冊未滿 6 個月，且註冊週期約 1 年，符合短期棄置型詐騙網域常見模式；需搭配其他訊號判斷。`;
+                domainAnalysisStatus = 'warning';
+                domainAnalysisDetails = '⚠️ 網域註冊未滿 6 個月，且註冊週期約 1 年；此為背景風險，需搭配其他獨立詐騙訊號判斷。';
             } else if (hasMissingAllSecurityHeaders) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 網站缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項現代安全標頭，常見於低成本臨時詐騙站。';
@@ -3078,25 +3069,24 @@ const { useState, useEffect, useRef } = React;
                             )
                     },
                     age: {
-                        status: isWhitelisted ? 'safe' : ((rdapDate && domainAgeDays !== null && domainAgeDays < 90) ? 'danger' :
-                            (hasNewOneYearRegistrationRisk ? (riskScore >= 70 ? 'danger' : 'warning') :
-                            (rdapDate ? (Math.abs(new Date() - new Date(rdapDate)) < 180 * 86400000 ? 'warning' :
-                                (Math.abs(new Date() - new Date(rdapDate)) < 365 * 86400000 ? 'warning' : 'safe')) : 'unknown'))),
+                        status: isWhitelisted ? 'safe' : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
+                            (hasNewOneYearRegistrationRisk ? 'warning' :
+                            (domainAgeDays !== null ? (domainAgeDays < 365 ? 'warning' : 'safe') : 'unknown'))),
                         label: '註冊時間',
-                        details: isOfficialTaiwanGov ? '台灣政府官方網域，不以 HTTPS 憑證核發日判定為新註冊風險' : (isWhitelisted ? '受信賴白名單網域，不以憑證日期判定新註冊風險' : (rdapDate ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${isRegistrationDateFromCertificate ? '（以 HTTPS 憑證最近核發日代入）' : ''}${domainAgeDays !== null && domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : '無法自動獲取 (建議手動查詢 WHOIS)')),
+                        details: isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替')),
                         link: `https://who.is/whois/${rdapQueriedDomain}`
                     },
                     registrationPeriod: {
-                        status: hasNewOneYearRegistrationRisk ? (riskScore >= 70 ? 'danger' : 'warning') : (registrationPeriodDays !== null ? 'info' : 'unknown'),
+                        status: hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown'),
                         label: '註冊週期',
                         details: registrationPeriodDays !== null
                             ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}`
                             : '無法自動判定註冊週期'
                     },
                     certificate: {
-                        status: isNewDomainWithNewCertificate ? 'danger' : (isVeryNewCertificate ? 'warning' : (certData?.notBefore ? 'safe' : 'unknown')),
+                        status: isNewDomainWithNewCertificate ? 'warning' : (certData?.notBefore ? 'info' : 'unknown'),
                         label: 'HTTPS 憑證時間',
-                        details: certData?.notBefore ? `憑證最近核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${certExpiryText}${certIssuerText}${isNewDomainWithNewCertificate ? ' - 新網域搭配新憑證，需提高警覺' : (isVeryNewCertificate ? ' - 3 個月內新核發憑證' : '')}` : '無法自動取得憑證核發時間'
+                        details: certData?.notBefore ? `憑證最近核發日: ${new Date(certData.notBefore).toISOString().split('T')[0]}${certExpiryText}${certIssuerText}${isNewDomainWithNewCertificate ? ' - RDAP/WHOIS 同時確認為新網域，需提高警覺' : (isVeryNewCertificate ? '；憑證會定期續發，此日期不代表網域新註冊，且不單獨加權' : '')}` : '無法自動取得憑證核發時間'
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : (isTrustedTaiwanRegistrar ? 'safe' : 'safe'), label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : (isTrustedTaiwanRegistrar ? `台灣常見註冊商: ${registrarName}` : `註冊商: ${registrarName}`)) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
@@ -4419,8 +4409,8 @@ const { useState, useEffect, useRef } = React;
                 if (checks.apkCheck?.status === 'danger') warnings.push(`⚠️ ${checks.apkCheck.details}`);
                 if (checks.securityHeaders?.status === 'danger') warnings.push('⚠️ 缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭');
                 if (checks.mxRecords?.status === 'danger') warnings.push('⚠️ 網域未設定 MX 郵件紀錄');
-                if (checks.registrationPeriod?.status === 'danger') warnings.push('⚠️ 新網域且註冊週期約 1 年，具備短期棄置風險');
-                else if (checks.age?.status === 'danger') warnings.push('⚠️ 網域註冊時間極新，具備高風險');
+                if (['warning', 'danger'].includes(checks.registrationPeriod?.status)) warnings.push('⚠️ 新網域且註冊週期約 1 年，需搭配其他訊號判斷');
+                else if (['warning', 'danger'].includes(checks.age?.status)) warnings.push(`⚠️ ${checks.age.details || '網域註冊時間較新，需搭配其他訊號判斷'}`);
                 if (checks.disposableDomain?.status === 'danger') warnings.push(`⚠️ ${checks.disposableDomain.details}`);
                 if (checks.entropy?.status === 'warning') warnings.push('⚠️ 網域名稱亂碼 (高風險特徵)');
                 if (checks.redirect?.status && checks.redirect.status !== 'safe') warnings.push(`⚠️ 網站存在轉址行為 (${checks.redirect.details})`);
