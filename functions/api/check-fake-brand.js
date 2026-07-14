@@ -139,6 +139,10 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
             allowedBrandTokens: ["szshop", "sz shop", "富影貿易", "攝影器材", "攝影主機"]
         },
         {
+            domain: "ls-love.org",
+            allowedBrandTokens: ["ls-love", "lslove", "磊山慈愛社", "中華磊山慈愛社", "讓愛看見希望"]
+        },
+        {
             domain: "sunpay.com.tw",
             allowedBrandTokens: [
                 "sunpay", "紅陽科技", "紅陽支付", "紅陽",
@@ -220,6 +224,14 @@ const localBrandMap = {
         "szshop": ["szshop.com.tw"],
         "富影貿易": ["szshop.com.tw"],
         "富影貿易有限公司": ["szshop.com.tw"],
+        "DJI": ["dji.com"],
+        "DJI Store": ["dji.com"],
+        "大疆": ["dji.com"],
+        "大疆創新": ["dji.com"],
+        "中華磊山慈愛社": ["ls-love.org"],
+        "磊山慈愛社": ["ls-love.org"],
+        "讓愛看見希望": ["ls-love.org"],
+        "ls-love": ["ls-love.org"],
         "紅陽科技": ["sunpay.com.tw"],
         "紅陽科技股份有限公司": ["sunpay.com.tw"],
         "紅陽支付": ["sunpay.com.tw"],
