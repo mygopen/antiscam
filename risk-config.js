@@ -46,7 +46,9 @@ window.RISK_CONFIG = {
         'usa.fastgetmove.com',
         'kk78lin.org',
         'a-family-tw.geatzs.link',
-        'calm-quokka-a2fe57.netlify.app'
+        'calm-quokka-a2fe57.netlify.app',
+        'jsizg.com',
+        'kackofworc.com'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',

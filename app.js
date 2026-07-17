@@ -443,7 +443,8 @@ const { useState, useEffect, useRef } = React;
             businessIdentitySignals: { score: 0, matched: false, names: [], hasTaxId: false, reasons: [] },
             lineOfficialSignals: { matched: false, urls: [], reason: '' },
             ecommerceTrustSignals: { score: 0, matched: false, reasons: [], categories: [] },
-            shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasMerchantInfo: false },
+            shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasAliziOrderSystem: false, hasMerchantInfo: false },
+            jobTaskScamSignals: { score: 0, matched: false, reasons: [], jobMatches: [], moneyMatches: [], taskMatches: [], identityMatches: [], hasJobFacade: false, hasMoneyFlow: false, hasTaskMechanics: false, hasIdentityCollection: false },
             regulatedTobaccoSalesSignals: { score: 0, matched: false, reasons: [], productMatches: [], salesMatches: [], hasPriceSignal: false, hasLinePurchaseSignal: false }
         });
 
@@ -1065,7 +1066,7 @@ const { useState, useEffect, useRef } = React;
                 .filter(keyword => haystack.includes(keyword.toLowerCase()));
 
             const formFieldSelectors = [
-                'input[name*="name" i]', 'input[name*="phone" i]', 'input[name*="tel" i]', 'input[name*="address" i]',
+                'input[name*="name" i]', 'input[name*="phone" i]', 'input[name*="mobile" i]', 'input[name*="tel" i]', 'input[name*="address" i]',
                 'textarea[name*="address" i]', 'input[placeholder*="姓名"]', 'input[placeholder*="手機"]',
                 'input[placeholder*="電話"]', 'input[placeholder*="地址"]', 'textarea[placeholder*="地址"]',
                 'select[name*="quantity" i]', 'select[name*="qty" i]'
@@ -1082,6 +1083,7 @@ const { useState, useEffect, useRef } = React;
             const highPressureSalesKeywords = ['貨到付款', '免運', '限量', '立即搶購', '馬上訂購'];
             const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時/i.test(haystack);
             const hasCodSalesPitch = highPressureSalesKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) || hasLimitedPurchasePitch;
+            const hasAliziOrderSystem = /(?:\/public\/alizi\/|alizi-order|alizibooking|www\.alizi\.net)/i.test(haystack);
             const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
             const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const hasLineContactSignal = lineContactMatches.length > 0;
@@ -1104,6 +1106,7 @@ const { useState, useEffect, useRef } = React;
             if (hasOnePageStructure) reasons.push('一頁式購物頁結構');
             if (hasOrderForm) reasons.push('頁面直接要求收件或訂購資料');
             if (hasCodSalesPitch) reasons.push('貨到付款/限時優惠等銷售話術');
+            if (hasAliziOrderSystem && hasOrderForm && hasCodSalesPitch) reasons.push('Alizi 一頁式下單系統搭配收件表單與貨到付款話術');
             if (!hasMerchantInfo && matchedKeywords.length >= 4) reasons.push('缺少明確商家資訊或退換貨政策');
             if (imageHeavy) reasons.push('商品圖片比例高且正常站內連結偏少');
             if (hasTrackingLandingParam) reasons.push('含廣告落地頁追蹤參數');
@@ -1128,11 +1131,56 @@ const { useState, useEffect, useRef } = React;
                 imageCount,
                 linkCount,
                 hasOrderForm,
+                hasAliziOrderSystem,
                 hasMerchantInfo,
                 hasCourseProviderTrust,
                 hasLineContactSignal,
                 hasLineOrderContext,
                 lineContactExamples: lineContactMatches.slice(0, 3)
+            };
+        };
+
+        const analyzeJobTaskScamSignals = (doc, rawText = '', fullUrl = '') => {
+            const textParts = [rawText || '', doc?.title || '', doc?.body?.textContent || '', fullUrl || ''];
+            if (doc) {
+                doc.querySelectorAll('a, input, button, label, meta[name="description"]').forEach(el => {
+                    ['href', 'name', 'id', 'placeholder', 'value', 'content'].forEach(attr => textParts.push(el.getAttribute(attr) || ''));
+                    textParts.push(el.textContent || '');
+                });
+            }
+
+            const haystack = decodeSignalText(textParts.join('\n'));
+            const jobKeywords = ['找工作', '求職', '徵才', '職缺', '應徵', '薪資', '職員登入', '工作首頁', '企業徵才'];
+            const moneyKeywords = ['提領資金', '存入資金', '存入提領', '交易紀錄', '儲值', '充值', '入金', '出金', '匯款', '銀行帳戶', '帳戶須為同一人'];
+            const taskKeywords = ['機台操作', '每日簽到', '領取能量', '平台代理', '任務佣金', '接單任務'];
+            const identityKeywords = ['真實姓名', '手機號碼', '身分證', '銀行帳戶', '本人手機', '帳戶須為同一人'];
+            const findMatches = keywords => keywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const jobMatches = findMatches(jobKeywords);
+            const moneyMatches = findMatches(moneyKeywords);
+            const taskMatches = findMatches(taskKeywords);
+            const identityMatches = findMatches(identityKeywords);
+            const hasJobFacade = jobMatches.length >= 3;
+            const hasMoneyFlow = moneyMatches.length >= 2;
+            const hasTaskMechanics = taskMatches.length >= 1;
+            const hasIdentityCollection = identityMatches.length >= 2;
+            const matched = hasJobFacade && hasMoneyFlow && hasTaskMechanics;
+            const reasons = [];
+            if (hasJobFacade && hasMoneyFlow) reasons.push('求職/徵才頁混入存入、提領或交易資金功能');
+            if (hasTaskMechanics) reasons.push('以機台操作、每日簽到或任務機制包裝工作內容');
+            if (hasIdentityCollection) reasons.push('註冊要求真實身分、手機或銀行帳戶資料');
+
+            return {
+                score: matched ? Math.min(100, 75 + (hasIdentityCollection ? 15 : 0)) : Math.min(60, reasons.length * 25),
+                matched,
+                reasons,
+                jobMatches,
+                moneyMatches,
+                taskMatches,
+                identityMatches,
+                hasJobFacade,
+                hasMoneyFlow,
+                hasTaskMechanics,
+                hasIdentityCollection
             };
         };
 
@@ -1257,6 +1305,7 @@ const { useState, useEffect, useRef } = React;
                 lineOfficialSignals: analyzeLineOfficialSignals(doc, rawText, fullUrl),
                 ecommerceTrustSignals: analyzeEcommerceTrustSignals(doc, rawText, fullUrl),
                 shoppingScamSignals: analyzeShoppingScamSignals(doc, rawText, fullUrl),
+                jobTaskScamSignals: analyzeJobTaskScamSignals(doc, rawText, fullUrl),
                 regulatedTobaccoSalesSignals: analyzeRegulatedTobaccoSalesSignals(doc, rawText, fullUrl)
             };
         };
@@ -2110,6 +2159,7 @@ const { useState, useEffect, useRef } = React;
             const suspiciousDownloadPath = !!downloadSignals.suspiciousPath;
             const suspiciousDownloadPathCount = downloadSignals.suspiciousPathFragments?.length || 0;
             const shoppingScamSignals = pageSignals.shoppingScamSignals || createEmptyPageSignals().shoppingScamSignals;
+            const jobTaskScamSignals = pageSignals.jobTaskScamSignals || createEmptyPageSignals().jobTaskScamSignals;
             const ecommerceTrustSignals = pageSignals.ecommerceTrustSignals || createEmptyPageSignals().ecommerceTrustSignals;
             const seoSignals = pageSignals.seoSignals || createEmptyPageSignals().seoSignals;
             const languageSignals = pageSignals.languageSignals || createEmptyPageSignals().languageSignals;
@@ -2183,6 +2233,9 @@ const { useState, useEffect, useRef } = React;
                 hasLogisticsScamSignal;
             const hasRegulatedTobaccoSalesSignal = !isWhitelisted &&
                 !!regulatedTobaccoSalesSignals.matched;
+            const hasJobTaskScamSignal = !isWhitelisted &&
+                !!jobTaskScamSignals.matched &&
+                (isVeryNewDomain || isLowTraffic || !hasVerifiedBusinessEntity);
             const hasFreeHostingSensitiveLinkRisk = !isWhitelisted &&
                 isFreeHosting &&
                 (hasSuspiciousParams || hasNestedSuspiciousParams || hasRemovedVolatileParams) &&
@@ -2385,6 +2438,7 @@ const { useState, useEffect, useRef } = React;
                 hasCloudflarePagesDevRandomRisk ||
                 hasNetlifyAppRandomRisk ||
                 hasRegulatedTobaccoSalesSignal ||
+                hasJobTaskScamSignal ||
                 hasShoppingLineContactRisk;
 
             const hasSecondaryFraudEvidence = hasConfirmedThreatSignal ||
@@ -2558,6 +2612,7 @@ const { useState, useEffect, useRef } = React;
                     else if (hasDisposableUnreadablePageRisk) riskScore += 70;
                     if (hasFreeHostingSensitiveLinkRisk) riskScore += 85;
                     if (hasRegulatedTobaccoSalesSignal) riskScore += 95;
+                    if (hasJobTaskScamSignal) riskScore += 90;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
                     if (hasShoppingLineContactRisk) riskScore += hasShoppingLandingUrlRisk ? 50 : 40;
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
@@ -2693,6 +2748,7 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
                 hasRegulatedTobaccoSalesSignal ||
+                hasJobTaskScamSignal ||
                 hasShoppingLineContactRisk ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform && !isTraceHighRiskSameRoot);
 
@@ -2736,6 +2792,7 @@ const { useState, useEffect, useRef } = React;
                     hasShoppingLandingUrlRisk ||
                     hasShoppingScamSignal ||
                     hasRegulatedTobaccoSalesSignal ||
+                    hasJobTaskScamSignal ||
                     hasShoppingLineContactRisk ||
                     isDownloadPhishingSignal ||
                     isApkSite;
@@ -2809,6 +2866,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到台灣高風險電子菸/加熱菸網路販售：${regulatedTobaccoSalesSignals.reasons.slice(0, 3).join('、')}。此類非法商品頁常伴隨 LINE 導流、貨到付款或一頁式交易詐騙風險。`;
                 siteContentMsg = '危險：疑似電子菸/加熱菸網路販售或交易導流';
+            } else if (hasJobTaskScamSignal) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 偵測到假求職/任務金流詐騙特徵：${jobTaskScamSignals.reasons.slice(0, 3).join('、')}。`;
+                siteContentMsg = '危險：疑似假求職、任務儲值或提領詐騙';
             } else if (hasSuspiciousTldAdLandingRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑後綴廣告落地頁：${domain} 使用較常被濫用的網域後綴，原始網址含 ${rawAdLandingParamDetails.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且缺少可信白名單、商家實體或正規電商佐證。`;
@@ -2947,6 +3008,7 @@ const { useState, useEffect, useRef } = React;
                 hasPageBrandMismatch ||
                 hasShoppingScamSignal ||
                 hasShoppingLineContactRisk ||
+                hasJobTaskScamSignal ||
                 hasRegulatedTobaccoSalesSignal;
             const siteContentStatus = isSocialMedia
                 ? 'warning'
@@ -2957,7 +3019,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain },
+                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasJobTaskScamSignal || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3113,6 +3175,13 @@ const { useState, useEffect, useRef } = React;
                             ? `偵測到電子菸、煙彈、RELX/悅刻等商品搭配交易脈絡：${regulatedTobaccoSalesSignals.reasons.slice(0, 4).join('、')}。在台灣情境下屬高度法規與交易詐騙風險。`
                             : '未偵測到電子菸、加熱菸或煙彈的網路販售脈絡'
                     },
+                    jobTaskScam: {
+                        status: hasJobTaskScamSignal ? 'danger' : (jobTaskScamSignals.reasons.length > 0 ? 'warning' : 'safe'),
+                        label: '假求職/任務金流',
+                        details: hasJobTaskScamSignal
+                            ? `偵測到求職頁混入存入、提領、交易或機台任務：${jobTaskScamSignals.reasons.slice(0, 3).join('、')}`
+                            : (jobTaskScamSignals.reasons.length > 0 ? jobTaskScamSignals.reasons.join('、') : '未偵測到求職網站搭配儲值、提領或任務金流的異常組合')
+                    },
                     shoppingScam: { status: hasStrongEcommerceValidation ? 'info' : ((hasShoppingScamSignal || hasShoppingLineContactRisk) ? 'danger' : (shoppingScamSignals.matched || hasShoppingLandingUrlRisk ? 'warning' : 'safe')), label: '一頁式購物詐騙', details: hasStrongEcommerceValidation ? '偵測到購物頁特徵，但同時具備正規電商佐證，未單獨判為一頁式購物詐騙' : (shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : (hasShoppingLandingUrlRisk ? '頁面內容未完整取得，無法確認購物頁結構；但網址本身已符合可疑購物落地頁特徵' : '未能從可讀 HTML 中確認一頁式購物結構')) },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
                     shoppingLanding: { status: (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數')) },
@@ -3256,6 +3325,7 @@ const { useState, useEffect, useRef } = React;
                     externalResources: createScanCheck('safe', '外部資源/表單送出', '未偵測到異常外部表單或資源'),
                     freeHostingSensitiveLink: createScanCheck('safe', '免費子網域驗證連結', '未偵測到免費子網域搭配敏感驗證參數的高風險組合'),
                     regulatedProduct: createScanCheck('safe', '電子菸/加熱菸販售', '未偵測到電子菸、加熱菸或煙彈的網路販售脈絡'),
+                    jobTaskScam: createScanCheck('unknown', '假求職/任務金流', '檢測流程未完整完成，無法確認求職網站是否混入儲值、提領或任務金流'),
                     shoppingScam: createScanCheck('unknown', '一頁式購物詐騙', '未能從可讀 HTML 中確認一頁式購物結構'),
                     lineContact: createScanCheck('safe', 'LINE 聯絡導流', '未偵測到 LINE 聯絡導流'),
                     shoppingLanding: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'unknown', '購物/廣告落地頁網址', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : '檢測流程未完整完成，無法確認購物/廣告落地頁特徵'),
@@ -3320,6 +3390,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
             addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
+            addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
             addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');

@@ -804,6 +804,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
     addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
     addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
+    addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
     addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
@@ -1676,6 +1677,7 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     const highPressureSalesKeywords = ['貨到付款', '免運', '限量', '立即搶購', '馬上訂購'];
     const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時/i.test(haystack);
     const hasCodSalesPitch = highPressureSalesKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) || hasLimitedPurchasePitch;
+    const hasAliziOrderSystem = /(?:\/public\/alizi\/|alizi-order|alizibooking|www\.alizi\.net)/i.test(haystack);
     const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
     const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const hasLineContactSignal = lineContactMatches.length > 0;
@@ -1692,6 +1694,7 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     if (hasOnePageStructure) reasons.push('一頁式購物頁結構');
     if (hasOrderForm) reasons.push('頁面直接要求收件或訂購資料');
     if (hasCodSalesPitch) reasons.push('貨到付款/限時優惠等銷售話術');
+    if (hasAliziOrderSystem && hasOrderForm && hasCodSalesPitch) reasons.push('Alizi 一頁式下單系統搭配收件表單與貨到付款話術');
     if (!hasMerchantInfo && matchedKeywords.length >= 4) reasons.push('缺少明確商家資訊或退換貨政策');
     if (imageHeavy) reasons.push('商品圖片比例高且正常站內連結偏少');
     if (hasTrackingLandingParam) reasons.push('含廣告落地頁追蹤參數');
@@ -1715,11 +1718,48 @@ function analyzeShoppingScamSignals({ html = '', url }) {
         imageCount,
         linkCount,
         hasOrderForm,
+        hasAliziOrderSystem,
         hasMerchantInfo,
         hasCourseProviderTrust,
         hasLineContactSignal,
         hasLineOrderContext,
         lineContactExamples: lineContactMatches.slice(0, 3)
+    };
+}
+
+function analyzeJobTaskScamSignals({ html = '', url }) {
+    const haystack = decodeSignalText(`${html}\n${url}`);
+    const jobKeywords = ['找工作', '求職', '徵才', '職缺', '應徵', '薪資', '職員登入', '工作首頁', '企業徵才'];
+    const moneyKeywords = ['提領資金', '存入資金', '存入提領', '交易紀錄', '儲值', '充值', '入金', '出金', '匯款', '銀行帳戶', '帳戶須為同一人'];
+    const taskKeywords = ['機台操作', '每日簽到', '領取能量', '平台代理', '任務佣金', '接單任務'];
+    const identityKeywords = ['真實姓名', '手機號碼', '身分證', '銀行帳戶', '本人手機', '帳戶須為同一人'];
+    const findMatches = keywords => keywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const jobMatches = findMatches(jobKeywords);
+    const moneyMatches = findMatches(moneyKeywords);
+    const taskMatches = findMatches(taskKeywords);
+    const identityMatches = findMatches(identityKeywords);
+    const hasJobFacade = jobMatches.length >= 3;
+    const hasMoneyFlow = moneyMatches.length >= 2;
+    const hasTaskMechanics = taskMatches.length >= 1;
+    const hasIdentityCollection = identityMatches.length >= 2;
+    const matched = hasJobFacade && hasMoneyFlow && hasTaskMechanics;
+    const reasons = [];
+    if (hasJobFacade && hasMoneyFlow) reasons.push('求職/徵才頁混入存入、提領或交易資金功能');
+    if (hasTaskMechanics) reasons.push('以機台操作、每日簽到或任務機制包裝工作內容');
+    if (hasIdentityCollection) reasons.push('註冊要求真實身分、手機或銀行帳戶資料');
+
+    return {
+        score: matched ? Math.min(100, 75 + (hasIdentityCollection ? 15 : 0)) : Math.min(60, reasons.length * 25),
+        matched,
+        reasons,
+        jobMatches,
+        moneyMatches,
+        taskMatches,
+        identityMatches,
+        hasJobFacade,
+        hasMoneyFlow,
+        hasTaskMechanics,
+        hasIdentityCollection
     };
 }
 
@@ -3358,6 +3398,151 @@ test('一頁式購物詐騙頁會抓到訂購表單、貨到付款話術與追�
     assert.ok(signals.reasons.includes('頁面直接要求收件或訂購資料'));
     assert.ok(signals.reasons.includes('貨到付款/限時優惠等銷售話術'));
     assert.ok(signals.reasons.includes('含廣告落地頁追蹤參數'));
+});
+
+test('jsizg.com Alizi 一頁式購物頁應列為人工確認高風險', () => {
+    const rawUrl = 'https://jsizg.com/index.php?m=Order&id=mxwsh01&tpl=detail&ldtag_cl=4z_YFsogS-GkszWPrOsqwAAA&lt_r=203';
+    const parsed = new URL(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>智能led顯示三頭充電剃鬚刀</title>
+                <meta name="description" content="米鏈數位促動有限公司">
+                <meta name="keywords" content="貨到付款,假一賠十,7天退換">
+                <link href="/Public/Alizi/alizi-order.css?v=V3.5" rel="stylesheet">
+                <script src="/Public/Alizi/seajs/sea.js?v=V3.5"></script>
+            </head>
+            <body>
+                <h1>低噪音！動力強！3D立體浮動刀頭</h1>
+                <h2>限時搶購</h2>
+                <p>NT$998，已售:6384，倒計時 00:00:00</p>
+                <p>貨到付款、假一賠十、7天退換，立即搶購</p>
+                <img src="1.jpg"><img src="2.jpg"><img src="3.jpg"><img src="4.jpg">
+                <img src="5.jpg"><img src="6.jpg"><img src="7.jpg"><img src="8.jpg">
+                <form action="/index.php?m=Order&a=aliziBooking" id="aliziForm">
+                    <input type="hidden" name="redirect" value="${rawUrl}">
+                    <input name="name" placeholder="真實姓名">
+                    <input name="mobile" placeholder="行動電話">
+                    <input name="address" placeholder="詳細地址">
+                    <select name="quantity"><option>1</option></select>
+                    <button>確認提交訂單</button>
+                </form>
+                <footer>Copyright © 米鏈數位促動有限公司</footer>
+            </body>
+        </html>`;
+    const signals = analyzeShoppingScamSignals({ html, url: rawUrl });
+    const isConfirmedScam = matchesDomainList(parsed.hostname, riskConfig.confirmedScamDomains);
+    const isWhitelisted = matchesDomainList(parsed.hostname, whitelist);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : (signals.matched ? 75 : 0),
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為一頁式購物高風險網站'
+            },
+            shoppingScam: {
+                status: signals.matched ? 'danger' : 'safe',
+                details: signals.reasons.join('、')
+            },
+            domainAnalysis: {
+                status: 'danger',
+                details: '頁面使用 Alizi 一頁式下單系統，搭配廣告追蹤參數、倒數與貨到付款話術'
+            }
+        }
+    });
+
+    assert.equal(parsed.hostname, 'jsizg.com');
+    assert.equal(isConfirmedScam, true);
+    assert.equal(isWhitelisted, false);
+    assert.equal(signals.matched, true);
+    assert.equal(signals.hasOrderForm, true);
+    assert.equal(signals.hasAliziOrderSystem, true);
+    assert.equal(signals.hasMerchantInfo, true);
+    assert.ok(signals.reasons.includes('一頁式購物頁結構'));
+    assert.ok(signals.reasons.includes('頁面直接要求收件或訂購資料'));
+    assert.ok(signals.reasons.includes('貨到付款/限時優惠等銷售話術'));
+    assert.ok(signals.reasons.includes('Alizi 一頁式下單系統搭配收件表單與貨到付款話術'));
+    assert.ok(signals.reasons.includes('含廣告落地頁追蹤參數'));
+    assert.equal(matchesDomainList('shop.jsizg.com', riskConfig.confirmedScamDomains), true);
+    assert.equal(matchesDomainList('jsizg.com.evil.example', riskConfig.confirmedScamDomains), false);
+    assert.equal(scanData.riskScore, 100);
+    assert.ok(scanData.summaryReasons.includes('人工確認詐騙網域'));
+});
+
+test('kackofworc.com 假求職網站混入存入提領與機台任務應列為高風險', () => {
+    const rawUrl = 'https://www.kackofworc.com/index.php';
+    const parsed = new URL(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const html = `
+        <html lang="zh-TW">
+            <head><title>找工作 - 找工作和技能交換，打造更全面的求職服務</title></head>
+            <body>
+                <header><button>企業徵才</button><a href="login.php">會員登入</a></header>
+                <main>
+                    <p>共 364,929 人在兩週內快速找到工作</p>
+                    <h2>熱門職缺</h2><p>新鮮人專區，無經驗可，起薪35K起</p>
+                    <a href="company-profile.php?id=cosmed">康是美 月薪最高 38K 立即應徵</a>
+                </main>
+                <nav>
+                    <a href="index.php">工作首頁</a>
+                    <a href="member-center.php?tab=machine">機台操作</a>
+                    <a href="member-center.php?tab=transactions">交易紀錄</a>
+                    <a href="member-center.php?tab=withdraw">提領資金</a>
+                    <a href="member-center.php?tab=deposit">存入資金</a>
+                    <a href="customer-service.php">客服中心與存入提領申請</a>
+                    <a href="#">每日簽到，立即領取能量</a>
+                </nav>
+                <footer>© 2026 by Dispatch Technology Co., Ltd. All Rights Reserved.</footer>
+            </body>
+        </html>`;
+    const signals = analyzeJobTaskScamSignals({ html, url: rawUrl });
+    const domainAgeDays = getPastAgeDays('2026-06-24T10:39:18Z', Date.parse('2026-07-17T00:00:00Z'));
+    const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
+    const hasJobTaskScamSignal = signals.matched && isVeryNewDomain;
+    const isConfirmedScam = matchesDomainList(parsed.hostname, riskConfig.confirmedScamDomains);
+    const genericRiskScore = hasJobTaskScamSignal ? 90 : 0;
+    const scoreAfterTrustedWeakCap = applyTrustedCommercialWeakSignalCap({
+        riskScore: genericRiskScore,
+        hasStrongRiskSignal: hasJobTaskScamSignal,
+        hasTrustedCommercialWeakSignalContext: true
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : scoreAfterTrustedWeakCap,
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此網域已由人工確認為假求職/任務金流高風險網站'
+            },
+            jobTaskScam: {
+                status: hasJobTaskScamSignal ? 'danger' : 'safe',
+                details: signals.reasons.join('、')
+            },
+            domainAnalysis: {
+                status: hasJobTaskScamSignal ? 'danger' : 'safe',
+                details: '求職頁混入存入、提領、交易與機台任務功能'
+            }
+        }
+    });
+
+    assert.equal(parsed.hostname, 'www.kackofworc.com');
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), false);
+    assert.equal(domainAgeDays, 22);
+    assert.equal(isVeryNewDomain, true);
+    assert.equal(signals.matched, true);
+    assert.equal(signals.hasJobFacade, true);
+    assert.equal(signals.hasMoneyFlow, true);
+    assert.equal(signals.hasTaskMechanics, true);
+    assert.ok(signals.reasons.includes('求職/徵才頁混入存入、提領或交易資金功能'));
+    assert.ok(signals.reasons.includes('以機台操作、每日簽到或任務機制包裝工作內容'));
+    assert.equal(hasJobTaskScamSignal, true);
+    assert.equal(scoreAfterTrustedWeakCap, 90);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(matchesDomainList('portal.kackofworc.com', riskConfig.confirmedScamDomains), true);
+    assert.equal(matchesDomainList('kackofworc.com.safe.example', riskConfig.confirmedScamDomains), false);
+    assert.equal(scanData.riskScore, 100);
+    assert.ok(scanData.summaryReasons.includes('人工確認詐騙網域'));
+    assert.ok(scanData.summaryReasons.includes('假求職/任務金流詐騙特徵'));
 });
 
 test('一頁式購物廣告落地頁即使抓不到 HTML 也應由 URL-only 訊號升高風險', () => {
