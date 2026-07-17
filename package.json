@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "sync:cofacts-risk-signals": "node scripts/sync-cofacts-risk-signals.mjs",
     "sync:fda-puffery-ads": "node scripts/sync-fda-puffery-ads.mjs",
     "sync:ftc-decisions": "node scripts/sync-ftc-decisions.mjs",
     "test": "node --test tests/*.test.js"

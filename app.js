@@ -1706,6 +1706,18 @@ const { useState, useEffect, useRef } = React;
             }
         };
 
+        const checkCofactsRiskSignals = async (domain, fullUrl) => {
+            try {
+                const params = new URLSearchParams({ domain, url: fullUrl });
+                return await fetchJsonSafely(
+                    `/api/check-cofacts?${params.toString()}`,
+                    { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false }
+                );
+            } catch (e) {
+                return { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false };
+            }
+        };
+
         const checkCommunityBlocklists = async (domain) => {
             const lowerDomain = domain.toLowerCase();
             try {
@@ -1842,9 +1854,19 @@ const { useState, useEffect, useRef } = React;
             }
 
             let resolvedIp = null;
+            let prefetchedCofactsRiskData = null;
             try {
                 const dnsData = await fetchJsonSafely(`https://dns.google/resolve?name=${targetDomain}&type=A`, null);
-                if (dnsData?.Status === 3) return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
+                if (dnsData?.Status === 3) {
+                    prefetchedCofactsRiskData = await withTimeout(
+                        checkCofactsRiskSignals(domain, fullUrl),
+                        4000,
+                        { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false }
+                    );
+                    if (!prefetchedCofactsRiskData?.matched) {
+                        return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
+                    }
+                }
                 if (dnsData?.Answer && dnsData.Answer.length > 0) {
                     const aRecord = dnsData.Answer.find(r => r.type === 1);
                     if (aRecord) resolvedIp = aRecord.data;
@@ -1882,7 +1904,7 @@ const { useState, useEffect, useRef } = React;
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, networkInfoData, securityHeadersData, siteSeoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
+            const [geoLocationData, networkInfoData, securityHeadersData, siteSeoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData, cofactsRiskData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
@@ -1899,7 +1921,10 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchTraceData(fullUrl), 11000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
                 withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { isUnsafe: false }), 4000, { isUnsafe: false }),
-                withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] })
+                withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] }),
+                prefetchedCofactsRiskData
+                    ? Promise.resolve(prefetchedCofactsRiskData)
+                    : withTimeout(checkCofactsRiskSignals(domain, fullUrl), 4000, { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false })
             ]);
 
             // TLS 憑證會定期續發，核發日不能代表網域註冊日。
@@ -2170,6 +2195,17 @@ const { useState, useEffect, useRef } = React;
             const officialAlertMatch = officialAlertMatches[0] || null;
             const hasOfficialAlert = !isWhitelisted && !!officialAlertData?.matched;
             const hasOfficialAlertUrlMatch = hasOfficialAlert && officialAlertMatches.some(item => ['url', 'url-prefix'].includes(item.matchType));
+            const cofactsMatches = cofactsRiskData?.matches || [];
+            const cofactsMatch = cofactsMatches[0] || null;
+            const hasCofactsRecord = !!cofactsRiskData?.matched;
+            const cofactsRiskScore = !isWhitelisted && hasCofactsRecord
+                ? Math.max(0, Math.min(75, Number(cofactsRiskData?.riskScore || 0)))
+                : 0;
+            const hasCofactsFraudEvidence = cofactsRiskScore >= 50;
+            const hasStrongCofactsRisk = !isWhitelisted &&
+                !!cofactsRiskData?.strongRisk &&
+                cofactsRiskScore >= 60 &&
+                !cofactsRiskData?.hasConflict;
             const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
             const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount > 0 || suspiciousDownloadPath);
             const hasSuspiciousDownloadLanding = suspiciousDownloadPath &&
@@ -2421,6 +2457,7 @@ const { useState, useEffect, useRef } = React;
             const hasConfirmedThreatSignal = blocklistListedForRisk ||
                 isConfirmedScam ||
                 hasOfficialAlert ||
+                hasStrongCofactsRisk ||
                 isApkSite ||
                 isGoogleFlaggedForRisk ||
                 hasEmailTrackingPhishingPattern ||
@@ -2442,6 +2479,7 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingLineContactRisk;
 
             const hasSecondaryFraudEvidence = hasConfirmedThreatSignal ||
+                hasCofactsFraudEvidence ||
                 hasNewOneYearRegistrationRisk ||
                 isVeryNewDomain ||
                 isNewDomainWithNewCertificate ||
@@ -2601,6 +2639,7 @@ const { useState, useEffect, useRef } = React;
                     else if (hasUrgencyScamSignal) riskScore += 10;
                     if (hasHomographSignal) riskScore += 85;
                     if (hasOfficialAlert) riskScore += hasOfficialAlertUrlMatch ? 100 : 90;
+                    if (cofactsRiskScore > 0) riskScore += cofactsRiskScore;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -2716,6 +2755,7 @@ const { useState, useEffect, useRef } = React;
             const hasStrongRiskSignal = blocklistListedForRisk ||
                 isConfirmedScam ||
                 hasOfficialAlert ||
+                hasStrongCofactsRisk ||
                 isApkSite ||
                 isGoogleFlaggedForRisk ||
                 isVeryHighRiskTLD ||
@@ -2766,6 +2806,7 @@ const { useState, useEffect, useRef } = React;
                 const hasDangerDetail = hasBrandSimilarity ||
                     isConfirmedScam ||
                     hasOfficialAlert ||
+                    hasStrongCofactsRisk ||
                     hasEmailTrackingPhishingPattern ||
                     hasFinancialPhishingSignal ||
                     (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
@@ -2820,6 +2861,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 官方警示資料命中：${officialAlertMatch.source} 已公告「${officialAlertMatch.title}」，${officialAlertMatch.warning}`;
                 siteContentMsg = '危險：此網址已出現在官方警示資料';
+            } else if (hasStrongCofactsRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 Cofacts 社群查核強風險訊號：${cofactsRiskData.label}。此為群眾協作查核資料，仍應搭配網站證據判斷。`;
+                siteContentMsg = '危險：Cofacts 查核回應明確指出詐騙且獲得支持';
             } else if (isApkSite) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到網頁誘導下載不明 APK (Android App)，極可能是夾帶木馬的惡意軟體！';
@@ -3010,6 +3055,14 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingLineContactRisk ||
                 hasJobTaskScamSignal ||
                 hasRegulatedTobaccoSalesSignal;
+            const cofactsCheckStatus = !hasCofactsRecord
+                ? 'safe'
+                : (isWhitelisted || cofactsRiskData?.hasConflict || cofactsRiskScore === 0
+                    ? 'info'
+                    : (hasStrongCofactsRisk ? 'danger' : 'warning'));
+            const cofactsCheckDetails = !hasCofactsRecord
+                ? '未命中目前同步的 Cofacts 群眾回報與查核資料'
+                : `${cofactsRiskData.label}；要求查核 ${Number(cofactsMatch?.replyRequestCount || 0)} 次、查核回應 ${Number(cofactsMatch?.replyCount || 0)} 筆${cofactsRiskData?.hasConflict ? '；查核意見有歧異，不自動列為高風險' : ''}${cofactsRiskScore <= 25 ? '；民眾回報本身不是已確認詐騙結論' : ''}`;
             const siteContentStatus = isSocialMedia
                 ? 'warning'
                 : (hasConfirmedSiteContentThreat
@@ -3019,7 +3072,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasJobTaskScamSignal || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain },
+                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasStrongCofactsRisk || hasJobTaskScamSignal || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3040,6 +3093,14 @@ const { useState, useEffect, useRef } = React;
                             `${officialAlertMatch.source} 公告：${officialAlertMatch.category}「${officialAlertMatch.productName || officialAlertMatch.title}」。${officialAlertMatch.violationType}；${officialAlertMatch.warning}${officialAlertMatch.claimSummary ? ` ${officialAlertMatch.claimSummary}` : ''}` :
                             '未命中目前內建的官方警示資料',
                         link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
+                    },
+                    cofactsReports: {
+                        status: cofactsCheckStatus,
+                        label: 'Cofacts 群眾回報',
+                        details: cofactsCheckDetails,
+                        link: hasCofactsRecord ? cofactsMatch?.articleUrl : null,
+                        attribution: cofactsRiskData?.attribution?.text || '',
+                        license: cofactsRiskData?.attribution?.license || ''
                     },
                     confirmedScam: {
                         status: isConfirmedScam ? 'danger' : 'safe',
@@ -3296,6 +3357,7 @@ const { useState, useEffect, useRef } = React;
                 checks: {
                     googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
+                    cofactsReports: createScanCheck('unknown', 'Cofacts 群眾回報', '檢測流程未完整完成，無法查詢 Cofacts 群眾回報與查核資料'),
                     siteContent: createScanCheck(isFallbackConfirmedScam || isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackConfirmedScam ? fallbackConfirmedScamDetails : (isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails)),
                     domainAnalysis: createScanCheck(fallbackDomainStatus, '網域特徵分析', fallbackDomainDetails),
                     confirmedScam: createScanCheck(isFallbackConfirmedScam ? 'danger' : 'safe', '人工確認詐騙網域', isFallbackConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'),
@@ -3387,6 +3449,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
             addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
             addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
+            addReason(checks.cofactsReports?.status === 'danger', 'Cofacts 查核回應明確指出詐騙');
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
             addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
@@ -3766,6 +3829,8 @@ const { useState, useEffect, useRef } = React;
                 if (brandDataRes?.isFakeBrand) warningLines.push('企圖假冒知名品牌');
                 if (scanData.blocklistListed) warningLines.push('已被列入警示黑名單');
                 if (scanData.checks?.officialAlerts?.status === 'danger') warningLines.push(`官方警示資料命中：${scanData.checks.officialAlerts.details}`);
+                if (scanData.checks?.cofactsReports?.status === 'danger') warningLines.push(`Cofacts 強風險查核訊號：${scanData.checks.cofactsReports.details}`);
+                else if (scanData.checks?.cofactsReports?.status === 'warning') warningLines.push(`Cofacts 有相關群眾回報：${scanData.checks.cofactsReports.details}`);
                 if (scanData.checks?.shoppingLanding?.status === 'danger') warningLines.push('網址符合可疑購物/廣告落地頁特徵');
                 if (scanData.checks?.disposableDomain?.status === 'danger') warningLines.push('主網域具有免洗亂碼特徵');
                 if (scanData.checks?.apkCheck?.status === 'danger') warningLines.push(scanData.checks.apkCheck.details);
@@ -4911,6 +4976,29 @@ const { useState, useEffect, useRef } = React;
                                                         <ExternalLink size={14} />
                                                     </a>
                                                 )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {result.checks.cofactsReports && ['danger', 'warning', 'info'].includes(result.checks.cofactsReports.status) && (
+                                    <div className={`mb-6 p-4 md:p-5 border-2 rounded-2xl shadow-sm animate-fade-in ${result.checks.cofactsReports.status === 'danger' ? 'bg-red-50 border-red-300' : (result.checks.cofactsReports.status === 'warning' ? 'bg-yellow-50 border-yellow-300' : 'bg-blue-50 border-blue-200')}`}>
+                                        <div className="flex items-start gap-3">
+                                            <ShieldAlert size={28} className={`flex-shrink-0 mt-0.5 ${result.checks.cofactsReports.status === 'danger' ? 'text-red-600' : (result.checks.cofactsReports.status === 'warning' ? 'text-yellow-600' : 'text-blue-600')}`} />
+                                            <div className="min-w-0">
+                                                <h4 className={`font-extrabold text-lg md:text-xl mb-2 ${result.checks.cofactsReports.status === 'danger' ? 'text-red-800' : (result.checks.cofactsReports.status === 'warning' ? 'text-yellow-800' : 'text-blue-800')}`}>Cofacts 群眾回報與查核紀錄</h4>
+                                                <p className="text-sm md:text-base text-gray-800 leading-relaxed font-semibold">
+                                                    {result.checks.cofactsReports.details}
+                                                </p>
+                                                {result.checks.cofactsReports.link && (
+                                                    <a href={result.checks.cofactsReports.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-3 text-sm font-bold text-blue-700 hover:text-blue-900 hover:underline break-all">
+                                                        查看 Cofacts 原始案件
+                                                        <ExternalLink size={14} />
+                                                    </a>
+                                                )}
+                                                <p className="mt-3 text-[11px] md:text-xs text-gray-600 leading-relaxed">
+                                                    {result.checks.cofactsReports.attribution || '本編輯資料取自「Cofacts 真的假的」訊息回報機器人與查證協作社群，採 CC BY-SA 4.0 授權提供。'}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>

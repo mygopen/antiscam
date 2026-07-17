@@ -1,0 +1,58 @@
+name: Sync Cofacts Risk Signals
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+    - cron: '47 18 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      COFACTS_APP_SECRET: ${{ secrets.COFACTS_APP_SECRET }}
+      COFACTS_APP_ID: ${{ secrets.COFACTS_APP_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check authorized Cofacts credentials
+        id: credentials
+        shell: bash
+        run: |
+          if [[ -n "$COFACTS_APP_SECRET" || -n "$COFACTS_APP_ID" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Cofacts sync skipped: configure COFACTS_APP_SECRET or COFACTS_APP_ID after obtaining authorization from Cofacts WG."
+          fi
+
+      - name: Incremental Cofacts sync
+        if: steps.credentials.outputs.enabled == 'true' && github.event.schedule != '47 18 * * 0'
+        run: npm run sync:cofacts-risk-signals -- --lookback-days=30
+
+      - name: Weekly tracked-record reconciliation
+        if: steps.credentials.outputs.enabled == 'true' && github.event.schedule == '47 18 * * 0'
+        run: npm run sync:cofacts-risk-signals -- --lookback-days=7 --recheck-existing
+
+      - name: Commit updated Cofacts risk index
+        if: steps.credentials.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          if git diff --quiet -- functions/api/synced-cofacts-risk-signals.js; then
+            echo "No Cofacts risk index changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add functions/api/synced-cofacts-risk-signals.js
+          git commit -m "chore: sync Cofacts risk signals"
+          git push
