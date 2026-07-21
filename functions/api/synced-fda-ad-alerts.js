@@ -4,14 +4,1526 @@ export const fdaAdSyncMetadata = {
     "schemaVersion": 1,
     "source": "衛生福利部食品藥物管理署",
     "sourceUrl": "https://www.fda.gov.tw/TC/news.aspx?cid=5085",
-    "generatedAt": "2026-07-14T20:44:43.012Z",
+    "generatedAt": "2026-07-21T20:50:25.549Z",
     "maxPages": 20,
     "recordsFetched": 200,
     "detailsFetched": 200,
-    "recordsWithDomains": 146
+    "recordsWithDomains": 165
 };
 
 export const syncedFdaAdAlerts = [
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://hungans.com/product/zolpidem/)涉嫌違規廣告產品：Zolpidem(佐沛眠)",
+        "productName": "Zolpidem(佐沛眠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "hungans.com",
+        "rootDomains": [
+            "hungans.com"
+        ],
+        "urls": [
+            "https://hungans.com/product/zolpidem/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31604",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31604"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://hungans.com/product/fm2/ )涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "hungans.com",
+        "rootDomains": [
+            "hungans.com"
+        ],
+        "urls": [
+            "https://hungans.com/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31605",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31605"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://hungans.com/product/stilnox/ )涉嫌違規廣告產品：Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productName": "Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "hungans.com",
+        "rootDomains": [
+            "hungans.com"
+        ],
+        "urls": [
+            "https://hungans.com/product/stilnox/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31606",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31606"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://hungans.com/product/sclp/ )涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "hungans.com",
+        "rootDomains": [
+            "hungans.com"
+        ],
+        "urls": [
+            "https://hungans.com/product/sclp/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31607",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31607"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://linxmed.com/product/fm2/ )涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "linxmed.com",
+        "rootDomains": [
+            "linxmed.com"
+        ],
+        "urls": [
+            "https://linxmed.com/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31608",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31608"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://linxmed.com/product/stilnox/ )涉嫌違規廣告產品：Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productName": "Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "linxmed.com",
+        "rootDomains": [
+            "linxmed.com"
+        ],
+        "urls": [
+            "https://linxmed.com/product/stilnox/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31609",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31609"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://linxmed.com/product/nimetazepam/)涉嫌違規廣告產品：Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productName": "Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "linxmed.com",
+        "rootDomains": [
+            "linxmed.com"
+        ],
+        "urls": [
+            "https://linxmed.com/product/nimetazepam/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31610",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31610"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://linxmed.com/product/cu33/)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "linxmed.com",
+        "rootDomains": [
+            "linxmed.com"
+        ],
+        "urls": [
+            "https://linxmed.com/product/cu33/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31611",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31611"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://sexfet.tw/product/triazolam-tablets-d295)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "sexfet.tw",
+        "rootDomains": [
+            "sexfet.tw"
+        ],
+        "urls": [
+            "https://sexfet.tw/product/triazolam-tablets-d295"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31612",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31612"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://sexfet.tw/product/sleep-enhancer-9893)涉嫌違規廣告產品：Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productName": "Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "sexfet.tw",
+        "rootDomains": [
+            "sexfet.tw"
+        ],
+        "urls": [
+            "https://sexfet.tw/product/sleep-enhancer-9893"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31613",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31613"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://sexfet.tw/product/desire-enhancer-127c)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "sexfet.tw",
+        "rootDomains": [
+            "sexfet.tw"
+        ],
+        "urls": [
+            "https://sexfet.tw/product/desire-enhancer-127c"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31614",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31614"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://lin-pha.com.tw/shop/zopiclone)涉嫌違規廣告產品：Zopiclone(唑匹可隆)",
+        "productName": "Zopiclone(唑匹可隆)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "lin-pha.com.tw",
+        "rootDomains": [
+            "lin-pha.com.tw"
+        ],
+        "urls": [
+            "https://lin-pha.com.tw/shop/zopiclone"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31615",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31615"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://lin-pha.com.tw/shop/halcion)涉嫌違規廣告產品：Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productName": "Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "lin-pha.com.tw",
+        "rootDomains": [
+            "lin-pha.com.tw"
+        ],
+        "urls": [
+            "https://lin-pha.com.tw/shop/halcion"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31616",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31616"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-595.html)涉嫌違規廣告產品：Zopiclone(唑匹可隆)",
+        "productName": "Zopiclone(唑匹可隆)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-595.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31617",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31617"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-445.html)涉嫌違規廣告產品：Zolpidem(佐沛眠)",
+        "productName": "Zolpidem(佐沛眠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-445.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31618",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31618"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-444.html)涉嫌違規廣告產品：Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productName": "Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-444.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31619",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31619"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-182.html)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-182.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31620",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31620"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-179.html)涉嫌違規廣告產品：Alprazolam(阿普唑他)",
+        "productName": "Alprazolam(阿普唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-179.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31621",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31621"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-178.html)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-178.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31622",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31622"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twck.cc/product-186.html)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twck.cc",
+        "rootDomains": [
+            "twck.cc"
+        ],
+        "urls": [
+            "https://www.twck.cc/product-186.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31623",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31623"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twkkk5.com/product-444.html)涉嫌違規廣告產品：Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productName": "Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twkkk5.com",
+        "rootDomains": [
+            "twkkk5.com"
+        ],
+        "urls": [
+            "https://www.twkkk5.com/product-444.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31624",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31624"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twkkk5.com/product-179.html)涉嫌違規廣告產品：Alprazolam(阿普唑他)",
+        "productName": "Alprazolam(阿普唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twkkk5.com",
+        "rootDomains": [
+            "twkkk5.com"
+        ],
+        "urls": [
+            "https://www.twkkk5.com/product-179.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31625",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31625"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twkkk5.com/product-186.html)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twkkk5.com",
+        "rootDomains": [
+            "twkkk5.com"
+        ],
+        "urls": [
+            "https://www.twkkk5.com/product-186.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31626",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31626"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twkkk5.com/product-445.html)涉嫌違規廣告產品：Zolpidem(佐沛眠) 54",
+        "productName": "Zolpidem(佐沛眠) 54",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twkkk5.com",
+        "rootDomains": [
+            "twkkk5.com"
+        ],
+        "urls": [
+            "https://www.twkkk5.com/product-445.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31627",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31627"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://gofm2.com/works/)涉嫌違規廣告產品：Zolpidem(佐沛眠) / Stilnox使蒂諾斯, Flunitrazepam(氟硝⻄泮), Triazolam(三唑他), Nimetazepam(硝甲⻄泮/硝甲氮平）/ ⼀粒眠",
+        "productName": "Zolpidem(佐沛眠) / Stilnox使蒂諾斯, Flunitrazepam(氟硝⻄泮), Triazolam(三唑他), Nimetazepam(硝甲⻄泮/硝甲氮平）/ ⼀粒眠",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "gofm2.com",
+        "rootDomains": [
+            "gofm2.com"
+        ],
+        "urls": [
+            "https://gofm2.com/works/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31628",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31628"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://yepow.com/index.php/product/nimetazepam/)涉嫌違規廣告產品：Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productName": "Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "yepow.com",
+        "rootDomains": [
+            "yepow.com"
+        ],
+        "urls": [
+            "https://yepow.com/index.php/product/nimetazepam/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31629",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31629"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://yepow.com/index.php/product/fm2/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "yepow.com",
+        "rootDomains": [
+            "yepow.com"
+        ],
+        "urls": [
+            "https://yepow.com/index.php/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31630",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31630"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://yepow.com/index.php/product/dsge/)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "yepow.com",
+        "rootDomains": [
+            "yepow.com"
+        ],
+        "urls": [
+            "https://yepow.com/index.php/product/dsge/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31631",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31631"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://yepow.com/index.php/product/dgru/)涉嫌違規廣告產品：Alprazolam(阿普唑他)",
+        "productName": "Alprazolam(阿普唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "yepow.com",
+        "rootDomains": [
+            "yepow.com"
+        ],
+        "urls": [
+            "https://yepow.com/index.php/product/dgru/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31632",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31632"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://huntsew.com/product/ylm/)涉嫌違規廣告產品：Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productName": "Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "huntsew.com",
+        "rootDomains": [
+            "huntsew.com"
+        ],
+        "urls": [
+            "https://huntsew.com/product/ylm/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31633",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31633"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://huntsew.com/product/fm2/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "huntsew.com",
+        "rootDomains": [
+            "huntsew.com"
+        ],
+        "urls": [
+            "https://huntsew.com/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31634",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31634"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://huntsew.com/product/stilnox/)涉嫌違規廣告產品：Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productName": "Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "huntsew.com",
+        "rootDomains": [
+            "huntsew.com"
+        ],
+        "urls": [
+            "https://huntsew.com/product/stilnox/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31635",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31635"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://huntsew.com/product/pidi/)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "huntsew.com",
+        "rootDomains": [
+            "huntsew.com"
+        ],
+        "urls": [
+            "https://huntsew.com/product/pidi/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31636",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31636"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://miclubs.vip/product/hong-kong-1)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "miclubs.vip",
+        "rootDomains": [
+            "miclubs.vip"
+        ],
+        "urls": [
+            "https://miclubs.vip/product/hong-kong-1"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31637",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31637"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://miclubs.vip/product/triazolam)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "miclubs.vip",
+        "rootDomains": [
+            "miclubs.vip"
+        ],
+        "urls": [
+            "https://miclubs.vip/product/triazolam"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31638",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31638"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://miclubs.vip/product/hypnotic-fm2)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "miclubs.vip",
+        "rootDomains": [
+            "miclubs.vip"
+        ],
+        "urls": [
+            "https://miclubs.vip/product/hypnotic-fm2"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31639",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31639"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://miclubs.vip/product/sleeping-strong)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "miclubs.vip",
+        "rootDomains": [
+            "miclubs.vip"
+        ],
+        "urls": [
+            "https://miclubs.vip/product/sleeping-strong"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31640",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31640"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://tw-tintinpha.com/product/amy)涉嫌違規廣告產品：Alprazolam(阿普唑他)",
+        "productName": "Alprazolam(阿普唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "tw-tintinpha.com",
+        "rootDomains": [
+            "tw-tintinpha.com"
+        ],
+        "urls": [
+            "https://tw-tintinpha.com/product/amy"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31641",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31641"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://tw-tintinpha.com/product/cmp-hypnotic)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "tw-tintinpha.com",
+        "rootDomains": [
+            "tw-tintinpha.com"
+        ],
+        "urls": [
+            "https://tw-tintinpha.com/product/cmp-hypnotic"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31642",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31642"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://lowe99.vip/product/female-aphrodisiac-standard-2)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "lowe99.vip",
+        "rootDomains": [
+            "lowe99.vip"
+        ],
+        "urls": [
+            "https://lowe99.vip/product/female-aphrodisiac-standard-2"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31643",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31643"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://zopiclone.com/product/zopiclone-7-5mg/)涉嫌違規廣告產品：Zopiclone(唑匹可隆)",
+        "productName": "Zopiclone(唑匹可隆)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "zopiclone.com",
+        "rootDomains": [
+            "zopiclone.com"
+        ],
+        "urls": [
+            "https://zopiclone.com/product/zopiclone-7-5mg/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31644",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31644"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://supxfy.com/product/halcion/)涉嫌違規廣告產品：Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productName": "Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "supxfy.com",
+        "rootDomains": [
+            "supxfy.com"
+        ],
+        "urls": [
+            "https://supxfy.com/product/halcion/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31645",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31645"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://supxfy.com/product/fm2-2/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "supxfy.com",
+        "rootDomains": [
+            "supxfy.com"
+        ],
+        "urls": [
+            "https://supxfy.com/product/fm2-2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31646",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31646"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://supxfy.com/product/fm2/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "supxfy.com",
+        "rootDomains": [
+            "supxfy.com"
+        ],
+        "urls": [
+            "https://supxfy.com/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31647",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31647"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://supxfy.com/product/afdfg/)涉嫌違規廣告產品：Zopiclone(唑匹可隆)",
+        "productName": "Zopiclone(唑匹可隆)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "supxfy.com",
+        "rootDomains": [
+            "supxfy.com"
+        ],
+        "urls": [
+            "https://supxfy.com/product/afdfg/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31648",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31648"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.twkkk5.com/product-602.html)涉嫌違規廣告產品：Clonazepam [氯硝⻄泮(可那氮平、氯硝氮平)]",
+        "productName": "Clonazepam [氯硝⻄泮(可那氮平、氯硝氮平)]",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "twkkk5.com",
+        "rootDomains": [
+            "twkkk5.com"
+        ],
+        "urls": [
+            "https://www.twkkk5.com/product-602.html"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31649",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31649"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://oka19.com/product/chunyaoanmingyao/)涉嫌違規廣告產品：Zopiclone(唑匹可隆), Zolpidem(佐沛眠)",
+        "productName": "Zopiclone(唑匹可隆), Zolpidem(佐沛眠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "oka19.com",
+        "rootDomains": [
+            "oka19.com"
+        ],
+        "urls": [
+            "https://oka19.com/product/chunyaoanmingyao/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31650",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31650"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://oka19.com/product/fm2sclqydlzrtk/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮), Triazolam(三唑他)",
+        "productName": "Flunitrazepam(氟硝⻄泮), Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "oka19.com",
+        "rootDomains": [
+            "oka19.com"
+        ],
+        "urls": [
+            "https://oka19.com/product/fm2sclqydlzrtk/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31651",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31651"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://tw-tintinpha.com/product/zolpidem)涉嫌違規廣告產品：Zolpidem(佐沛眠)",
+        "productName": "Zolpidem(佐沛眠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "tw-tintinpha.com",
+        "rootDomains": [
+            "tw-tintinpha.com"
+        ],
+        "urls": [
+            "https://tw-tintinpha.com/product/zolpidem"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31652",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31652"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://fulun88.com/product/fm2/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "fulun88.com",
+        "rootDomains": [
+            "fulun88.com"
+        ],
+        "urls": [
+            "https://fulun88.com/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31653",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31653"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://fulun88.com/product/triazolam/)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "fulun88.com",
+        "rootDomains": [
+            "fulun88.com"
+        ],
+        "urls": [
+            "https://fulun88.com/product/triazolam/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31654",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31654"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://song99.cc/product/productContent/17/314)涉嫌違規廣告產品：Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productName": "Nimetazepam(硝甲⻄泮/硝甲氮平)/ ⼀粒眠",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "song99.cc",
+        "rootDomains": [
+            "song99.cc"
+        ],
+        "urls": [
+            "https://song99.cc/product/productContent/17/314"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31656",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31656"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://www.russianpharmacy.org/zh/product-page/buy-sonata-zaleplon)涉嫌違規廣告產品：Zaleplon(札來普隆)",
+        "productName": "Zaleplon(札來普隆)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "russianpharmacy.org",
+        "rootDomains": [
+            "russianpharmacy.org"
+        ],
+        "urls": [
+            "https://www.russianpharmacy.org/zh/product-page/buy-sonata-zaleplon"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31657",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31657"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://tw-tintinpha.com/product/halcion)涉嫌違規廣告產品：Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productName": "Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "tw-tintinpha.com",
+        "rootDomains": [
+            "tw-tintinpha.com"
+        ],
+        "urls": [
+            "https://tw-tintinpha.com/product/halcion"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31658",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31658"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://peachw88.com/product/halcion/)涉嫌違規廣告產品：Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productName": "Triazolam(三唑他) / Halcion(酣樂欣錠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "peachw88.com",
+        "rootDomains": [
+            "peachw88.com"
+        ],
+        "urls": [
+            "https://peachw88.com/product/halcion/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31659",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31659"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://peachw88.com/product/fm2/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "peachw88.com",
+        "rootDomains": [
+            "peachw88.com"
+        ],
+        "urls": [
+            "https://peachw88.com/product/fm2/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31660",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31660"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://peachw88.com/product/triazolamtablets/)涉嫌違規廣告產品：Triazolam(三唑他)",
+        "productName": "Triazolam(三唑他)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "peachw88.com",
+        "rootDomains": [
+            "peachw88.com"
+        ],
+        "urls": [
+            "https://peachw88.com/product/triazolamtablets/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31661",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31661"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://peachw88.com/product/fm2m/)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "peachw88.com",
+        "rootDomains": [
+            "peachw88.com"
+        ],
+        "urls": [
+            "https://peachw88.com/product/fm2m/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31662",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31662"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://peachw88.com/product/zolpidem/)涉嫌違規廣告產品：Zolpidem(佐沛眠)",
+        "productName": "Zolpidem(佐沛眠)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "peachw88.com",
+        "rootDomains": [
+            "peachw88.com"
+        ],
+        "urls": [
+            "https://peachw88.com/product/zolpidem/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31663",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31663"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://peachw88.com/product/zopiclone/)涉嫌違規廣告產品：Zopiclone(唑匹可隆)",
+        "productName": "Zopiclone(唑匹可隆)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "peachw88.com",
+        "rootDomains": [
+            "peachw88.com"
+        ],
+        "urls": [
+            "https://peachw88.com/product/zopiclone/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31664",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31664"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://norbeibaby.com/product-category/%e6%9c%aa%e5%88%86%e9%a1%9e)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮), Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productName": "Flunitrazepam(氟硝⻄泮), Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "norbeibaby.com",
+        "rootDomains": [
+            "norbeibaby.com"
+        ],
+        "urls": [
+            "https://norbeibaby.com/product-category/%e6%9c%aa%e5%88%86%e9%a1%9e"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31665",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31665"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://miclubs.tw/product/super-strong-hallucinogen-hypnosis-liquid)涉嫌違規廣告產品：Flunitrazepam(氟硝⻄泮)",
+        "productName": "Flunitrazepam(氟硝⻄泮)",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "miclubs.tw",
+        "rootDomains": [
+            "miclubs.tw"
+        ],
+        "urls": [
+            "https://miclubs.tw/product/super-strong-hallucinogen-hypnosis-liquid"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31666",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31666"
+    },
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站(https://sprman.com/product/stilnox-sleeping-pills/)涉嫌違規廣告產品：Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productName": "Zolpidem(佐沛眠) / Stilnox使蒂諾斯",
+        "productCategory": null,
+        "siteName": null,
+        "rootDomain": "sprman.com",
+        "rootDomains": [
+            "sprman.com"
+        ],
+        "urls": [
+            "https://sprman.com/product/stilnox-sleeping-pills/"
+        ],
+        "publishedDate": "2026-07-20",
+        "monitoredDate": "",
+        "issuingUnit": "管制藥品組",
+        "violationType": "涉嫌違規食藥廣告",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31667",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "31667"
+    },
     {
         "source": "衛生福利部食品藥物管理署",
         "category": "涉嫌違規廣告產品",
@@ -2103,534 +3615,6 @@ export const syncedFdaAdAlerts = [
     {
         "source": "衛生福利部食品藥物管理署",
         "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://shop.cosmad.com.tw)涉嫌違規廣告產品：使蒂諾斯(Stilnox)",
-        "productName": "使蒂諾斯(Stilnox)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "cosmad.com.tw",
-        "rootDomains": [
-            "cosmad.com.tw"
-        ],
-        "urls": [
-            "https://shop.cosmad.com.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31121",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31121"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://shop.cosmad.com.tw)涉嫌違規廣告產品：贊安諾(Xanax)",
-        "productName": "贊安諾(Xanax)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "cosmad.com.tw",
-        "rootDomains": [
-            "cosmad.com.tw"
-        ],
-        "urls": [
-            "https://shop.cosmad.com.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31122",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31122"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://shop.cosmad.com.tw)涉嫌違規廣告產品：宜眠安(zopiclone)",
-        "productName": "宜眠安(zopiclone)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "cosmad.com.tw",
-        "rootDomains": [
-            "cosmad.com.tw"
-        ],
-        "urls": [
-            "https://shop.cosmad.com.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31123",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31123"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.watsonstw.com)涉嫌違規廣告產品：使蒂諾斯(Stilnox)",
-        "productName": "使蒂諾斯(Stilnox)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "watsonstw.com",
-        "rootDomains": [
-            "watsonstw.com"
-        ],
-        "urls": [
-            "https://www.watsonstw.com"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31124",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31124"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://dechan19.com)涉嫌違規廣告產品：使蒂諾斯(Stilnox)",
-        "productName": "使蒂諾斯(Stilnox)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "dechan19.com",
-        "rootDomains": [
-            "dechan19.com"
-        ],
-        "urls": [
-            "https://dechan19.com"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31125",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31125"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://dechan19.com)涉嫌違規廣告產品： FM2/Flunitrazepam",
-        "productName": "FM2/Flunitrazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "dechan19.com",
-        "rootDomains": [
-            "dechan19.com"
-        ],
-        "urls": [
-            "https://dechan19.com"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31126",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31126"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.shinan-drugstore.tw)涉嫌違規廣告產品：FM2/Flunitrazepam",
-        "productName": "FM2/Flunitrazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "shinan-drugstore.tw",
-        "rootDomains": [
-            "shinan-drugstore.tw"
-        ],
-        "urls": [
-            "https://www.shinan-drugstore.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31127",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31127"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.shinan-drugstore.tw)涉嫌違規廣告產品：贊安諾(Xanax)",
-        "productName": "贊安諾(Xanax)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "shinan-drugstore.tw",
-        "rootDomains": [
-            "shinan-drugstore.tw"
-        ],
-        "urls": [
-            "https://www.shinan-drugstore.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31128",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31128"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.meise.tw)涉嫌違規廣告產品： FM2/Flunitrazepam",
-        "productName": "FM2/Flunitrazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "meise.tw",
-        "rootDomains": [
-            "meise.tw"
-        ],
-        "urls": [
-            "https://www.meise.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31129",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31129"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.meise.tw)涉嫌違規廣告產品：Zolpiclone",
-        "productName": "Zolpiclone",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "meise.tw",
-        "rootDomains": [
-            "meise.tw"
-        ],
-        "urls": [
-            "https://www.meise.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31130",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31130"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://rwpdgm.weig.tw)涉嫌違規廣告產品：Zolpidem",
-        "productName": "Zolpidem",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "weig.tw",
-        "rootDomains": [
-            "weig.tw"
-        ],
-        "urls": [
-            "https://rwpdgm.weig.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31131",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31131"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://wegbhztwhrgshwxtkzp.weig.tw)涉嫌違規廣告產品：Zopiclone",
-        "productName": "Zopiclone",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "weig.tw",
-        "rootDomains": [
-            "weig.tw"
-        ],
-        "urls": [
-            "https://wegbhztwhrgshwxtkzp.weig.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31132",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31132"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.somi.com.tw/)涉嫌違規廣告產品：Zolpidem",
-        "productName": "Zolpidem",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "somi.com.tw",
-        "rootDomains": [
-            "somi.com.tw"
-        ],
-        "urls": [
-            "https://www.somi.com.tw/"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31133",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31133"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://bigtree19.com.tw/)涉嫌違規廣告產品： FM2/Flunitrazepam",
-        "productName": "FM2/Flunitrazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "bigtree19.com.tw",
-        "rootDomains": [
-            "bigtree19.com.tw"
-        ],
-        "urls": [
-            "https://bigtree19.com.tw/"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31134",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31134"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.vge.com.tw/product-200.html)涉嫌違規廣告產品：一粒眠/Nimetazepam",
-        "productName": "一粒眠/Nimetazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "vge.com.tw",
-        "rootDomains": [
-            "vge.com.tw"
-        ],
-        "urls": [
-            "https://www.vge.com.tw/product-200.html"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31135",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31135"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://stilnox.xyz)涉嫌違規廣告產品：使蒂諾斯(Stilnox)",
-        "productName": "使蒂諾斯(Stilnox)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "stilnox.xyz",
-        "rootDomains": [
-            "stilnox.xyz"
-        ],
-        "urls": [
-            "https://stilnox.xyz"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31136",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31136"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://fm2buy.com/)涉嫌違規廣告產品： FM2/Flunitrazepam",
-        "productName": "FM2/Flunitrazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "fm2buy.com",
-        "rootDomains": [
-            "fm2buy.com"
-        ],
-        "urls": [
-            "https://fm2buy.com/"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31137",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31137"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://store.japandrugdealer.com/product/zopiclone/ )涉嫌違規廣告產品：Zopiclone(唑匹可隆)",
-        "productName": "Zopiclone(唑匹可隆)",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "japandrugdealer.com",
-        "rootDomains": [
-            "japandrugdealer.com"
-        ],
-        "urls": [
-            "https://store.japandrugdealer.com/product/zopiclone/"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31138",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31138"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.ujcgo.com/product/mifepristone-tablets200-mg)涉嫌違規廣告產品：",
-        "productName": "國外網站(https://www.ujcgo.com/product/mifepristone-tablets200-mg)涉嫌違規廣告產品：",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "ujcgo.com",
-        "rootDomains": [
-            "ujcgo.com"
-        ],
-        "urls": [
-            "https://www.ujcgo.com/product/mifepristone-tablets200-mg"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31140",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31140"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.doctorsite.com.tw)涉嫌違規廣告產品： FM2/Flunitrazepam",
-        "productName": "FM2/Flunitrazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "doctorsite.com.tw",
-        "rootDomains": [
-            "doctorsite.com.tw"
-        ],
-        "urls": [
-            "https://www.doctorsite.com.tw"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31141",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31141"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://nikotw.com/shop/halcion)涉嫌違規廣告產品：Halcion",
-        "productName": "Halcion",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "nikotw.com",
-        "rootDomains": [
-            "nikotw.com"
-        ],
-        "urls": [
-            "https://nikotw.com/shop/halcion"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31142",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31142"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://810w.com/shop/zdj)涉嫌違規廣告產品：一粒眠/Nimetazepam",
-        "productName": "一粒眠/Nimetazepam",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "810w.com",
-        "rootDomains": [
-            "810w.com"
-        ],
-        "urls": [
-            "https://810w.com/shop/zdj"
-        ],
-        "publishedDate": "2025-07-18",
-        "monitoredDate": "",
-        "issuingUnit": "管制藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=31143",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "31143"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
         "title": "國外網站涉嫌違規廣告產品：桑葉雙瓜茶",
         "productName": "桑葉雙瓜茶",
         "productCategory": "食品",
@@ -2967,78 +3951,6 @@ export const syncedFdaAdAlerts = [
     {
         "source": "衛生福利部食品藥物管理署",
         "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.originalnumbtktx.com/)涉嫌違規廣告產品： TKTX",
-        "productName": "TKTX",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "originalnumbtktx.com",
-        "rootDomains": [
-            "originalnumbtktx.com"
-        ],
-        "urls": [
-            "https://www.originalnumbtktx.com/"
-        ],
-        "publishedDate": "2024-12-25",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30864",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30864"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.tktxtattoos.com/)涉嫌違規廣告產品： TKTX",
-        "productName": "TKTX",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "tktxtattoos.com",
-        "rootDomains": [
-            "tktxtattoos.com"
-        ],
-        "urls": [
-            "https://www.tktxtattoos.com/"
-        ],
-        "publishedDate": "2024-12-25",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30866",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30866"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://tktxstore.co/zh-TW/)涉嫌違規廣告產品： TKTX",
-        "productName": "TKTX",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "tktxstore.co",
-        "rootDomains": [
-            "tktxstore.co"
-        ],
-        "urls": [
-            "https://tktxstore.co/zh-TW/"
-        ],
-        "publishedDate": "2024-12-25",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30867",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30867"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
         "title": "國外網站( https://zh-tw.tktxcompany.com/%E5%AD%98%E5%84%B2/)涉嫌違規廣告產品： TKTX",
         "productName": "TKTX",
         "productCategory": null,
@@ -3059,461 +3971,5 @@ export const syncedFdaAdAlerts = [
         "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30868",
         "syncedFrom": "fda-puffery-ads",
         "recordId": "30868"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站(https://www.instagram.com/52.sosobody/)涉嫌違規廣告產品： Rybelsus等藥品",
-        "productName": "Rybelsus等藥品",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "instagram.com",
-        "rootDomains": [
-            "instagram.com"
-        ],
-        "urls": [
-            "https://www.instagram.com/52.sosobody/"
-        ],
-        "publishedDate": "2024-11-15",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30814",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30814"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：最強代謝酵素膠囊",
-        "productName": "最強代謝酵素膠囊",
-        "productCategory": "食品",
-        "siteName": "抖音網站（帳號：@kudos_belle）",
-        "rootDomain": "tiktok.com",
-        "rootDomains": [
-            "tiktok.com"
-        ],
-        "urls": [
-            "https://www.tiktok.com/@kudos_belle?_t=8qwfHmOLHLF&_r=1"
-        ],
-        "publishedDate": "2024-11-12",
-        "monitoredDate": "2024-03-20",
-        "issuingUnit": "高雄市政府衛生局",
-        "violationType": "違反食品安全衛生管理法第28條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "阻斷糖分 澱粉 油膩的負擔/輕鬆代謝過多的熱量",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113P1858&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113P1858"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.norbeibaby.com/product/rybelsus-14mg)涉嫌違規廣告產品： Rybelsus",
-        "productName": "Rybelsus",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "norbeibaby.com",
-        "rootDomains": [
-            "norbeibaby.com"
-        ],
-        "urls": [
-            "https://www.norbeibaby.com/product/rybelsus-14mg"
-        ],
-        "publishedDate": "2024-11-12",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30803",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30803"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.instagram.com/qoo976?igsh=MTd1eXB0a2NxMmE0dQ==)涉嫌違規廣告產品：Ozempic等藥品",
-        "productName": "Ozempic等藥品",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "instagram.com",
-        "rootDomains": [
-            "instagram.com"
-        ],
-        "urls": [
-            "https://www.instagram.com/qoo976?igsh=MTd1eXB0a2NxMmE0dQ=="
-        ],
-        "publishedDate": "2024-11-06",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30798",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30798"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：雙效威而鋼200mg等多項藥物",
-        "productName": "雙效威而鋼200mg等多項藥物",
-        "productCategory": "西藥",
-        "siteName": "OK藥局",
-        "rootDomain": "ok.com.tw",
-        "rootDomains": [
-            "ok.com.tw"
-        ],
-        "urls": [
-            "https://ok.com.tw/"
-        ],
-        "publishedDate": "2024-10-15",
-        "monitoredDate": "2024-10-11",
-        "issuingUnit": "新北市政府衛生局",
-        "violationType": "違反藥事法第83條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "有效治療男性性功能勃起障礙、早洩、攝護腺肥大症保養",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W9413&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W9413"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：褐藻醣膠",
-        "productName": "褐藻醣膠",
-        "productCategory": "食品",
-        "siteName": "世界新聞網",
-        "rootDomain": "worldjournal.com",
-        "rootDomains": [
-            "worldjournal.com"
-        ],
-        "urls": [
-            "https://www.worldjournal.com/wj/story/121375/8012996"
-        ],
-        "publishedDate": "2024-10-07",
-        "monitoredDate": "2024-09-12",
-        "issuingUnit": "臺北市政府衛生局",
-        "violationType": "違反食品安全衛生管理法第28條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "褐藻醣膠混合AG和病毒感染性肺炎的支持作用…褐藻醣膠支持免疫健康方面很有優勢…褐藻醣膠治療副作用產生時免疫平衡支持…高分子褐藻醣膠支持免疫功效優於低分子醣膠…褐藻醣膠支持腸道免疫健康以及呼吸道黏膜免疫",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W9207&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W9207"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：鳳梨酵素",
-        "productName": "鳳梨酵素",
-        "productCategory": "食品",
-        "siteName": "https://qjqjqja1.wixsite.com/website",
-        "rootDomain": "wixsite.com",
-        "rootDomains": [
-            "wixsite.com"
-        ],
-        "urls": [
-            "https://qjqjqja1.wixsite.com/website"
-        ],
-        "publishedDate": "2024-09-09",
-        "monitoredDate": "2024-08-24",
-        "issuingUnit": "臺北市政府衛生局",
-        "violationType": "違反食品安全衛生管理法第28條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "腹部救星 坐著坐著就大腹了 喝著喝著就順暢了...是消化不良最佳消化劑...能量活食物 維持高能狀態...擁有自然的活化能量 使全身氣血的運行順暢 迅速疏通...具有高頻的能量 讓疲憊與不適的身心快速",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W8469&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W8469"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://sieud.top/item/relieve/relieve.html)涉嫌違規廣告產品： relieve itching",
-        "productName": "relieve itching",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "sieud.top",
-        "rootDomains": [
-            "sieud.top"
-        ],
-        "urls": [
-            "https://sieud.top/item/relieve/relieve.html"
-        ],
-        "publishedDate": "2024-09-06",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30738",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30738"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.kuwa-osaka.com/store/products/336-500mg)涉嫌違規廣告產品：田邊三菱製藥 克里美淨 336粒 錠狀 500mg 速崩錠",
-        "productName": "田邊三菱製藥 克里美淨 336粒 錠狀 500mg 速崩錠",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "kuwa-osaka.com",
-        "rootDomains": [
-            "kuwa-osaka.com"
-        ],
-        "urls": [
-            "https://www.kuwa-osaka.com/store/products/336-500mg"
-        ],
-        "publishedDate": "2024-08-29",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30728",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30728"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.kuwa-osaka.com/store/products/336-500mg)涉嫌違規廣告產品：エスエス製薬 EVE 藍色 QUICK イブクイック 頭痛薬",
-        "productName": "エスエス製薬 EVE 藍色 QUICK イブクイック 頭痛薬",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "kuwa-osaka.com",
-        "rootDomains": [
-            "kuwa-osaka.com"
-        ],
-        "urls": [
-            "https://www.kuwa-osaka.com/store/products/336-500mg"
-        ],
-        "publishedDate": "2024-08-29",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30729",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30729"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.kuwa-osaka.com/store/products/336-500mg)涉嫌違規廣告產品：大正製藥 百保能 綜合感冒藥 錠狀 130/210錠",
-        "productName": "大正製藥 百保能 綜合感冒藥 錠狀 130/210錠",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "kuwa-osaka.com",
-        "rootDomains": [
-            "kuwa-osaka.com"
-        ],
-        "urls": [
-            "https://www.kuwa-osaka.com/store/products/336-500mg"
-        ],
-        "publishedDate": "2024-08-29",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30730",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30730"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.kuwa-osaka.com/store/products/336-500mg)涉嫌違規廣告產品：日本皇漢堂 LOXONIN 強效退燒 生理止痛藥",
-        "productName": "日本皇漢堂 LOXONIN 強效退燒 生理止痛藥",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "kuwa-osaka.com",
-        "rootDomains": [
-            "kuwa-osaka.com"
-        ],
-        "urls": [
-            "https://www.kuwa-osaka.com/store/products/336-500mg"
-        ],
-        "publishedDate": "2024-08-29",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30731",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30731"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：魔泌 魔煥玫瑰液",
-        "productName": "魔泌 魔煥玫瑰液",
-        "productCategory": "化粧品",
-        "siteName": "魔泌ASCE",
-        "rootDomain": "magicasce.com",
-        "rootDomains": [
-            "magicasce.com"
-        ],
-        "urls": [
-            "https://magicasce.com/article.php?id=28"
-        ],
-        "publishedDate": "2024-08-19",
-        "monitoredDate": "2024-07-10",
-        "issuingUnit": "臺北市政府衛生局",
-        "violationType": "違反化粧品安全衛生管理法第10條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "再生醫美…影響周圍細胞的功能和行為…突破性臨床數據…醫美…臨床驗證…臨床試驗…皺紋深度減少了約35%…肌膚彈性提升了約45%…刺激真皮纖维母细胞的增生…使膠原蛋白增加至原來的6倍，彈性蛋白的新生量增加",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W7745&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W7745"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：魔泌 魔煥玫瑰液",
-        "productName": "魔泌 魔煥玫瑰液",
-        "productCategory": "化粧品",
-        "siteName": "魔泌ASCE",
-        "rootDomain": "magicasce.com",
-        "rootDomains": [
-            "magicasce.com"
-        ],
-        "urls": [
-            "https://magicasce.com/article.php?id=27"
-        ],
-        "publishedDate": "2024-08-19",
-        "monitoredDate": "2024-07-10",
-        "issuingUnit": "臺北市政府衛生局",
-        "violationType": "違反化粧品安全衛生管理法第10條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "…外泌體再生醫美公司…醫學臨床期刊…GMP藥廠…",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W7749&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W7749"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：魔泌 魔煥玫瑰液",
-        "productName": "魔泌 魔煥玫瑰液",
-        "productCategory": "化粧品",
-        "siteName": "魔泌ASCE",
-        "rootDomain": "magicasce.com",
-        "rootDomains": [
-            "magicasce.com"
-        ],
-        "urls": [
-            "https://magicasce.com"
-        ],
-        "publishedDate": "2024-08-19",
-        "monitoredDate": "2024-07-10",
-        "issuingUnit": "臺北市政府衛生局",
-        "violationType": "違反化粧品安全衛生管理法第10條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "…催化細胞再生…外泌體再生醫美公司…醫學臨床期刊…人體幹細胞外泌體強大的再生功能…育髮再生…毛髮護理…抗細胞衰老…修復重建毛髮…肌膚再生…抗敏修護…",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W7750&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W7750"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站涉嫌違規廣告產品：魔泌 魔煥玫瑰液",
-        "productName": "魔泌 魔煥玫瑰液",
-        "productCategory": "化粧品",
-        "siteName": "魔泌ASCE",
-        "rootDomain": "magicasce.com",
-        "rootDomains": [
-            "magicasce.com"
-        ],
-        "urls": [
-            "https://magicasce.com/faqs.php"
-        ],
-        "publishedDate": "2024-08-19",
-        "monitoredDate": "2024-07-10",
-        "issuingUnit": "臺北市政府衛生局",
-        "violationType": "違反化粧品安全衛生管理法第10條規定",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "…生長因子…生長因子…高純度外泌體all in one注入直達肌底…搭配微針電波設備、皮秒雷射、二氧化碳雷射等有小傷口脂光電設備一起來治療…一般PRP及PLT治療…生長因子…落髮…再生醫美…全球高規格",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=113W7752&type=pmds",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "113W7752"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.twman19.com/)涉嫌違規廣告產品：Cialis",
-        "productName": "Cialis",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "twman19.com",
-        "rootDomains": [
-            "twman19.com"
-        ],
-        "urls": [
-            "https://www.twman19.com/"
-        ],
-        "publishedDate": "2024-08-12",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30674",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30674"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.indiarhino.com/category.html)涉嫌違規廣告產品：Cialis等藥品",
-        "productName": "Cialis等藥品",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "indiarhino.com",
-        "rootDomains": [
-            "indiarhino.com"
-        ],
-        "urls": [
-            "https://www.indiarhino.com/category.html"
-        ],
-        "publishedDate": "2024-08-12",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30675",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30675"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://www.cialiseshop.com/)涉嫌違規廣告產品：Cialis",
-        "productName": "Cialis",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "cialiseshop.com",
-        "rootDomains": [
-            "cialiseshop.com"
-        ],
-        "urls": [
-            "https://www.cialiseshop.com/"
-        ],
-        "publishedDate": "2024-08-12",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30676",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30676"
     }
 ];
