@@ -48,7 +48,8 @@ window.RISK_CONFIG = {
         'a-family-tw.geatzs.link',
         'calm-quokka-a2fe57.netlify.app',
         'jsizg.com',
-        'kackofworc.com'
+        'kackofworc.com',
+        'chesapeakeexpo.com'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
