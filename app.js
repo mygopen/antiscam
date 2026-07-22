@@ -26,7 +26,6 @@ const { useState, useEffect, useRef } = React;
         const Globe = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" /></IconBase>;
         const Copy = (p) => <IconBase {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconBase>;
         const Check = (p) => <IconBase {...p}><polyline points="20 6 9 17 4 12"></polyline></IconBase>;
-        const RefreshCw = (p) => <IconBase {...p}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></IconBase>;
         const ImageIcon = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></IconBase>;
 
         // [新增] 相機圖示
@@ -46,7 +45,6 @@ const { useState, useEffect, useRef } = React;
         const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></IconBase>;
         const BarChart = (p) => <IconBase {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></IconBase>;
         const Edit = (p) => <IconBase {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
-        const ShieldZap = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polygon points="13 10 13 6 8 13 11 13 11 18 16 11 13 11" /></IconBase>;
         const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
 // 👇 新增這行：乾淨標準的使用者頭像圖示 👇
         const User = (p) => <IconBase {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></IconBase>;
@@ -3668,58 +3666,10 @@ const { useState, useEffect, useRef } = React;
             );
         };
 
-
-        // =========================================================================
-        // 📡 自動通報 Helper：將每次查詢的正常/異常指標全部組合並送往後台
-        // =========================================================================
-        const sendAutoReport = async (url, scanData, brandDataRes, source, reportedUrls, setReportedUrls) => {
-            try {
-                const indicators = [];
-                const rawUrl = scanData.rawUrl || scanData.inputUrl || url;
-                const sanitizedUrl = scanData.sanitizedUrl || scanData.scannedUrl || url;
-                const removedParams = scanData.removedParams || [
-                    ...(scanData.removedTrackingParams || []),
-                    ...(scanData.removedVolatileParams || [])
-                ];
-                
-                // 黑名單與假冒品牌屬於絕對危險特徵
-                if (scanData.blocklistListed) indicators.push('🚨 已列入165詐騙黑名單');
-                if (brandDataRes && brandDataRes.isFakeBrand) indicators.push(`🚨 假冒品牌：偽裝成「${brandDataRes.detectedBrand}」`);
-                
-                // 依序條列各項檢查的指標與理由 (包含安全、警告、危險)
-                Object.values(scanData.checks).forEach(check => {
-                    if (check.status === 'danger') indicators.push(`❌ ${check.label}: ${check.details.split('\n')[0]}`);
-                    else if (check.status === 'warning') indicators.push(`⚠️ ${check.label}: ${check.details.split('\n')[0]}`);
-                    else if (check.status === 'safe') indicators.push(`✅ ${check.label}: ${check.details.split('\n')[0]}`);
-                });
-                
-                const aiAnalysisContent = `[系統自動檢測 - ${source}]\n判斷為正常或詐騙之指標：\n${indicators.join('\n')}\n\n[URL 稽核]\n原始URL：${rawUrl}\n掃描URL：${sanitizedUrl}${removedParams.length ? `\n移除參數：${removedParams.join(', ')}` : ''}`;
-
-                const res = await fetch('/api/report', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: rawUrl,
-                        rawUrl,
-                        sanitizedUrl,
-                        removedParams,
-                        riskScore: scanData.riskScore,
-                        aiAnalysis: aiAnalysisContent // 送出我們整理好的全指標清單
-                    })
-                });
-
-                const data = await res.json();
-                
-                // 背景自動通報只作為後台分析資料，不應標記成使用者已手動檢舉。
-            } catch (e) {
-                console.log('背景自動通報失敗，不影響主流程', e);
-            }
-        };
-
 // =========================================================================
-        // 🦁 完整的 BotAssistant 元件 (獨立運作，包含貼圖與檢舉功能)
-        // =========================================================================
-        const BotAssistant = ({ reportedUrls, setReportedUrls, externalWhitelist }) => {
+        // 🦁 完整的 BotAssistant 元件
+// =========================================================================
+        const BotAssistant = ({ externalWhitelist }) => {
             const [view, setView] = useState('closed');
             const [messages, setMessages] = useState([
                 { role: 'assistant', content: '哈囉！我是防詐大獅：阿麥 🦁\n\n有遇到可疑的網址嗎？直接貼上來，我幫你看！' }
@@ -3827,56 +3777,7 @@ const { useState, useEffect, useRef } = React;
                 setView('welcome');
             };
 
-            // 聊天室專屬的檢舉狀態與功能
-            const [isReportingBot, setIsReportingBot] = useState(false);
-
-            const handleBotReportAction = async (targetUrl) => {
-                if (isReportingBot) return;
-                setIsReportingBot(true);
-                
-                setMessages(prev => [...prev, { role: 'user', content: `[請阿麥幫忙檢舉：${targetUrl}]` }]);
-                setIsTyping(true);
-                
-                try {
-                    const res = await fetch('/api/report', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            url: targetUrl,
-                            rawUrl: targetUrl,
-                            sanitizedUrl: targetUrl,
-                            removedParams: [],
-                            riskScore: 100,
-                            aiAnalysis: "此為使用者透過「聊天室」辨識出之高風險網址"
-                        })
-                    });
-                    const data = await res.json();
-                    
-                    if (data.success) {
-                        const newReported = [...reportedUrls, targetUrl];
-                        setReportedUrls(newReported);
-                        localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
-                        
-                        let replyMsg = '✅ 檢舉成功！感謝你的熱心，阿麥已經把這個壞壞網址交給防詐團隊囉！🦁';
-                        if (data.isDuplicate) {
-                            replyMsg = '🛡️ 感謝熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態。';
-                        }
-                        setMessages(prev => [...prev, { role: 'assistant', content: replyMsg }]);
-                    } else {
-                        let errMsg = '系統異常';
-                        if (typeof data.error === 'string') errMsg = data.error;
-                        else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
-                        setMessages(prev => [...prev, { role: 'assistant', content: `❌ 通報失敗了：${errMsg}` }]);
-                    }
-                } catch (err) {
-                    setMessages(prev => [...prev, { role: 'assistant', content: '❌ 網路好像有點問題，通報送不出去。' }]);
-                } finally {
-                    setIsReportingBot(false);
-                    setIsTyping(false);
-                }
-            };
-
-            const buildBotScanReply = (scanData, brandDataRes, urlObj, contextText = '') => {
+            const buildBotScanReply = (scanData, brandDataRes, contextText = '') => {
                 let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 安全');
                 let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
                 if (contextText) replyText += `${contextText}\n\n`;
@@ -3897,7 +3798,6 @@ const { useState, useEffect, useRef } = React;
                     replyText += `\n絕對不要點擊或輸入任何資料喔！`;
                     return {
                         content: replyText,
-                        action: { type: 'report', url: urlObj.href },
                         sticker: 'https://ik.imagekit.io/mygopen/sticks/17.png'
                     };
                 }
@@ -3960,11 +3860,7 @@ const { useState, useEffect, useRef } = React;
                     scanData.riskScore = 100;
                 }
 
-                if (!targetUrl.includes('@')) {
-                    sendAutoReport(urlObj.href, scanData, brandDataRes, '阿麥聊天室', reportedUrls, setReportedUrls);
-                }
-
-                const reply = buildBotScanReply(scanData, brandDataRes, urlObj, contextText);
+                const reply = buildBotScanReply(scanData, brandDataRes, contextText);
                 setMessages(prev => [...prev, { role: 'assistant', ...reply }]);
             };
 
@@ -4180,25 +4076,6 @@ const { useState, useEffect, useRef } = React;
                                                     </div>
                                                 )}
 
-                                                {msg.action && msg.action.type === 'report' && (
-                                                    <div className="bg-red-50 border border-red-100 rounded-xl p-3 shadow-sm w-full animate-fade-in">
-                                                        <div className="flex items-center gap-1.5 mb-2">
-                                                            <ShieldZap size={16} className="text-red-600" />
-                                                            <span className="text-red-800 font-bold text-xs">要阿麥幫你檢舉這個網址嗎？</span>
-                                                        </div>
-                                                        {reportedUrls.includes(msg.action.url) ? (
-                                                            <div className="text-gray-500 text-xs font-bold flex items-center justify-center gap-1 bg-gray-200 py-1.5 rounded-lg"><CheckCircle size={14}/> 這個網址已檢舉通報中</div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => handleBotReportAction(msg.action.url)}
-                                                                disabled={isReportingBot}
-                                                                className={`w-full py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm flex items-center justify-center gap-1 ${isReportingBot ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
-                                                            >
-                                                                {isReportingBot ? <><RefreshCw size={14} className="animate-spin" /> 通報中...</> : <><Flag size={14} /> 立即協助檢舉</>}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -4414,81 +4291,6 @@ const { useState, useEffect, useRef } = React;
             const [externalWhitelist, setExternalWhitelist] = useState([]);
             const resultRef = useRef(null);
 
-            const [isReporting, setIsReporting] = useState(false);
-            const [reportedUrls, setReportedUrls] = useState(() => {
-                try { return JSON.parse(localStorage.getItem('userReportedUrls')) || []; } catch { return []; }
-            });
-
-            const handleReport = async () => {
-                if (!result || isReporting) return;
-                if (isOfficialTaiwanGovDomain(result.domain)) {
-                    alert('這是台灣政府官方網域，不提供檢舉通報。');
-                    return;
-                }
-                setIsReporting(true);
-                try {
-                    // 👇 彙整所有風險指標，產生更詳細的報告原因
-                    const warnings = [];
-                    if (result.blocklistListed) warnings.push('此網址已列入詐騙黑名單');
-                    
-                    // 遍歷所有檢查項目，將非 safe 且非 info 的警告加入
-                    Object.values(result.checks).forEach(check => {
-                        if (check.status === 'danger' || check.status === 'warning') {
-                            // 只取第一行，避免過長的 AI 分析文字破壞排版
-                            warnings.push(check.details.split('\n')[0]);
-                        }
-                    });
-
-                    // 去除重複項目並組合
-                    const uniqueWarnings = [...new Set(warnings)];
-                    const reportUrl = result.rawUrl || result.inputUrl || result.scannedUrl;
-                    const reportSanitizedUrl = result.sanitizedUrl || result.scannedUrl;
-                    const reportRemovedParams = result.removedParams || [
-                        ...(result.removedTrackingParams || []),
-                        ...(result.removedVolatileParams || [])
-                    ];
-                    const detailedAnalysis = `\n原因：\n${uniqueWarnings.map(w => '- ' + w).join('\n')}\n\n[URL 稽核]\n原始URL：${reportUrl}\n掃描URL：${reportSanitizedUrl}${reportRemovedParams.length ? `\n移除參數：${reportRemovedParams.join(', ')}` : ''}`;
-
-                    const res = await fetch('/api/report', { 
-                        method: 'POST', 
-                        headers: { 'Content-Type': 'application/json' }, 
-                        body: JSON.stringify({ 
-                            url: reportUrl,
-                            rawUrl: reportUrl,
-                            sanitizedUrl: reportSanitizedUrl,
-                            removedParams: reportRemovedParams,
-                            riskScore: result.riskScore, 
-                            aiAnalysis: detailedAnalysis 
-                        }) 
-                    });
-                    
-                    const data = await res.json();
-                    if (data.success) {
-                        const newReported = [...reportedUrls, reportUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
-                        if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
-                    } else {
-                        let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
-                        alert(`通報失敗 (狀態碼: ${data.status || '未知'})：\n${errMsg}`);
-                    }
-                } catch (err) { alert('通報發生網路錯誤，請稍後再試。\n' + err.message); } finally { setIsReporting(false); }
-            };
-
-            const handleImageReport = async (targetUrl) => {
-                if (!targetUrl || isReporting) return;
-                setIsReporting(true);
-                try {
-                    const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: targetUrl, rawUrl: targetUrl, sanitizedUrl: targetUrl, removedParams: [], riskScore: 100, aiAnalysis: "此為使用者透過「截圖 AI 分析」辨識出之高風險網址" }) });
-                    const data = await res.json();
-                    if (data.success) {
-                        const newReported = [...reportedUrls, targetUrl]; setReportedUrls(newReported); localStorage.setItem('userReportedUrls', JSON.stringify(newReported));
-                        if (data.isDuplicate) alert('感謝您的熱心！這個網址已經有其他人搶先通報囉，我們已為您標記為通報狀態 🛡️');
-                    } else {
-                        let errMsg = '系統異常'; if (typeof data.error === 'string') errMsg = data.error; else if (data.error && typeof data.error === 'object') errMsg = data.error.message || JSON.stringify(data.error);
-                        alert(`通報失敗 (狀態碼: ${data.status || '未知'})：\n${errMsg}`);
-                    }
-                } catch (err) { alert('通報發生網路錯誤，請稍後再試。\n' + err.message); } finally { setIsReporting(false); }
-            };
-
             useEffect(() => {
                 const params = new URLSearchParams(window.location.search);
                 const sharedUrl = params.get('url'); const sharedText = params.get('text');
@@ -4644,11 +4446,6 @@ const { useState, useEffect, useRef } = React;
                     enforceFinalRiskConsistency(scanData);
                     setBrandAnalysis(brandDataRes);
                     setResult(scanData);
-
-                    // 👇 新增：每次查詢完畢，自動背景通報正常與詐騙的判斷指標 (排除 Email)
-                    if (!scanData.isInvalid && !scanData.isSocialMedia && !inputUrl.includes('@')) {
-                        sendAutoReport(urlObj.href, scanData, brandDataRes, '首頁檢測', reportedUrls, setReportedUrls);
-                    }
 
                     // 👇 新增：GA4 網址檢測行為追蹤
                     if (typeof gtag === 'function') {
@@ -4898,51 +4695,6 @@ const { useState, useEffect, useRef } = React;
                                     </div>
                                 </div>
 
-                            {/* ================= 新增：截圖高風險專屬的檢舉通報區塊 ================= */}
-                                {aiReport.includes('高風險') && (() => {
-                                    // 利用正則表達式，把 AI 報告裡的網址精準抓出來
-                                    const urlMatch = aiReport.match(/🔗 網址：(.*?)(?=\n|$)/);
-                                    const extractedUrl = urlMatch ? urlMatch[1].trim() : null;
-                                    
-                                    // 👇 新增：如果包含 @ 符號，代表它是 Email，就將 hasValidUrl 設為 false 隱藏按鈕
-                                    const hasValidUrl = extractedUrl && extractedUrl !== '無' && !extractedUrl.includes('None') && !extractedUrl.includes('@');
-                                    
-                                    // 如果沒有抓到實體網址，就不顯示檢舉按鈕
-                                    if (!hasValidUrl) return null;
-
-                                    return (
-                                        <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <ShieldZap size={28} className="text-red-600 flex-shrink-0" />
-                                                <div className="min-w-0">
-                                                    <h4 className="font-bold text-red-800 text-[15px] sm:text-base">協助打擊詐騙</h4>
-                                                    <p className="text-xs sm:text-sm text-red-700 mt-0.5 truncate">要請 MyGoPen 幫你檢舉這個網址嗎？</p>
-                                                    <p className="text-xs text-red-600 font-mono mt-1 font-bold truncate">{extractedUrl}</p>
-                                                </div>
-                                            </div>
-                                            
-                                            {reportedUrls.includes(extractedUrl) ? (
-                                                <div className="px-4 py-2.5 bg-gray-200 text-gray-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto flex-shrink-0">
-                                                    <CheckCircle size={18} /> 這個網址已檢舉通報中
-                                                </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={() => handleImageReport(extractedUrl)}
-                                                    disabled={isReporting}
-                                                    className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-white shadow-sm flex items-center justify-center gap-2 whitespace-nowrap flex-shrink-0 transition-all ${isReporting ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
-                                                >
-                                                    {isReporting ? (
-                                                        <><RefreshCw size={18} className="animate-spin" /> 通報中...</>
-                                                    ) : (
-                                                        <><Flag size={18} /> 立即協助檢舉</>
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
-                                {/* ================= 截圖檢舉區塊結束 ================= */}
-
                                 {/* 👇 新增的綠色複製按鈕 */}
                                 <button
                                     onClick={handleCopyAiReport}
@@ -5128,38 +4880,6 @@ const { useState, useEffect, useRef } = React;
                                     </div>
                                 )}
 
-                                {/* ================= 新增：高風險專屬的檢舉通報區塊 ================= */}
-                                {result.riskScore >= 70 && !result.isSocialMedia && !isOfficialTaiwanGovDomain(result.domain) && !url.includes('@') && (
-                                    <div className="mb-6 p-4 md:p-5 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
-                                        <div className="flex items-center gap-3">
-                                            <ShieldZap size={28} className="text-red-600 flex-shrink-0" />
-                                            <div>
-                                                <h4 className="font-bold text-red-800 text-[15px] sm:text-base">協助打擊詐騙</h4>
-                                                <p className="text-xs sm:text-sm text-red-700 mt-0.5">要請 MyGoPen 幫你檢舉這個網址嗎？</p>
-                                            </div>
-                                        </div>
-                                        
-                                        {reportedUrls.includes(result.rawUrl || result.inputUrl || result.scannedUrl) ? (
-                                            <div className="px-4 py-2.5 bg-gray-200 text-gray-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 whitespace-nowrap w-full sm:w-auto">
-                                                <CheckCircle size={18} /> 這個網址已檢舉通報中
-                                            </div>
-                                        ) : (
-                                            <button 
-                                                onClick={handleReport}
-                                                disabled={isReporting}
-                                                className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-white shadow-sm flex items-center justify-center gap-2 whitespace-nowrap transition-all ${isReporting ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 active:scale-95'}`}
-                                            >
-                                                {isReporting ? (
-                                                    <><RefreshCw size={18} className="animate-spin" /> 通報中...</>
-                                                ) : (
-                                                    <><Flag size={18} /> 立即協助檢舉</>
-                                                )}
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                                {/* ================= 新增結束 ================= */}
-
                                 <a href={`https://www.google.com/search?q=${encodeURIComponent(result.domain + ' 是詐騙嗎？')}&num=10&udm=50`} target="_blank" rel="noopener noreferrer" className="w-full mt-3 py-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all transform active:scale-95 text-lg shadow-md bg-[#4285F4] hover:bg-[#3367D6] text-white">
                                     <div className="bg-white p-1 rounded-full flex items-center justify-center"><GoogleIcon size={18} /></div>用 Google AI 再檢查看看
                                 </a>
@@ -5286,11 +5006,7 @@ const { useState, useEffect, useRef } = React;
                     <InstallPrompt />
                     
                     {/* 呼叫帶有完整對話邏輯的防詐小幫手元件 */}
-                    <BotAssistant 
-                        reportedUrls={reportedUrls} 
-                        setReportedUrls={setReportedUrls} 
-                        externalWhitelist={externalWhitelist} 
-                    />
+                    <BotAssistant externalWhitelist={externalWhitelist} />
 
                 </div>
             );

@@ -5182,3 +5182,13 @@ test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認
     assert.match(appSource, /isFallbackNetlifyAppRandomRisk/);
     assert.match(appSource, /Netlify 免費\/預設託管子網域/);
 });
+
+test('檢舉通報功能已從首頁、截圖與聊天小幫手完整移除', () => {
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    assert.doesNotMatch(appSource, /協助打擊詐騙/);
+    assert.doesNotMatch(appSource, /要請 MyGoPen 幫你檢舉/);
+    assert.doesNotMatch(appSource, /要阿麥幫你檢舉/);
+    assert.doesNotMatch(appSource, /\/api\/report/);
+    assert.doesNotMatch(appSource, /sendAutoReport/);
+    assert.equal(fs.existsSync(path.join(repoRoot, 'functions/api/report.js')), false);
+});
