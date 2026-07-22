@@ -49,7 +49,8 @@ window.RISK_CONFIG = {
         'calm-quokka-a2fe57.netlify.app',
         'jsizg.com',
         'kackofworc.com',
-        'chesapeakeexpo.com'
+        'chesapeakeexpo.com',
+        'shopkitchenette.com'
     ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
