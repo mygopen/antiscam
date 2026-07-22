@@ -1352,6 +1352,7 @@ const { useState, useEffect, useRef } = React;
                 finalUrl: null,
                 linkStats: { total: 0, internal: 0, external: 0 },
                 hasApk: false,
+                analyticsIdentifiers: [],
                 pageSignals: createEmptyPageSignals(),
                 ...extra
             });
@@ -1381,6 +1382,7 @@ const { useState, useEffect, useRef } = React;
                 let hasApk = false;
                 let linkStats = { total: 0, internal: 0, external: 0 };
                 let pageSignals = createEmptyPageSignals();
+                const analyticsIdentifiers = Array.isArray(data?.analyticsIdentifiers) ? data.analyticsIdentifiers : [];
 
                 pageSignals.downloadSignals = analyzeDownloadSignals(null, text, fetchUrl);
                 hasApk = pageSignals.downloadSignals.apkUrlCount > 0;
@@ -1395,7 +1397,8 @@ const { useState, useEffect, useRef } = React;
                         fetchUrl,
                         rawUrl,
                         sanitizedUrl,
-                        pageSignals
+                        pageSignals,
+                        analyticsIdentifiers
                     });
                 }
 
@@ -1435,7 +1438,8 @@ const { useState, useEffect, useRef } = React;
                                 linkStats,
                                 hasApk,
                                 source: sourceLabel,
-                                pageSignals
+                                pageSignals,
+                                analyticsIdentifiers
                             });
                         }
                         pageSignals = analyzePageSignals(doc, fetchUrl, text);
@@ -1481,7 +1485,8 @@ const { useState, useEffect, useRef } = React;
                         fetchUrl,
                         rawUrl,
                         sanitizedUrl,
-                        pageSignals
+                        pageSignals,
+                        analyticsIdentifiers
                     });
                 }
                 return {
@@ -1496,7 +1501,8 @@ const { useState, useEffect, useRef } = React;
                     fetchUrl,
                     rawUrl,
                     sanitizedUrl,
-                    pageSignals
+                    pageSignals,
+                    analyticsIdentifiers
                 };
             };
             let bestResult = null;
@@ -1718,6 +1724,31 @@ const { useState, useEffect, useRef } = React;
             }
         };
 
+        const checkAnalyticsClusterSignals = async (domain, identifiers = []) => {
+            const ids = [...new Set((Array.isArray(identifiers) ? identifiers : [])
+                .map(item => typeof item === 'string' ? item : item?.id)
+                .filter(Boolean))].slice(0, 20);
+            const fallback = {
+                checked: false,
+                matched: false,
+                status: ids.length > 0 ? 'info' : 'safe',
+                detectedCount: ids.length,
+                matchedIdentifierCount: 0,
+                knownHighRiskCount: 0,
+                items: [],
+                evidenceSources: [],
+                details: ids.length > 0 ? '已擷取分析識別碼，但站群索引暫時無法查詢。' : '未擷取到支援的分析識別碼。'
+            };
+            if (ids.length === 0) return fallback;
+            try {
+                const params = new URLSearchParams({ domain });
+                ids.forEach(id => params.append('id', id));
+                return await fetchJsonSafely(`/api/check-analytics-cluster?${params.toString()}`, fallback);
+            } catch (e) {
+                return fallback;
+            }
+        };
+
         const checkCommunityBlocklists = async (domain) => {
             const lowerDomain = domain.toLowerCase();
             try {
@@ -1889,6 +1920,7 @@ const { useState, useEffect, useRef } = React;
                 hasIframe: false,
                 finalUrl: null,
                 linkStats: { total: 0, internal: 0, external: 0 },
+                analyticsIdentifiers: [],
                 pageSignals: createEmptyPageSignals()
             };
             const trustedEcommerceSiteStatus = {
@@ -1900,6 +1932,7 @@ const { useState, useEffect, useRef } = React;
                 linkStats: { total: 0, internal: 0, external: 0 },
                 hasApk: false,
                 source: 'trusted-ecommerce-root',
+                analyticsIdentifiers: [],
                 pageSignals: createEmptyPageSignals()
             };
 
@@ -1926,6 +1959,22 @@ const { useState, useEffect, useRef } = React;
                     ? Promise.resolve(prefetchedCofactsRiskData)
                     : withTimeout(checkCofactsRiskSignals(domain, fullUrl), 4000, { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false })
             ]);
+
+            const analyticsClusterData = await withTimeout(
+                checkAnalyticsClusterSignals(domain, siteStatusData.analyticsIdentifiers),
+                2500,
+                {
+                    checked: false,
+                    matched: false,
+                    status: 'safe',
+                    detectedCount: Array.isArray(siteStatusData.analyticsIdentifiers) ? siteStatusData.analyticsIdentifiers.length : 0,
+                    matchedIdentifierCount: 0,
+                    knownHighRiskCount: 0,
+                    items: [],
+                    evidenceSources: [],
+                    details: '詐騙站群關聯索引暫時無法查詢。'
+                }
+            );
 
             // TLS 憑證會定期續發，核發日不能代表網域註冊日。
             // 註冊年齡只接受 RDAP/WHOIS 明確的 registration/creation 日期。
@@ -3102,6 +3151,12 @@ const { useState, useEffect, useRef } = React;
                         attribution: cofactsRiskData?.attribution?.text || '',
                         license: cofactsRiskData?.attribution?.license || ''
                     },
+                    analyticsCluster: {
+                        ...analyticsClusterData,
+                        status: analyticsClusterData?.status || 'safe',
+                        label: '詐騙站群關聯',
+                        details: analyticsClusterData?.details || '未取得站群關聯資料'
+                    },
                     confirmedScam: {
                         status: isConfirmedScam ? 'danger' : 'safe',
                         label: '人工確認詐騙網域',
@@ -3358,6 +3413,7 @@ const { useState, useEffect, useRef } = React;
                     googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
                     cofactsReports: createScanCheck('unknown', 'Cofacts 群眾回報', '檢測流程未完整完成，無法查詢 Cofacts 群眾回報與查核資料'),
+                    analyticsCluster: createScanCheck('unknown', '詐騙站群關聯', '檢測流程未完整完成，無法比對共享分析識別碼'),
                     siteContent: createScanCheck(isFallbackConfirmedScam || isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackConfirmedScam ? fallbackConfirmedScamDetails : (isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails)),
                     domainAnalysis: createScanCheck(fallbackDomainStatus, '網域特徵分析', fallbackDomainDetails),
                     confirmedScam: createScanCheck(isFallbackConfirmedScam ? 'danger' : 'safe', '人工確認詐騙網域', isFallbackConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'),
@@ -4998,6 +5054,74 @@ const { useState, useEffect, useRef } = React;
                                                 )}
                                                 <p className="mt-3 text-[11px] md:text-xs text-gray-600 leading-relaxed">
                                                     {result.checks.cofactsReports.attribution || '本編輯資料取自「Cofacts 真的假的」訊息回報機器人與查證協作社群，採 CC BY-SA 4.0 授權提供。'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {result.checks.analyticsCluster && result.checks.analyticsCluster.detectedCount > 0 && ['warning', 'info'].includes(result.checks.analyticsCluster.status) && (
+                                    <div className={`mb-6 p-4 md:p-5 border-2 rounded-2xl shadow-sm animate-fade-in ${result.checks.analyticsCluster.status === 'warning' ? 'bg-amber-50 border-amber-300' : 'bg-blue-50 border-blue-200'}`}>
+                                        <div className="flex items-start gap-3">
+                                            <Activity size={28} className={`flex-shrink-0 mt-0.5 ${result.checks.analyticsCluster.status === 'warning' ? 'text-amber-700' : 'text-blue-600'}`} />
+                                            <div className="min-w-0 w-full">
+                                                <h4 className={`font-extrabold text-lg md:text-xl mb-2 ${result.checks.analyticsCluster.status === 'warning' ? 'text-amber-900' : 'text-blue-900'}`}>詐騙站群關聯</h4>
+                                                <p className="text-sm md:text-base text-gray-800 leading-relaxed font-semibold">
+                                                    {result.checks.analyticsCluster.details}
+                                                </p>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+                                                    <div className="bg-white/80 border border-gray-200 rounded-xl p-3">
+                                                        <div className="text-[11px] font-bold text-gray-500 mb-1">共享識別碼類型</div>
+                                                        <div className="text-sm font-extrabold text-gray-800 leading-snug">
+                                                            {[...new Set((result.checks.analyticsCluster.items || []).map(item => item.typeLabel))].join('、') || '無'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-white/80 border border-gray-200 rounded-xl p-3">
+                                                        <div className="text-[11px] font-bold text-gray-500 mb-1">已知高風險關聯數</div>
+                                                        <div className={`text-2xl font-black ${result.checks.analyticsCluster.knownHighRiskCount > 0 ? 'text-amber-800' : 'text-gray-700'}`}>
+                                                            {Number(result.checks.analyticsCluster.knownHighRiskCount || 0)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-white/80 border border-gray-200 rounded-xl p-3">
+                                                        <div className="text-[11px] font-bold text-gray-500 mb-1">證據來源</div>
+                                                        <div className="text-sm font-extrabold text-gray-800">
+                                                            {(result.checks.analyticsCluster.evidenceSources || []).length > 0
+                                                                ? `${result.checks.analyticsCluster.evidenceSources.length} 類`
+                                                                : '原始碼＋本地索引'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-3 space-y-2">
+                                                    {(result.checks.analyticsCluster.items || []).map(item => (
+                                                        <div key={item.id} className="bg-white/80 border border-gray-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                                                            <div className="min-w-0">
+                                                                <div className="text-xs font-bold text-gray-500">{item.typeLabel}</div>
+                                                                <code className="text-xs md:text-sm font-bold text-gray-800 break-all">{item.id}</code>
+                                                            </div>
+                                                            <div className={`text-xs font-extrabold px-2.5 py-1 rounded-full self-start md:self-auto whitespace-nowrap ${item.knownHighRiskCount > 0 ? 'bg-amber-200 text-amber-900' : 'bg-gray-100 text-gray-600'}`}>
+                                                                {item.knownHighRiskCount > 0 ? `關聯 ${item.knownHighRiskCount} 個高風險網域` : '未命中已知站群'}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {(result.checks.analyticsCluster.evidenceSources || []).length > 0 && (
+                                                    <div className="mt-3 text-xs text-gray-700 leading-relaxed">
+                                                        <span className="font-bold">證據來源：</span>
+                                                        {(result.checks.analyticsCluster.evidenceSources || []).map((source, index) => (
+                                                            <React.Fragment key={`${source.name}-${index}`}>
+                                                                {index > 0 ? '、' : ''}
+                                                                {source.url ? (
+                                                                    <a href={source.url} target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">{source.name}</a>
+                                                                ) : <span className="font-bold">{source.name}</span>}
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <p className="mt-3 text-[11px] md:text-xs text-gray-600 leading-relaxed">
+                                                    共享分析識別碼可能來自同一業者、廣告代理商或共用模板，必須搭配網域年齡、內容、官方警示與群眾查核綜合判斷。
                                                 </p>
                                             </div>
                                         </div>

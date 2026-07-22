@@ -1,3 +1,5 @@
+import { extractAnalyticsIdentifiers } from './analytics-identifiers.js';
+
 function jsonResponse(data, init = {}) {
   return new Response(JSON.stringify(data), {
     ...init,
@@ -180,6 +182,7 @@ export async function onRequest(context) {
       if (result.ok && result.contents && !result.blocked) {
         return jsonResponse({
           ...result,
+          analyticsIdentifiers: extractAnalyticsIdentifiers(result.contents),
           rawUrl,
           sanitizedUrl: sanitized.href,
           removedVolatileParams: sanitized.removedVolatileParams,
@@ -192,6 +195,7 @@ export async function onRequest(context) {
 
   return jsonResponse({
     ...(best || { ok: false, status: { http_code: 0, url: target.href }, contents: '', reason: 'fetch_failed', source: 'direct-browser-ua' }),
+    analyticsIdentifiers: extractAnalyticsIdentifiers(best?.contents || ''),
     rawUrl,
     sanitizedUrl: sanitized.href,
     removedVolatileParams: sanitized.removedVolatileParams,

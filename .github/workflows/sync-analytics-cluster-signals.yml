@@ -1,0 +1,42 @@
+name: Sync Analytics Cluster Signals
+
+on:
+  schedule:
+    # 每三天更新一次，控制在 HackerTarget 無金鑰免費額度（每日最多 50 次）內。
+    - cron: '37 19 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-analytics-cluster-signals
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Refresh free analytics relationship index
+        run: npm run sync:analytics-cluster-signals -- --max-lookups=35
+
+      - name: Commit updated analytics cluster index
+        shell: bash
+        run: |
+          if git diff --quiet -- functions/api/synced-analytics-cluster-signals.js; then
+            echo "No analytics cluster index changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add functions/api/synced-analytics-cluster-signals.js
+          git commit -m "chore: sync analytics cluster signals"
+          git push
