@@ -2,12 +2,12 @@
 // Manual reviewed records live in manual-analytics-cluster-signals.js.
 export const analyticsClusterSyncMetadata = {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T09:05:25.816Z",
+  "generatedAt": "2026-07-22T20:42:05.371Z",
   "status": "ok",
   "records": 1,
   "confirmedDomainsChecked": 10,
-  "identifiersFound": 1,
-  "hackerTargetLookups": 1,
+  "identifiersFound": 0,
+  "hackerTargetLookups": 0,
   "freeLookupProvider": "HackerTarget Reverse Analytics Search",
   "lookupLimitPerRun": 35
 };
@@ -32,6 +32,6 @@ export const syncedAnalyticsClusterSignals = [
       }
     ],
     "lastSeenAt": "2026-07-22T09:05:25.816Z",
-    "checkedAt": "2026-07-22T09:05:25.816Z"
+    "checkedAt": "2026-07-22T20:42:05.371Z"
   }
 ];
