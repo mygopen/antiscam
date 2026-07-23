@@ -32,7 +32,8 @@ window.RISK_CONFIG = {
         'mababy.com', 'sunpay.com.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
-        'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw'
+        'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
+        'noncodingai.com'
     ],
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com'
