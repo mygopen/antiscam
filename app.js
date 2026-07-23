@@ -48,6 +48,7 @@ const { useState, useEffect, useRef } = React;
         const Wifi = (p) => <IconBase {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></IconBase>;
 // 👇 新增這行：乾淨標準的使用者頭像圖示 👇
         const User = (p) => <IconBase {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></IconBase>;
+        const Building = (p) => <IconBase {...p}><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 21v-4h6v4"></path><path d="M7 7h2"></path><path d="M15 7h2"></path><path d="M7 11h2"></path><path d="M15 11h2"></path></IconBase>;
         // --- Logic Helpers ---
         const getPseudoRandom = (str) => {
             let hash = 0;
@@ -438,7 +439,7 @@ const { useState, useEffect, useRef } = React;
             trustSignals: { score: 0, matched: false, reasons: [] },
             seoSignals: { score: 0, matched: false, reasons: [] },
             languageSignals: { status: 'unknown', matched: false, details: '無法判定頁面語言一致性' },
-            businessIdentitySignals: { score: 0, matched: false, names: [], hasTaxId: false, reasons: [] },
+            businessIdentitySignals: { score: 0, matched: false, names: [], taxIds: [], hasTaxId: false, reasons: [] },
             lineOfficialSignals: { matched: false, urls: [], reason: '' },
             ecommerceTrustSignals: { score: 0, matched: false, reasons: [], categories: [] },
             shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasAliziOrderSystem: false, hasMerchantInfo: false },
@@ -906,15 +907,23 @@ const { useState, useEffect, useRef } = React;
         const analyzeBusinessIdentitySignals = (doc, rawText = '') => {
             const source = [rawText || '', doc?.body?.textContent || '', doc?.title || ''].join('\n');
             const names = extractBusinessNames(source);
-            const hasTaxId = /(?:統一編號|統編|公司統編|營利事業統一編號)[:：\s　]*\d{8}/.test(source);
+            const taxIds = [];
+            const taxIdRegex = /(?:統一編號|統編|公司統編|營利事業統一編號|營業人統一編號|vatid)["'\s:=：　-]{0,16}(\d{8})/gi;
+            let taxIdMatch;
+            while ((taxIdMatch = taxIdRegex.exec(source)) !== null) {
+                taxIds.push(taxIdMatch[1]);
+            }
+            const uniqueTaxIds = [...new Set(taxIds)].slice(0, 3);
+            const hasTaxId = uniqueTaxIds.length > 0;
             const reasons = [];
-            if (names.length > 0) reasons.push(`頁面揭露公司/商家名稱：${names.slice(0, 2).join('、')}`);
-            if (hasTaxId) reasons.push('頁面揭露統一編號');
+            if (names.length > 0) reasons.push('頁面揭露公司/商家名稱：' + names.slice(0, 2).join('、'));
+            if (hasTaxId) reasons.push('頁面揭露統一編號：' + uniqueTaxIds.join('、'));
             const score = Math.min(45, (names.length > 0 ? 25 : 0) + (hasTaxId ? 20 : 0));
             return {
                 score,
                 matched: score >= 25,
                 names,
+                taxIds: uniqueTaxIds,
                 hasTaxId,
                 reasons
             };
@@ -1747,6 +1756,30 @@ const { useState, useEffect, useRef } = React;
             }
         };
 
+        const checkCompanyVerification = async (domain, businessSignals = {}) => {
+            const fallback = {
+                checked: false,
+                status: 'unavailable',
+                verified: false,
+                domainMatched: false,
+                registrationMatched: false,
+                confidenceScore: 0,
+                companies: [],
+                evidence: [],
+                disclosure: '公司公開資料服務暫時無法查詢，本項不納入風險計分。'
+            };
+            try {
+                const params = new URLSearchParams({ domain });
+                const taxIds = [...new Set(businessSignals.taxIds || [])].slice(0, 3);
+                const names = [...new Set(businessSignals.names || [])].slice(0, 4);
+                if (taxIds.length > 0) params.set('taxIds', taxIds.join(','));
+                if (names.length > 0) params.set('names', names.join('|'));
+                return await fetchJsonSafely('/api/company-verification?' + params.toString(), fallback);
+            } catch (e) {
+                return fallback;
+            }
+        };
+
         const checkCommunityBlocklists = async (domain) => {
             const lowerDomain = domain.toLowerCase();
             try {
@@ -1958,10 +1991,19 @@ const { useState, useEffect, useRef } = React;
                     : withTimeout(checkCofactsRiskSignals(domain, fullUrl), 4000, { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false })
             ]);
 
-            const analyticsClusterData = await withTimeout(
-                checkAnalyticsClusterSignals(domain, siteStatusData.analyticsIdentifiers),
-                2500,
-                {
+            const companyFallback = {
+                checked: false,
+                status: 'unavailable',
+                verified: false,
+                domainMatched: false,
+                registrationMatched: false,
+                confidenceScore: 0,
+                companies: [],
+                evidence: [],
+                disclosure: '公司公開資料服務暫時無法查詢，本項不納入風險計分。'
+            };
+            const [analyticsClusterData, companyVerificationData] = await Promise.all([
+                withTimeout(checkAnalyticsClusterSignals(domain, siteStatusData.analyticsIdentifiers), 2500, {
                     checked: false,
                     matched: false,
                     status: 'safe',
@@ -1971,8 +2013,13 @@ const { useState, useEffect, useRef } = React;
                     items: [],
                     evidenceSources: [],
                     details: '詐騙站群關聯索引暫時無法查詢。'
-                }
-            );
+                }),
+                withTimeout(
+                    checkCompanyVerification(domain, siteStatusData.pageSignals?.businessIdentitySignals || {}),
+                    6500,
+                    companyFallback
+                )
+            ]);
 
             // TLS 憑證會定期續發，核發日不能代表網域註冊日。
             // 註冊年齡只接受 RDAP/WHOIS 明確的 registration/creation 日期。
@@ -2236,6 +2283,9 @@ const { useState, useEffect, useRef } = React;
             const seoSignals = pageSignals.seoSignals || createEmptyPageSignals().seoSignals;
             const languageSignals = pageSignals.languageSignals || createEmptyPageSignals().languageSignals;
             const businessIdentitySignals = pageSignals.businessIdentitySignals || createEmptyPageSignals().businessIdentitySignals;
+            const hasOfficialCompanyDomainMatch = !!companyVerificationData?.verified;
+            const hasRegisteredBusinessIdentity = !!companyVerificationData?.registrationMatched;
+            const verifiedCompany = (companyVerificationData?.companies || [])[0] || null;
             const lineOfficialSignals = pageSignals.lineOfficialSignals || createEmptyPageSignals().lineOfficialSignals;
             const regulatedTobaccoSalesSignals = pageSignals.regulatedTobaccoSalesSignals || createEmptyPageSignals().regulatedTobaccoSalesSignals;
             const officialAlertMatches = officialAlertData?.matches || [];
@@ -2289,8 +2339,9 @@ const { useState, useEffect, useRef } = React;
                     (normalizedRegistrantTextForBusiness.includes(normalizedName) ||
                         normalizedName.includes(normalizedRegistrantTextForBusiness));
             }) || '';
-            const hasVerifiedBusinessEntity = !!matchedBusinessEntityName ||
+            const hasWhoisVerifiedBusinessEntity = !!matchedBusinessEntityName ||
                 (!!normalizedRegistrantTextForBusiness && businessIdentitySignals.hasTaxId && businessIdentitySignals.names?.length > 0);
+            const hasVerifiedBusinessEntity = hasOfficialCompanyDomainMatch || hasWhoisVerifiedBusinessEntity;
             const trustedTaiwanRegistrars = getRiskList('trustedTaiwanRegistrars');
             const isTrustedTaiwanRegistrar = domain.endsWith('.tw') &&
                 registrarName &&
@@ -2489,7 +2540,8 @@ const { useState, useEffect, useRef } = React;
             addTrustSignal(languageSignals.matched, 15, languageSignals.details || '頁面語言與台灣網域一致');
             addTrustSignal(pageTrustSignals.matched, pageTrustSignals.score || 20, pageTrustSignals.reasons?.slice(0, 2).join('、') || '頁面語意與網域相符');
             addTrustSignal(hasStrongEcommerceValidation, 35, `正規電商佐證：${ecommerceTrustSignals.reasons?.slice(0, 2).join('、') || '購物車、聯絡資訊或平台足跡完整'}`);
-            addTrustSignal(hasVerifiedBusinessEntity, 40, matchedBusinessEntityName ? `頁面商家名稱與 WHOIS/RDAP 註冊者相符：${matchedBusinessEntityName}` : '頁面商家資訊與 WHOIS/RDAP 註冊資料具一致性');
+            addTrustSignal(hasWhoisVerifiedBusinessEntity, 40, matchedBusinessEntityName ? `頁面商家名稱與 WHOIS/RDAP 註冊者相符：${matchedBusinessEntityName}` : '頁面商家資訊與 WHOIS/RDAP 註冊資料具一致性');
+            addTrustSignal(hasOfficialCompanyDomainMatch, 35, '主管機關公開資料申報的公司網址與本網域相符');
             addTrustSignal(isTrustedTaiwanRegistrar, 15, `台灣常見註冊商：${registrarName}`);
             addTrustSignal(lineOfficialSignals.matched && (hasStrongEcommerceValidation || hasVerifiedBusinessEntity), 10, 'LINE 官方帳號/客服連結與商家脈絡一致');
             addTrustSignal(hasRegistrantDomainMatch || hasTaiwanOfficialRegistrant, 35, 'WHOIS/RDAP 註冊資料與網域或官方語意相符');
@@ -3208,14 +3260,32 @@ const { useState, useEffect, useRef } = React;
                         label: '語言一致性',
                         details: languageSignals.details
                     },
+                    companyWebsite: {
+                        status: hasOfficialCompanyDomainMatch ? 'safe' : (companyVerificationData?.domainMatched ? 'warning' : (hasRegisteredBusinessIdentity ? 'info' : 'unknown')),
+                        label: '公司網址公開資料驗證',
+                        details: companyVerificationData?.disclosure || '未取得可將公司與此網域直接連結的公開資料',
+                        verified: hasOfficialCompanyDomainMatch,
+                        domainMatched: !!companyVerificationData?.domainMatched,
+                        activeRegistration: companyVerificationData?.activeRegistration !== false,
+                        registrationMatched: hasRegisteredBusinessIdentity,
+                        confidenceScore: Number(companyVerificationData?.confidenceScore || 0),
+                        company: verifiedCompany,
+                        companies: companyVerificationData?.companies || [],
+                        evidence: companyVerificationData?.evidence || [],
+                        checkedAt: companyVerificationData?.checkedAt || null
+                    },
                     businessIdentity: {
                         status: isTrustedPaymentGatewayOrApiEndpoint ? 'safe' : (hasVerifiedBusinessEntity ? 'safe' : (businessIdentitySignals.matched ? 'info' : 'unknown')),
                         label: '商家實體一致性',
                         details: isTrustedPaymentGatewayOrApiEndpoint
                             ? '可信支付閘道/API/checkout 端點，不要求台灣在地商家實體或統編與 WHOIS/RDAP 註冊者比對'
+                            : (hasOfficialCompanyDomainMatch
+                            ? '公司公開申報網址與目前網域相符：' + (verifiedCompany?.name || domain)
                             : (hasVerifiedBusinessEntity
                             ? (matchedBusinessEntityName ? `頁面商家名稱「${matchedBusinessEntityName}」與 WHOIS/RDAP 註冊者相符` : '頁面揭露商家資訊，且 WHOIS/RDAP 註冊資料具一致性')
-                            : (businessIdentitySignals.reasons?.length ? `${businessIdentitySignals.reasons.join('；')}；尚未能與 WHOIS/RDAP 註冊者明確比對` : '未取得足夠公司名稱、統一編號或 WHOIS/RDAP 註冊者比對資料'))
+                            : (hasRegisteredBusinessIdentity
+                            ? '頁面統編可對應經濟部登記資料，但尚未直接證明該公司持有此網域'
+                            : (businessIdentitySignals.reasons?.length ? `${businessIdentitySignals.reasons.join('；')}；尚未能與 WHOIS/RDAP 註冊者明確比對` : '未取得足夠公司名稱、統一編號或 WHOIS/RDAP 註冊者比對資料'))))
                     },
                     lineOfficial: {
                         status: lineOfficialSignals.matched ? (hasStrongEcommerceValidation || hasVerifiedBusinessEntity ? 'info' : 'warning') : 'safe',
@@ -3421,6 +3491,13 @@ const { useState, useEffect, useRef } = React;
                     ecommerceValidation: createScanCheck('unknown', '正規電商佐證', '檢測流程未完整完成，無法確認正規電商佐證'),
                     seoMaturity: createScanCheck('unknown', 'SEO 成熟度', '檢測流程未完整完成，無法確認 SEO 佐證'),
                     languageConsistency: createScanCheck('unknown', '語言一致性', '檢測流程未完整完成，無法判定頁面語言一致性'),
+                    companyWebsite: createScanCheck('unknown', '公司網址公開資料驗證', '檢測流程未完整完成，無法查詢公司公開資料', {
+                        verified: false,
+                        registrationMatched: false,
+                        confidenceScore: 0,
+                        companies: [],
+                        evidence: []
+                    }),
                     businessIdentity: createScanCheck('unknown', '商家實體一致性', '檢測流程未完整完成，無法比對商家實體'),
                     lineOfficial: createScanCheck('safe', 'LINE 官方帳號脈絡', '未偵測到 LINE 聯絡導流'),
                     securityHeaders: createScanCheck('unknown', 'HTTP 安全標頭', '無法自動檢查 HTTP 安全標頭'),
@@ -4525,7 +4602,7 @@ const { useState, useEffect, useRef } = React;
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.2.10 AI 偵測引擎</div></div></header>
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.3.0 公司公開資料驗證</div></div></header>
                     <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6"><div className="w-full max-w-3xl">
                         <div className="text-center mb-10 md:mb-12 animate-fade-in"><h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br className="md:hidden" /><span className="text-brand-red">從檢查網址開始</span></h2><p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p></div>
                         <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100">
@@ -4763,6 +4840,72 @@ const { useState, useEffect, useRef } = React;
                                         </h3>
                                     </div>
                                 </div>
+
+                                {result.checks.companyWebsite && (result.checks.companyWebsite.companies || []).length > 0 && (
+                                    <div className={'mb-6 p-4 md:p-5 border-2 rounded-2xl shadow-sm animate-fade-in ' + (result.checks.companyWebsite.verified ? 'bg-green-50 border-green-300' : (result.checks.companyWebsite.domainMatched ? 'bg-yellow-50 border-yellow-300' : 'bg-blue-50 border-blue-200'))}>
+                                        <div className="flex items-start gap-3">
+                                            <Building size={28} className={'flex-shrink-0 mt-0.5 ' + (result.checks.companyWebsite.verified ? 'text-green-700' : (result.checks.companyWebsite.domainMatched ? 'text-yellow-700' : 'text-blue-700'))} />
+                                            <div className="min-w-0 w-full">
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                    <h4 className={'font-extrabold text-lg md:text-xl ' + (result.checks.companyWebsite.verified ? 'text-green-900' : (result.checks.companyWebsite.domainMatched ? 'text-yellow-900' : 'text-blue-900'))}>公司網址公開資料驗證</h4>
+                                                    <span className={'text-xs font-extrabold px-2.5 py-1 rounded-full ' + (result.checks.companyWebsite.verified ? 'bg-green-200 text-green-900' : (result.checks.companyWebsite.domainMatched ? 'bg-yellow-200 text-yellow-900' : 'bg-blue-200 text-blue-900'))}>
+                                                        {result.checks.companyWebsite.verified ? '官網資料相符' : (result.checks.companyWebsite.domainMatched ? '網址紀錄需複核' : '公司登記相符')}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm md:text-base text-gray-800 leading-relaxed font-semibold">
+                                                    {result.checks.companyWebsite.details}
+                                                </p>
+
+                                                <div className="mt-4 space-y-3">
+                                                    {(result.checks.companyWebsite.companies || []).slice(0, 2).map((company, companyIndex) => (
+                                                        <div key={(company.taxId || company.name || 'company') + companyIndex} className="bg-white/90 border border-gray-200 rounded-xl p-4">
+                                                            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                                                <div className="font-extrabold text-gray-900">{company.name || '公司名稱未提供'}</div>
+                                                                <div className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                                                                    {[company.market, company.organizationType].filter(Boolean).join('・') || '商工登記'}
+                                                                </div>
+                                                            </div>
+                                                            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 text-sm">
+                                                                {company.taxId && <div><dt className="inline font-bold text-gray-500">統一編號：</dt><dd className="inline font-semibold text-gray-800">{company.taxId}</dd></div>}
+                                                                {company.status && <div><dt className="inline font-bold text-gray-500">登記狀態：</dt><dd className="inline font-semibold text-gray-800">{company.status}</dd></div>}
+                                                                {company.responsibleName && <div><dt className="inline font-bold text-gray-500">負責人：</dt><dd className="inline font-semibold text-gray-800">{company.responsibleName}</dd></div>}
+                                                                {company.setupDate && <div><dt className="inline font-bold text-gray-500">設立日期：</dt><dd className="inline font-semibold text-gray-800">{company.setupDate}</dd></div>}
+                                                                {company.capital && <div><dt className="inline font-bold text-gray-500">資本總額：</dt><dd className="inline font-semibold text-gray-800">NT$ {Number(company.capital).toLocaleString('zh-TW')}</dd></div>}
+                                                                {company.stockCode && <div><dt className="inline font-bold text-gray-500">公司代號：</dt><dd className="inline font-semibold text-gray-800">{company.stockCode}</dd></div>}
+                                                                {company.address && <div className="sm:col-span-2"><dt className="inline font-bold text-gray-500">登記地址：</dt><dd className="inline font-semibold text-gray-800">{company.address}</dd></div>}
+                                                                {company.website && <div className="sm:col-span-2"><dt className="inline font-bold text-gray-500">申報網址：</dt><dd className="inline font-semibold text-gray-800 break-all">{company.website}</dd></div>}
+                                                            </dl>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {(result.checks.companyWebsite.evidence || []).length > 0 && (
+                                                    <div className="mt-3 text-xs text-gray-700 leading-relaxed">
+                                                        <span className="font-bold">驗證來源：</span>
+                                                        {(result.checks.companyWebsite.evidence || []).map((evidence, index) => (
+                                                            <React.Fragment key={(evidence.type || 'source') + index}>
+                                                                {index > 0 ? '、' : ''}
+                                                                <a href={evidence.sourceUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">
+                                                                    {evidence.source}
+                                                                </a>
+                                                                {evidence.directDomainMatch ? '（網址相符）' : '（公司資料相符）'}
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className="mt-3 text-xs text-gray-700 leading-relaxed">
+                                                    <span className="font-bold">可再人工查核：</span>
+                                                    <a href="https://www.etax.nat.gov.tw/etwmain/online-service/publicity-inquiry/taxation-registration" target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">財政部稅籍登記</a>
+                                                    <span>、</span>
+                                                    <a href="https://whois.twnic.tw/" target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">TWNIC 網域資料</a>
+                                                </div>
+                                                <p className="mt-3 text-[11px] md:text-xs text-gray-600 leading-relaxed">
+                                                    公司依法登記不等於網站交易絕對安全；若僅有統編相符，可能仍存在冒用公司資料的情形。官方警示、釣魚黑名單與明確詐騙證據仍具有較高優先級。
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {result.checks.officialAlerts?.status === 'danger' && (
                                     <div className="mb-6 p-4 md:p-5 bg-red-50 border-2 border-red-300 rounded-2xl shadow-sm animate-fade-in">
