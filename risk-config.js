@@ -33,7 +33,7 @@ window.RISK_CONFIG = {
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
-        'noncodingai.com'
+        'noncodingai.com', 'fuboncharity.org.tw'
     ],
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com'
@@ -216,7 +216,7 @@ window.RISK_CONFIG = {
         { name: '國泰世華', keywords: ['cathay', 'cathaybk'], domains: ['cathaybk.com.tw'] },
         { name: '玉山銀行', keywords: ['esun', 'esunbank'], domains: ['esunbank.com.tw', 'esunbank.com'] },
         { name: '台新銀行', keywords: ['taishin', 'taishinbank'], domains: ['taishinbank.com.tw'] },
-        { name: '富邦銀行', keywords: ['fubon', 'taipeifubon'], domains: ['fubon.com', 'taipeifubon.com.tw'] },
+        { name: '富邦銀行', keywords: ['fubon', 'taipeifubon'], domains: ['fubon.com', 'taipeifubon.com.tw', 'fuboncharity.org.tw'] },
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
         { name: '統一7-ELEVEN獅', keywords: ['unilions', 'uni-lions', 'lioncrew', '統一獅', '萊恩酷'], domains: ['uni-lions.com.tw'] },
         { name: '日落小物', keywords: ['sunsetgoods', '日落小物'], domains: ['sunsetgoods.tw'] },

@@ -153,6 +153,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
                 "電子發票", "電子發票整合服務", "財政部電子發票",
                 "einvoice", "einv", "統一發票"
             ]
+        },
+        {
+            domain: "fuboncharity.org.tw",
+            allowedBrandTokens: [
+                "富邦", "富邦金控", "台北富邦銀行", "富邦人壽", "富邦證券",
+                "富邦慈善基金會", "富邦公益大使", "momo", "富邦媒體科技",
+                "fubon", "fubon charity foundation", "fubon social welfare ambassador"
+            ]
         }
     ];
     const normalizedBrand = normalizeBrandToken(detectedBrand);
@@ -179,8 +187,12 @@ const localBrandMap = {
         "國泰世華": ["cathaybk.com.tw", "cathayins.tw"],
         "國泰產險": ["cathay-ins.com.tw", "cathayins.tw"],
         "玉山銀行": ["esunbank.com.tw"],
-        "台新銀行": ["taishinbank.com.tw"], "富邦銀行": ["fubon.com"],
+        "台新銀行": ["taishinbank.com.tw"], "富邦銀行": ["fubon.com", "taipeifubon.com.tw", "fuboncharity.org.tw"],
         "台北富邦銀行": ["taipeifubon.com.tw"], "財政部": ["mof.gov.tw"],
+        "富邦慈善基金會": ["fuboncharity.org.tw"],
+        "富邦公益大使": ["fuboncharity.org.tw"],
+        "Fubon Charity Foundation": ["fuboncharity.org.tw"],
+        "Fubon Social Welfare Ambassador": ["fuboncharity.org.tw"],
         "衛生福利部": ["mohw.gov.tw"], "台灣大哥大": ["taiwanmobile.com"],
         "中華電信": ["cht.com.tw"], "遠傳電信": ["fetnet.net"],
         "台灣積體電路製造": ["tsmc.com"],
