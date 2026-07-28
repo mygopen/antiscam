@@ -4,11 +4,11 @@ export const fdaAdSyncMetadata = {
     "schemaVersion": 1,
     "source": "衛生福利部食品藥物管理署",
     "sourceUrl": "https://www.fda.gov.tw/TC/news.aspx?cid=5085",
-    "generatedAt": "2026-07-21T20:50:25.549Z",
+    "generatedAt": "2026-07-28T20:50:51.250Z",
     "maxPages": 20,
     "recordsFetched": 200,
     "detailsFetched": 200,
-    "recordsWithDomains": 165
+    "recordsWithDomains": 164
 };
 
 export const syncedFdaAdAlerts = [
@@ -3947,29 +3947,5 @@ export const syncedFdaAdAlerts = [
         "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30874",
         "syncedFrom": "fda-puffery-ads",
         "recordId": "30874"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://zh-tw.tktxcompany.com/%E5%AD%98%E5%84%B2/)涉嫌違規廣告產品： TKTX",
-        "productName": "TKTX",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "tktxcompany.com",
-        "rootDomains": [
-            "tktxcompany.com"
-        ],
-        "urls": [
-            "https://zh-tw.tktxcompany.com/%E5%AD%98%E5%84%B2/"
-        ],
-        "publishedDate": "2024-12-25",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30868",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30868"
     }
 ];
