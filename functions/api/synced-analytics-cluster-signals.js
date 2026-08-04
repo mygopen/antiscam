@@ -2,7 +2,7 @@
 // Manual reviewed records live in manual-analytics-cluster-signals.js.
 export const analyticsClusterSyncMetadata = {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-01T20:29:18.781Z",
+  "generatedAt": "2026-08-04T20:52:28.388Z",
   "status": "ok",
   "records": 1,
   "confirmedDomainsChecked": 10,
@@ -32,6 +32,6 @@ export const syncedAnalyticsClusterSignals = [
       }
     ],
     "lastSeenAt": "2026-07-22T09:05:25.816Z",
-    "checkedAt": "2026-08-01T20:29:18.781Z"
+    "checkedAt": "2026-08-04T20:52:28.388Z"
   }
 ];
