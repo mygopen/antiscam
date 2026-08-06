@@ -33,7 +33,7 @@ window.RISK_CONFIG = {
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
-        'noncodingai.com', 'fuboncharity.org.tw'
+        'noncodingai.com', 'fuboncharity.org.tw', 'utaggo.com.tw'
     ],
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com'
@@ -63,13 +63,13 @@ window.RISK_CONFIG = {
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
-        'aka.ms', 'shp.ee', 'cht.tw', 'ecloud.life', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
+        'aka.ms', 'shp.ee', 'cht.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
         'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw',
-        'ecloud.life'
+        'ecloud.life', 'link.utaggo.com.tw'
     ],
     emailTrackingRedirectors: [
         'awstrack.me', 'sendgrid.net', 'ct.sendgrid.net', 'u.ct.sendgrid.net',

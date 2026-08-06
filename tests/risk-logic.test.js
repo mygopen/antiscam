@@ -2587,6 +2587,36 @@ test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', () => 
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
 });
 
+test('uTagGo 官方短網址 link.utaggo.com.tw 應視為可信安全縮網址', () => {
+    const rawUrl = 'https://link.utaggo.com.tw/0sTPt?utm_source=instagram&utm_medium=social';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const hostname = 'link.utaggo.com.tw';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('utaggo.com.tw'));
+    assert.ok(riskConfig.urlShorteners.includes('link.utaggo.com.tw'));
+    assert.ok(riskConfig.safeShorteners.includes('link.utaggo.com.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.safeShorteners), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(shortenerOverride.hasTrustedAllowlistOverride, true);
+    assert.equal(shortenerOverride.blocklistListedForRisk, false);
+    assert.equal(shortenerOverride.googleFlaggedForRisk, false);
+    assert.equal(shortenerOverride.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('utaggo.com.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-utaggo.com.tw', []), false);
+});
+
 test('政府 JWT result 參數不應因參數值內容誤判為敏感參數', () => {
     const govUrl = 'https://500.gov.tw/FOAS/actions/GspValid.action?result=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.auth.token.session.verify';
     const phishingUrl = 'https://verify.example.com/login?token=abc123';
