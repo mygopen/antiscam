@@ -147,6 +147,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
             allowedBrandTokens: ["ls-love", "lslove", "磊山慈愛社", "中華磊山慈愛社", "讓愛看見希望"]
         },
         {
+            domain: "39buy.co",
+            allowedBrandTokens: [
+                "39buy", "mypay", "高鉅科技", "國際合作發展基金會", "國合會",
+                "taiwanicdf", "icdf", "外交部", "mofa",
+                "0728日本熊本賑災專案", "熊本賑災", "熊本"
+            ]
+        },
+        {
             domain: "sunpay.com.tw",
             allowedBrandTokens: [
                 "sunpay", "紅陽科技", "紅陽支付", "紅陽",
@@ -193,6 +201,13 @@ const localBrandMap = {
         "富邦公益大使": ["fuboncharity.org.tw"],
         "Fubon Charity Foundation": ["fuboncharity.org.tw"],
         "Fubon Social Welfare Ambassador": ["fuboncharity.org.tw"],
+        "國際合作發展基金會": ["icdf.org.tw", "39buy.co"],
+        "國合會": ["icdf.org.tw", "39buy.co"],
+        "TaiwanICDF": ["icdf.org.tw", "39buy.co"],
+        "ICDF": ["icdf.org.tw", "39buy.co"],
+        "MYPAY": ["mypay.com.tw", "spay.com.tw", "39buy.co", "39buy.com.tw"],
+        "高鉅科技": ["mypay.com.tw", "spay.com.tw", "39buy.co", "39buy.com.tw"],
+        "39buy": ["39buy.co", "39buy.com.tw", "mypay.com.tw"],
         "衛生福利部": ["mohw.gov.tw"], "台灣大哥大": ["taiwanmobile.com"],
         "中華電信": ["cht.com.tw"], "遠傳電信": ["fetnet.net"],
         "台灣積體電路製造": ["tsmc.com"],

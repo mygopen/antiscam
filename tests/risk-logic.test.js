@@ -221,6 +221,14 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
             allowedBrandTokens: ['ls-love', 'lslove', '磊山慈愛社', '中華磊山慈愛社', '讓愛看見希望']
         },
         {
+            domain: '39buy.co',
+            allowedBrandTokens: [
+                '39buy', 'mypay', '高鉅科技', '國際合作發展基金會', '國合會',
+                'taiwanicdf', 'icdf', '外交部', 'mofa',
+                '0728日本熊本賑災專案', '熊本賑災', '熊本'
+            ]
+        },
+        {
             domain: 'sunpay.com.tw',
             allowedBrandTokens: [
                 'sunpay', '紅陽科技', '紅陽支付', '紅陽',
@@ -4321,6 +4329,128 @@ test('中華磊山慈愛社官方捐款子網域不應因信用卡或收據欄�
     assert.equal(isVerifiedSafeRootDomain('fake-ls-love.org'), false);
     assert.match(brandApiSource, /"中華磊山慈愛社": \["ls-love\.org"\]/);
     assert.match(brandApiSource, /domain: "ls-love\.org"/);
+});
+
+test('39buy 想就捐國合會熊本賑災頁不應因捐款表單或品牌文字誤判為高風險', () => {
+    const rawUrl = 'https://39buy.co/charity/item/47450?_eat=valid_20260811143844_991ac1689258aa030d8d8605cef0ae5e&utm_source=threads';
+    const parsed = new URL(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>0728日本熊本賑災專案</title>
+                <meta name="description" content="國際合作發展基金會線上捐款專案">
+            </head>
+            <body>
+                <main>
+                    <h1>0728日本熊本賑災專案</h1>
+                    <p>本次「0728日本熊本賑災專案」係由外交部委託國合會辦理。</p>
+                    <p>請參考國合會官網 https://www.icdf.org.tw/wSite/np?ctNode=31941&mp=1#aC 取得更多詳細資訊。</p>
+                    <p>本平台由 MYPAY 39buy 想就捐慈善勸募系統提供，金流端點為 https://mp.spay.com.tw。</p>
+                    <form>
+                        <input name="donor_name" placeholder="姓名">
+                        <input name="email" placeholder="Email">
+                        <input name="receipt_title" placeholder="捐款收據資訊">
+                        <input name="amount" placeholder="請輸入捐款金額">
+                        <button>確定捐款</button>
+                    </form>
+                    <img src="https://qrcode.39buy.com.tw/charity/47450.png" alt="39buy 捐款 QR Code">
+                    <a href="https://www.icdf.org.tw/wSite/np?ctNode=31941&mp=1#aC">國合會官方募款資訊</a>
+                    <a href="https://www.mypay.com.tw/">MYPAY 高鉅科技</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url: sanitized.href });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
+    const pageBrandSignals = analyzePageBrandSignals({
+        hostname: parsed.hostname,
+        text: html
+    });
+    const fakeIcdfPageSignals = analyzePageBrandSignals({
+        hostname: 'icdf-donation.example.shop',
+        text: html
+    });
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const hasPageBrandMismatch = !isWhitelisted && !checkBrandSimilarity(parsed.hostname, []).matched && pageBrandSignals.matched;
+    const hasFakePageBrandMismatch = !isVerifiedSafeRootDomain('icdf-donation.example.shop', []) && fakeIcdfPageSignals.matched;
+    const paramsStatus = getParamsCheckStatus({
+        hasSuspiciousParams: hasSensitiveUrlParam(sanitized.href) || sanitized.removedVolatileParams.length > 0,
+        isWhitelisted
+    });
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isWhitelisted,
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            params: {
+                status: paramsStatus,
+                details: '合法公益捐款頁可能含一次性交易參數；風險評分使用清理後網址'
+            },
+            formFields: {
+                status: isWhitelisted ? 'info' : 'warning',
+                details: '公益捐款頁可能要求姓名、Email、收據與捐款金額'
+            },
+            domainAnalysis: {
+                status: isWhitelisted ? 'safe' : 'warning',
+                details: isWhitelisted ? '受信賴台灣公益募款與金流平台網域：39buy.co' : '網域命名結構無明顯異常'
+            }
+        }
+    });
+    const icdfBrand = riskConfig.protectedBrands.find(brand => brand.name === '國際合作發展基金會');
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('39buy.co'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('39buy.com.tw'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('mypay.com.tw'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('spay.com.tw'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('icdf.org.tw'));
+    assert.ok(riskConfig.safeCommercePlatforms.includes('39buy.co'));
+    assert.ok(riskConfig.globalPaymentGatewayDomains.includes('spay.com.tw'));
+    assert.ok(riskConfig.globalPaymentGatewayDomains.includes('mypay.com.tw'));
+    assert.ok(riskConfig.trustedResourceDomains.includes('39buy.com.tw'));
+    assert.ok(riskConfig.trustedResourceDomains.includes('spay.com.tw'));
+    assert.ok(icdfBrand.domains.includes('icdf.org.tw'));
+    assert.ok(icdfBrand.domains.includes('39buy.co'));
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
+    assert.equal(isGlobalPaymentGatewayDomain('mp.spay.com.tw'), true);
+    assert.equal(matchesDomainList('qrcode.39buy.com.tw', riskConfig.trustedResourceDomains), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, '國際合作發展基金會'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, '國合會'), true);
+    assert.equal(isTrustedCoBrandCampaignHost(parsed.hostname, 'ICDF'), true);
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(hasPageBrandMismatch, false);
+    assert.equal(fakeIcdfPageSignals.matched, true);
+    assert.equal(fakeIcdfPageSignals.brandName, '國際合作發展基金會');
+    assert.equal(hasFakePageBrandMismatch, true);
+    assert.equal(hasSensitiveUrlParam(sanitized.href), false);
+    assert.equal(paramsStatus, 'info');
+    assert.deepEqual(sanitized.removedVolatileParams, ['_eat']);
+    assert.deepEqual(sanitized.removedTrackingParams, ['utm_source']);
+    assert.equal(sanitized.rawUrl, rawUrl);
+    assert.equal(sanitized.href, 'https://39buy.co/charity/item/47450');
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('39buy.co.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-39buy.co', []), false);
+    assert.match(brandApiSource, /"國合會": \["icdf\.org\.tw", "39buy\.co"\]/);
+    assert.match(brandApiSource, /"MYPAY": \["mypay\.com\.tw", "spay\.com\.tw", "39buy\.co", "39buy\.com\.tw"\]/);
+    assert.match(brandApiSource, /domain: "39buy\.co"/);
 });
 
 test('新北市文化局三鶯線通車系列活動官網不應誤判為高風險', () => {

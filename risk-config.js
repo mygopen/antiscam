@@ -30,7 +30,8 @@ window.RISK_CONFIG = {
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
-        'mababy.com', 'sunpay.com.tw', 'xlearn.tw', 'cht.tw',
+        'mababy.com', 'sunpay.com.tw', 'mypay.com.tw', 'spay.com.tw',
+        '39buy.co', '39buy.com.tw', 'icdf.org.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
@@ -58,7 +59,8 @@ window.RISK_CONFIG = {
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',
         'authorize.net', 'ecpay.com.tw', 'newebpay.com', 'spgateway.com',
-        'opay.tw', 'payuni.com.tw', 'sunpay.com.tw'
+        'opay.tw', 'payuni.com.tw', 'sunpay.com.tw', 'mypay.com.tw',
+        'spay.com.tw'
     ],
     urlShorteners: [
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
@@ -88,7 +90,7 @@ window.RISK_CONFIG = {
     safeCommercePlatforms: [
         'shoplineapp.com', 'cyberbiz.co', 'meepshoper.com', 'waca.tw',
         'waca.ec', 'waca.store', 'easystore.co', '91app.com', 'qdm.tw',
-        'boutir.com', 'myshopify.com', 'quickper.com'
+        'boutir.com', 'myshopify.com', 'quickper.com', '39buy.co'
     ],
     highRiskRegistrars: [
         'namesilo', 'namecheap', 'gname', 'alibaba', 'godaddy',
@@ -210,7 +212,8 @@ window.RISK_CONFIG = {
         'cdnjs.com', 'hotjar.com', 'clarity.ms', 'yandex.ru',
         'ecpay.com.tw', 'newebpay.com', 'spgateway.com', 'opay.tw',
         'payuni.com.tw', 'paypal.com', 'shoplineapp.com', 'myshopify.com',
-        'quickper.com', 'woocommerce.com'
+        'quickper.com', '39buy.co', '39buy.com.tw', 'mypay.com.tw',
+        'spay.com.tw', 'woocommerce.com'
     ],
     protectedBrands: [
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
@@ -226,6 +229,7 @@ window.RISK_CONFIG = {
         { name: 'SZ SHOP', keywords: ['szshop', 'sz shop', '富影貿易', '攝影器材', '攝影主機'], domains: ['szshop.com.tw'] },
         { name: '聖弘紙藝', keywords: ['shenghongpaper', '聖弘紙藝', '聖弘紙藝專賣店'], domains: ['shenghongpaper.com'] },
         { name: '中華磊山慈愛社', keywords: ['ls-love', 'lslove', '磊山慈愛社', '中華磊山慈愛社', '讓愛看見希望'], domains: ['ls-love.org'] },
+        { name: '國際合作發展基金會', keywords: ['icdf', 'taiwanicdf', '國合會', '國際合作發展基金會', '0728日本熊本賑災專案', '熊本賑災'], domains: ['icdf.org.tw', '39buy.co'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
         { name: '家樂福', keywords: ['carrefour', 'uni-prosperity', 'uniprosperity'], domains: ['carrefour.com.tw', 'uni-prosperity.com.tw'] },
