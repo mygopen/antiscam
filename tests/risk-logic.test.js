@@ -2140,6 +2140,43 @@ test('全球頂級可信根網域即使白名單載入失敗也應保留 root ov
     assert.equal(isVerifiedSafeRootDomain('store-dji.com'), false);
 });
 
+test('Moneywalk 官方 App 網域不應因走路賺錢與獎勵文案誤判為高風險', () => {
+    const hostname = 'www.moneywalk.app';
+    const rawUrl = 'https://www.moneywalk.app/zh-TW?utm_source=line&utm_medium=social';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const marketingText = [
+        rawUrl,
+        'Moneywalk 走路就能賺錢的計步器應用程式',
+        'Daily rewards just by walking, redeem gift cards, affiliate payout, PayPal, Wise',
+        'Gravity Labs Co., Ltd. Business Registration No. 865-87-02459 contact@moneywalk.app'
+    ].join('\n');
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const hasFinancialPhishingSignal = !isVerifiedSafeRootDomain(hostname) &&
+        hasFinancialPhishingText(marketingText);
+    const hasPathRisk = !isVerifiedSafeRootDomain(hostname) && hasOfficialFlowPath(rawUrl);
+
+    assert.ok(riskConfig.trustedGlobalDomains.includes('moneywalk.app'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedGlobalDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname, []), true);
+    assert.equal(hasFinancialPhishingSignal, false);
+    assert.equal(hasPathRisk, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('moneywalk.app.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-moneywalk.app', []), false);
+});
+
 test('Axi 官方金融服務網域不應因外匯或交易語意誤判為高風險', () => {
     const hostname = 'www.axi.com';
     const url = 'https://www.axi.com/int/markets/forex';

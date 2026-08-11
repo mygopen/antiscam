@@ -18,7 +18,8 @@ window.RISK_CONFIG = {
     ],
     trustedGlobalDomains: [
         'paypal.com', 'google.com', 'apple.com', 'microsoft.com', 'amazon.com',
-        'youtube.com', 'netflix.com', 'openai.com', 'chatgpt.com', 'dji.com'
+        'youtube.com', 'netflix.com', 'openai.com', 'chatgpt.com', 'dji.com',
+        'moneywalk.app'
     ],
     trustedEcommerceRootDomains: [
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
