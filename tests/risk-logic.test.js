@@ -5338,6 +5338,35 @@ test('人工確認詐騙的 web.app 子網域應直接升為高風險', () => {
     assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資']);
 });
 
+test('人工確認高風險的 eu.cc 子網域 eukka.eu.cc 應直接升為高風險', () => {
+    const domain = 'eukka.eu.cc';
+    const isFreeHosting = matchesDomainList(domain, riskConfig.freeHostingProviders);
+    const isSuspiciousTLD = hasSuspiciousTld(domain);
+    const isConfirmedScam = matchesDomainList(domain, riskConfig.confirmedScamDomains);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : (isFreeHosting || isSuspiciousTLD ? 35 : 0),
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: '此 eu.cc 子網域已由人工確認為高風險連結'
+            },
+            domainAnalysis: {
+                status: isConfirmedScam ? 'danger' : 'warning',
+                details: isConfirmedScam ? '此 eu.cc 子網域已列入人工確認高風險清單，請勿點擊或輸入任何個資、帳密或付款資料' : '使用 eu.cc 免費/動態子網域'
+            }
+        }
+    });
+
+    assert.equal(isFreeHosting, true);
+    assert.equal(isSuspiciousTLD, true);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(matchesDomainList('login.eukka.eu.cc', riskConfig.confirmedScamDomains), true);
+    assert.equal(matchesDomainList('eukka.eu.cc.safe.example', riskConfig.confirmedScamDomains), false);
+    assert.equal(matchesDomainList('fake-eukka.eu.cc', riskConfig.confirmedScamDomains), false);
+    assert.equal(scanData.riskScore, 100);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此 eu.cc 子網域已列入人工確認高風險清單，請勿點擊或輸入任何個資、帳密或付款資料']);
+});
+
 test('人工確認高風險的 fastgetmove H5 店鋪管理頁應直接升為高風險', () => {
     const rawUrl = 'https://usa.fastgetmove.com/h5/#/pages/user/my_shop/my_shop_data?shop_supplier_id=13121&app_id=10001';
     const parsed = new URL(rawUrl);
