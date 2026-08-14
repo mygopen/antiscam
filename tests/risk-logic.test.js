@@ -5546,6 +5546,7 @@ test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應
 test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認案例應升為高風險', () => {
     const readableDomain = 'brand-demo.netlify.app';
     const suspiciousDomain = 'calm-quokka-a2fe57.netlify.app';
+    const confirmedReadableDomain = 'wavesvote.netlify.app';
     const suspiciousSubdomain = analyzeSuspiciousSubdomain(suspiciousDomain);
     const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
 
@@ -5556,6 +5557,20 @@ test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認
     });
     const randomNetlifyRisk = hasNetlifyAppRandomRisk(suspiciousDomain);
     const isConfirmedScam = matchesDomainList(suspiciousDomain, riskConfig.confirmedScamDomains);
+    const isReadableConfirmedScam = matchesDomainList(confirmedReadableDomain, riskConfig.confirmedScamDomains);
+    const readableConfirmedScanData = enforceFinalRiskConsistency({
+        riskScore: isReadableConfirmedScam ? 100 : (isNetlifyAppHostname(confirmedReadableDomain) ? 30 : 0),
+        checks: {
+            confirmedScam: {
+                status: isReadableConfirmedScam ? 'danger' : 'safe',
+                details: '此 Netlify 活動冒名頁已由人工確認為高風險連結'
+            },
+            domainAnalysis: {
+                status: isReadableConfirmedScam ? 'danger' : 'warning',
+                details: isReadableConfirmedScam ? '此 Netlify 子網域冒用臺灣國際熱氣球嘉年華並蒐集姓名、手機與簡訊驗證碼' : 'Netlify 免費/預設託管子網域'
+            }
+        }
+    });
     const randomScanData = enforceFinalRiskConsistency({
         riskScore: isConfirmedScam ? 100 : (randomNetlifyRisk ? 75 : 0),
         checks: {
@@ -5583,6 +5598,14 @@ test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認
     assert.equal(hasGeneratedNetlifySubdomain(suspiciousDomain), true);
     assert.equal(randomNetlifyRisk, true);
     assert.equal(isConfirmedScam, true);
+    assert.equal(isNetlifyAppHostname(confirmedReadableDomain), true);
+    assert.equal(hasNetlifyAppRandomRisk(confirmedReadableDomain), false);
+    assert.equal(isReadableConfirmedScam, true);
+    assert.equal(matchesDomainList('login.wavesvote.netlify.app', riskConfig.confirmedScamDomains), true);
+    assert.equal(matchesDomainList('wavesvote.netlify.app.safe.example', riskConfig.confirmedScamDomains), false);
+    assert.equal(matchesDomainList('fake-wavesvote.netlify.app', riskConfig.confirmedScamDomains), false);
+    assert.equal(readableConfirmedScanData.riskScore, 100);
+    assert.deepEqual(readableConfirmedScanData.summaryReasons, ['人工確認詐騙網域', '此 Netlify 子網域冒用臺灣國際熱氣球嘉年華並蒐集姓名、手機與簡訊驗證碼']);
     assert.equal(randomScanData.riskScore, 100);
     assert.deepEqual(randomScanData.summaryReasons, ['人工確認詐騙網域', `Netlify 免費/預設託管子網域「${suspiciousDomain}」使用隨機字詞與代碼組合`, '網址含高隨機亂碼特徵']);
     assert.equal(suspiciousSubdomain.matched, true);

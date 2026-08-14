@@ -50,6 +50,7 @@ window.RISK_CONFIG = {
         'kk78lin.org',
         'a-family-tw.geatzs.link',
         'calm-quokka-a2fe57.netlify.app',
+        'wavesvote.netlify.app',
         'eukka.eu.cc',
         'jsizg.com',
         'kackofworc.com',
