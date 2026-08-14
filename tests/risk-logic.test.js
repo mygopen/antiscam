@@ -3180,6 +3180,69 @@ test('DJI 官方 Store 子網域應視為可信全球品牌商城', () => {
     assert.match(brandApiSource, /"DJI Store": \["dji\.com"\]/);
 });
 
+test('一休.com 官方日本訂房平台不應因預約登入與付款語意誤判為高風險', () => {
+    const rawUrl = 'https://www.ikyu.com/?utm_source=line&utm_medium=social';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageText = `
+        <title>一休.com - ホテル予約・旅館予約</title>
+        <meta name="description" content="ホテル・旅館の宿泊予約は一休.com。国内約4,400の厳選されたホテル・旅館を予約。">
+        <a href="https://restaurant.ikyu.com">レストラン予約</a>
+        <a href="https://my.ikyu.com/login">ログイン</a>
+        <a href="/booking/">予約確認</a>
+        <p>株式会社一休が提供するホテル、旅館、レストラン予約サービス。</p>
+        <p>オンラインカード決済、予約変更、キャンセル、会員登録をサポート。</p>
+        <img src="https://www.img-ikyu.com/contents/example.png" alt="一休.com">
+    `;
+    const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: pageText });
+    const hasFinancialSignal = !isVerifiedSafeRootDomain(parsed.hostname, []) &&
+        hasFinancialPhishingText(pageText);
+    const hasOfficialFlowSignal = !isVerifiedSafeRootDomain(parsed.hostname, []) &&
+        hasOfficialFlowPath('https://www.ikyu.com/booking/');
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isVerifiedSafeRootDomain(parsed.hostname, []) ? 0 : 60,
+        isTrustedAllowlist: isVerifiedSafeRootDomain(parsed.hostname, []),
+        checks: {
+            ecommerceValidation: { status: ecommerce.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: 'safe', details: '受信賴日本訂房與旅遊預約平台網域：ikyu.com' },
+            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' }
+        }
+    });
+
+    assert.equal(sanitized.href, 'https://www.ikyu.com/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('ikyu.com'));
+    assert.ok(riskConfig.trustedGlobalDomains.includes('ikyu.co.jp'));
+    assert.ok(riskConfig.trustedResourceDomains.includes('img-ikyu.com'));
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
+    assert.equal(matchesDomainList('restaurant.ikyu.com', whitelist), true);
+    assert.equal(matchesDomainList('my.ikyu.com', whitelist), true);
+    assert.equal(matchesDomainList('www.ikyu.co.jp', whitelist), true);
+    assert.equal(isTrustedEcommerceDomain(parsed.hostname), true);
+    assert.equal(isTrustedGlobalDomain('www.ikyu.co.jp'), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain('restaurant.ikyu.com', []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(hasFinancialSignal, false);
+    assert.equal(hasOfficialFlowSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('ikyu.com.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-ikyu.com', []), false);
+});
+
 test('Quickper 快電商應作為正規電商平台足跡，但不作無條件硬白名單', () => {
     const merchantUrl = 'https://andy-c2cbuy.quickper.com/products/example?utm_source=facebook&fbclid=abc';
     const sanitized = sanitizeUrlForRiskScoring(merchantUrl);

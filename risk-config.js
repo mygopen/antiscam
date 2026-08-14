@@ -19,14 +19,14 @@ window.RISK_CONFIG = {
     trustedGlobalDomains: [
         'paypal.com', 'google.com', 'apple.com', 'microsoft.com', 'amazon.com',
         'youtube.com', 'netflix.com', 'openai.com', 'chatgpt.com', 'dji.com',
-        'moneywalk.app'
+        'moneywalk.app', 'ikyu.co.jp'
     ],
     trustedEcommerceRootDomains: [
         'pchome.com.tw', 'coupang.com', 'pxmart.com.tw',
         'momoshop.com.tw', 'friday.tw', 'uni-prosperity.com.tw',
         'uni-lions.com.tw', 'sunsetgoods.tw', 'theaxiomstore.com',
         'tristahandmade.com', 'szshop.com.tw', 'shenghongpaper.com',
-        'dji.com', 'shopee.tw', 'shp.ee'
+        'dji.com', 'shopee.tw', 'shp.ee', 'ikyu.com'
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
@@ -215,7 +215,8 @@ window.RISK_CONFIG = {
         'ecpay.com.tw', 'newebpay.com', 'spgateway.com', 'opay.tw',
         'payuni.com.tw', 'paypal.com', 'shoplineapp.com', 'myshopify.com',
         'quickper.com', '39buy.co', '39buy.com.tw', 'mypay.com.tw',
-        'spay.com.tw', 'woocommerce.com'
+        'spay.com.tw', 'ikyu.com', 'ikyu.co.jp', 'img-ikyu.com',
+        'woocommerce.com'
     ],
     protectedBrands: [
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
