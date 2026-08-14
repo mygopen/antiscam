@@ -43,6 +43,9 @@ window.RISK_CONFIG = {
     trustedGovernmentServiceDomains: [
         'imigrasi.go.id'
     ],
+    trustedPublicInterestDomains: [
+        'mwtnuns.org'
+    ],
     confirmedScamDomains: [
         'jinguan.web.app',
         'lineeshopping.weebly.com',

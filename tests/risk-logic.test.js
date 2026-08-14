@@ -165,6 +165,10 @@ function isTrustedGovernmentServiceDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.trustedGovernmentServiceDomains);
 }
 
+function isTrustedPublicInterestDomain(hostname) {
+    return matchesDomainList(hostname, riskConfig.trustedPublicInterestDomains);
+}
+
 function isGlobalPaymentGatewayDomain(hostname) {
     return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
 }
@@ -265,6 +269,7 @@ function isVerifiedSafeRootDomain(hostname, whitelist = []) {
         isTrustedTaiwanServiceDomain(hostname) ||
         isTrustedFinancialServiceDomain(hostname) ||
         isTrustedGovernmentServiceDomain(hostname) ||
+        isTrustedPublicInterestDomain(hostname) ||
         matchesDomainList(hostname, whitelist);
 }
 
@@ -2135,6 +2140,76 @@ test('富邦公益大使官方次網域不應因投票、註冊、手機驗證�
     assert.match(brandApiSource, /"富邦慈善基金會": \["fuboncharity\.org\.tw"\]/);
     assert.match(brandApiSource, /"富邦公益大使": \["fuboncharity\.org\.tw"\]/);
     assert.match(brandApiSource, /domain: "fuboncharity\.org\.tw"/);
+});
+
+test('曼華堂竹林禪院公益宗教資料站不應因法院或慈善文字誤判為高風險', () => {
+    const rawUrl = 'https://www.mwtnuns.org/?utm_source=facebook&utm_medium=social';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const html = `
+        <html lang="zh-HK">
+            <head>
+                <title>竹林禪院 曼華堂 Man Wa Tong Chuk Lam Sim Yuen</title>
+                <meta name="description" content="曼華堂(竹林禪院)歷史資料與更佳管理方案分析">
+            </head>
+            <body>
+                <main>
+                    <h1>曼華堂(竹林禪院)</h1>
+                    <p>本網站保存及分析竹林禪院、曼華堂歷史資料、習慣法下「堂」的管理、法庭判決與更佳管理方案。</p>
+                    <p>內容包括高等法院原訟法庭裁決、上訴法庭判決、法改會《慈善組織》報告書、監管慈善性質的廟宇。</p>
+                    <p>竹林禪院宗旨為弘揚佛法、濟老助貧，並曾取得按香港稅務條例第88條的慈善免稅地位。</p>
+                    <a href="/p/high-court-judgment.html">高等法院原訟法庭裁決</a>
+                    <a href="/p/hong-kong-charity-monitor-charitable.html">監管慈善性質的廟宇</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url: sanitized.href });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const hasFinancialSignal = !isWhitelisted && hasFinancialPhishingText(html);
+    const hasOfficialFlowSignal = !isWhitelisted && hasOfficialFlowPath(sanitized.href);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : 35,
+        isTrustedAllowlist: isWhitelisted,
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            domainAnalysis: {
+                status: isWhitelisted ? 'safe' : 'warning',
+                details: isWhitelisted ? '受信賴公益/宗教資訊網域：mwtnuns.org' : '網域命名結構無明顯異常'
+            },
+            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' }
+        }
+    });
+
+    assert.ok(riskConfig.trustedPublicInterestDomains.includes('mwtnuns.org'));
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
+    assert.equal(isTrustedPublicInterestDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(sanitized.href, 'https://www.mwtnuns.org/');
+    assert.equal(sanitized.rawUrl, rawUrl);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(shoppingSignals.matched, false);
+    assert.equal(ecommerceSignals.matched, false);
+    assert.equal(hasFinancialSignal, false);
+    assert.equal(hasOfficialFlowSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('mwtnuns.org.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-mwtnuns.org', []), false);
 });
 
 test('全球頂級可信根網域即使白名單載入失敗也應保留 root override', () => {
