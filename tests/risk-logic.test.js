@@ -1706,7 +1706,9 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     const hasLineOrderContext = /(下單|訂單|訂購|購買|立即搶購|馬上訂購|貨到付款|限時|限量|截圖傳給客服|客服確認訂單)/i.test(haystack);
     const courseKeywords = ['線上課程', '課程說明會', '課程簡介', '課程內容', '課程長度', '講師', '學員', '試閱', '所有課程', '報名'];
     const courseKeywordMatches = courseKeywords.filter(keyword => haystack.includes(keyword.toLowerCase()));
-    const isTaiwanCourseProviderPage = new URL(url).hostname.toLowerCase().endsWith('.tw');
+    const courseProviderHostname = new URL(url).hostname.toLowerCase();
+    const isTaiwanCourseProviderPage = courseProviderHostname.endsWith('.tw') ||
+        isTrustedTaiwanServiceDomain(courseProviderHostname);
     const hasCourseProviderTrust = isTaiwanCourseProviderPage &&
         courseKeywordMatches.length >= 3 &&
         hasMerchantInfo &&
@@ -4241,6 +4243,152 @@ test('xLab/xlearn 正規課程活動頁不應因 liveform 與 UTM 誤判為高�
     assert.equal(effectiveLandingRisk, false);
     assert.equal(scanData.riskScore < 30, true);
     assert.deepEqual(scanData.summaryReasons, []);
+});
+
+test('子康學院官方課程網域不應因課程報名與退費條款誤判為高風險', () => {
+    const rawUrl = 'https://zk-school.com/?utm_source=facebook&utm_medium=paid&utm_campaign=course';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>子康學院 - 子康學院</title>
+                <meta name="description" content="子康學院提供 NLP 執行師國際認證課程與 IACT+NGH 雙國際催眠證照班">
+            </head>
+            <body>
+                <main>
+                    <h1>子康學院</h1>
+                    <p>所有課程包含課程內容、講師介紹、學員資訊與預約一對一諮詢。</p>
+                    <p>平台由子康國際股份有限公司營運，統編 83701725。</p>
+                    <p>聯絡地址：110台北市信義區松平路30巷18號。聯絡信箱：zikangacademy@gmail.com。</p>
+                    <p>隱私權政策、服務條款與退換貨條款完整揭露。</p>
+                    <a href="/about/">關於我們</a><a href="/courses/">所有課程</a>
+                    <a href="/privacy-policy/">隱私權政策</a><a href="/terms/">服務條款</a>
+                    <a href="/refund/">退換貨條款</a><a href="mailto:zikangacademy@gmail.com">聯絡我們</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url: sanitized.href });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const hasFinancialSignal = !isWhitelisted && hasFinancialPhishingText(html);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isWhitelisted,
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            domainAnalysis: {
+                status: isWhitelisted ? 'safe' : 'warning',
+                details: isWhitelisted ? '受信賴台灣民營教育課程服務官方網域：zk-school.com' : '網域命名結構無明顯異常'
+            },
+            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' }
+        }
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('zk-school.com'));
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
+    assert.equal(matchesDomainList('www.zk-school.com', whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain('www.zk-school.com', []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(sanitized.href, 'https://zk-school.com/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_medium', 'utm_source'].sort());
+    assert.equal(shoppingSignals.hasCourseProviderTrust, true);
+    assert.equal(shoppingSignals.matched, false);
+    assert.equal(ecommerceSignals.matched, true);
+    assert.ok(ecommerceSignals.categories.includes('course'));
+    assert.ok(ecommerceSignals.categories.includes('contact'));
+    assert.equal(hasFinancialSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('zk-school.com.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-zk-school.com', []), false);
+});
+
+test('GoWedding 婚禮掏心話官方婚禮資訊平台不應誤判為高風險', () => {
+    const rawUrl = 'https://gowedding.tw/?utm_source=facebook&utm_medium=paid&utm_campaign=wedding';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>GoWedding婚禮掏心話 讓愛的旅程更美好</title>
+                <meta name="description" content="GoWedding婚禮掏心話提供求婚、訂婚、結婚、蜜月與籌備婚禮資訊">
+            </head>
+            <body>
+                <main>
+                    <h1>GoWedding婚禮掏心話</h1>
+                    <p>WEDDINGS 新娘物語旗下婚禮資訊平台，整合婚禮場地、婚紗攝影、訂婚喜餅、新娘秘書與婚禮顧問資訊。</p>
+                    <p>婚禮優質廠商推薦，已幫 1,000,000 名新娘完成婚禮，提供線上婚禮顧問與籌備婚禮懶人包。</p>
+                    <p>GoWedding 官方LINE 提供台灣籌婚新人線上婚禮顧問服務。</p>
+                    <p>新娘物語股份有限公司營運，隱私權政策、服務條款與聯絡資訊完整揭露。</p>
+                    <a href="/wedding-venues/">婚禮場地</a><a href="/wedding-photo/">婚紗攝影</a>
+                    <a href="/wedding-cake/">訂婚喜餅</a><a href="/wedding-planner/">婚禮顧問</a>
+                    <a href="/privacy-policy/">隱私權政策</a><a href="/contact/">聯絡我們</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url: sanitized.href });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const hasFinancialSignal = !isWhitelisted && hasFinancialPhishingText(html);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : 35,
+        isTrustedAllowlist: isWhitelisted,
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            domainAnalysis: {
+                status: isWhitelisted ? 'safe' : 'warning',
+                details: isWhitelisted ? '受信賴台灣婚禮資訊服務官方網域：gowedding.tw' : '網域命名結構無明顯異常'
+            },
+            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' }
+        }
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('gowedding.tw'));
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
+    assert.equal(matchesDomainList('www.gowedding.tw', whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain('www.gowedding.tw', []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(sanitized.href, 'https://gowedding.tw/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_medium', 'utm_source'].sort());
+    assert.equal(shoppingSignals.matched, false);
+    assert.equal(ecommerceSignals.categories.includes('contact'), true);
+    assert.equal(ecommerceSignals.categories.includes('policy'), true);
+    assert.equal(hasFinancialSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('gowedding.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-gowedding.tw', []), false);
 });
 
 test('Nocoding AI 大學正規課程網站不應因新網域、賺錢文案與結帳頁誤判為高風險', () => {
