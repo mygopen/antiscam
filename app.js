@@ -1774,6 +1774,13 @@ const { useState, useEffect, useRef } = React;
                 evidence: [],
                 disclosure: '公司公開資料服務暫時無法查詢，本項不納入風險計分。'
             };
+            if (isOfficialTaiwanGovDomain(domain)) {
+                return {
+                    ...fallback,
+                    status: 'not-applicable',
+                    disclosure: '政府機關網域不適用公司網址公開資料驗證，本項不納入風險計分。'
+                };
+            }
             try {
                 const params = new URLSearchParams({ domain });
                 const taxIds = [...new Set(businessSignals.taxIds || [])].slice(0, 3);

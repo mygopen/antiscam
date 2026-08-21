@@ -70,6 +70,9 @@ test('matches exact hosts and same company roots without suffix tricks', async (
   assert.equal(compareWebsiteDomain('example.com.tw.evil.shop', 'https://example.com.tw/').matched, false);
   assert.equal(compareWebsiteDomain('unrelated.com.au', 'https://official.com.au/').matched, false);
   assert.equal(compareWebsiteDomain('fake.kbro.com.tw', 'https://brand.kbro.com.tw/').matched, false);
+  assert.equal(compareWebsiteDomain('hs.kcg.gov.tw', 'http://www.vac.gov.tw/~shinhu/www/weclome.html').matched, false);
+  assert.equal(compareWebsiteDomain('dept.kcg.gov.tw', 'https://www.kcg.gov.tw/').matched, true);
+  assert.equal(compareWebsiteDomain('portal.ntu.edu.tw', 'https://www.nthu.edu.tw/').matched, false);
 });
 
 test('verifies a company website only when a market disclosure points to the domain', async () => {
@@ -108,6 +111,36 @@ test('copied company registration data does not turn an unrelated domain into an
   assert.match(result.disclosure, /尚未直接證明/);
 });
 
+test('government second-level domains do not cross-match unrelated public company disclosures', async () => {
+  const { verifyCompanyWebsite } = await endpointModulePromise;
+  const fetcher = async (input) => {
+    const url = String(input);
+    if (url.includes('t187ap03_P')) {
+      return jsonResponse([{
+        '公司代號': '8379',
+        '公司名稱': '欣湖天然氣股份有限公司',
+        '公司簡稱': '欣湖天然氣',
+        '營利事業統一編號': '04779353',
+        '住址': '臺北市內湖區新湖二路180號5樓',
+        '總機電話': '(02)2791-1345',
+        '電子郵件信箱': 'example@example.test',
+        '網址': 'http://www.vac.gov.tw/~shinhu/www/weclome.html'
+      }]);
+    }
+    return jsonResponse([]);
+  };
+  const result = await verifyCompanyWebsite({
+    domain: 'hs.kcg.gov.tw',
+    fetcher
+  });
+
+  assert.equal(result.status, 'not-found');
+  assert.equal(result.verified, false);
+  assert.equal(result.domainMatched, false);
+  assert.equal(result.companies.length, 0);
+  assert.match(result.disclosure, /未取得可將公司與此網域直接連結/);
+});
+
 test('an old disclosed website is not trusted when the company registration is inactive', async () => {
   const { verifyCompanyWebsite } = await endpointModulePromise;
   const baseFetcher = makeFetcher();
@@ -141,6 +174,8 @@ test('app exposes company public data and evidence in the result indicators', ()
   const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
   assert.match(source, /\/api\/company-verification/);
   assert.match(source, /公司網址公開資料驗證/);
+  assert.match(source, /isOfficialTaiwanGovDomain\(domain\)/);
+  assert.match(source, /政府機關網域不適用公司網址公開資料驗證/);
   assert.match(source, /官網資料相符/);
   assert.match(source, /統一編號/);
   assert.match(source, /驗證來源/);
