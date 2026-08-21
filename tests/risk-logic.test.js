@@ -2330,14 +2330,19 @@ test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('gov-tw-login.shop'), false);
 });
 
-test('台灣 gov.tw 官方網域應顯示政府機關網域驗證與頁面單位資訊', () => {
+test('台灣 gov.tw 官方網域只在公開機關資料比對後顯示政府機關驗證', () => {
     const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
     assert.match(appSource, /govAgencySignals:\s*analyzeGovernmentAgencySignals/);
+    assert.match(appSource, /\/api\/gov-agency-verification/);
+    assert.match(appSource, /govAgencyVerificationData/);
+    assert.match(appSource, /hasVerifiedGovernmentAgency/);
+    assert.match(appSource, /govAgency:\s*isOfficialTaiwanGov && hasVerifiedGovernmentAgency \?/);
     assert.match(appSource, /政府機關網域驗證/);
+    assert.match(appSource, /驗證來源：行政院所屬中央及地方機關代碼/);
+    assert.match(appSource, /本項依正確性優先暫不顯示/);
     assert.match(appSource, /kcg\.gov\.tw/);
     assert.match(appSource, /高雄市政府/);
-    assert.match(appSource, /主管\/申請單位/);
-    assert.match(appSource, /台灣政府官方網域：/);
+    assert.doesNotMatch(appSource, /const agencyName = extractGovernmentAgencyName\(pageText\) \|\| rootAgency/);
 });
 
 test('台灣 gov.tw 官方網域應跳過 AI 品牌覆寫，避免被誤改成詐騙', () => {
@@ -2667,6 +2672,44 @@ test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網�
     assert.equal(isVerifiedSafeRootDomain(appDestination, []), true);
     assert.equal(override.hasTrustedAllowlistOverride, true);
     assert.equal(override.riskScore, 0);
+});
+
+test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
+    const rawUrl = 'https://591.to/rGRj?utm_source=facebook&utm_medium=social';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const hostname = '591.to';
+    const officialDestination = 'www.591.com.tw';
+    const rentDestination = 'rent.591.com.tw';
+    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('591.com.tw'));
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('591.to'));
+    assert.ok(riskConfig.urlShorteners.includes('591.to'));
+    assert.ok(riskConfig.safeShorteners.includes('591.to'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(officialDestination, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.safeShorteners), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isTrustedTaiwanServiceDomain(officialDestination), true);
+    assert.equal(isTrustedTaiwanServiceDomain(rentDestination), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain(officialDestination, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasRandomizedPathToken(rawUrl), false);
+    assert.equal(shortenerOverride.hasTrustedAllowlistOverride, true);
+    assert.equal(shortenerOverride.blocklistListedForRisk, false);
+    assert.equal(shortenerOverride.googleFlaggedForRisk, false);
+    assert.equal(shortenerOverride.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('591.to.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-591.to', []), false);
 });
 
 test('Shopee 官方短網址 tw.shp.ee 應視為可信安全縮網址', () => {
@@ -3210,6 +3253,161 @@ test('聖弘紙藝官方網站不應因 LINE 訂購與免運文字誤判為高�
     assert.equal(isVerifiedSafeRootDomain('fake-shenghongpaper.com'), false);
     assert.match(brandApiSource, /"聖弘紙藝": \["shenghongpaper\.com"\]/);
     assert.match(brandApiSource, /domain: "shenghongpaper\.com"/);
+});
+
+test('三得利健康網路商店台灣官方銷售網站不應因保健食品與定期購誤判為高風險', () => {
+    const rawUrl = 'https://wellness.suntory.com.tw/suntory/product/?utm_source=google&gclid=abc123';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const parts = getDomainParts(parsed.hostname);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageText = `
+        <title>三得利健康網路商店｜SUNTORY WELLNESS</title>
+        <meta name="description" content="日本 SUNTORY 官方直營的保健食品與美容商品，三得利健康網路商店提供健康定期購與會員服務">
+        <link rel="canonical" href="https://wellness.suntory.com.tw/suntory/product/">
+        <h1>SUNTORY WELLNESS 三得利健康網路商店</h1>
+        <a href="/cart">購物車</a><a href="/checkout">結帳</a><a href="/regulardelivery/">健康定期購</a>
+        <button>加入購物車</button><button>立即購買</button>
+        <p>付款方式、線上刷卡、配送方式、退換貨政策、隱私權政策、服務條款與會員條款。</p>
+        <p>客服電話 0800-321-555，客服信箱 info@wellness.suntory.com.tw。</p>
+        <p>公司名稱：SUNTORY WELLNESS ASIA PACIFIC PTE. LTD. 新加坡商三得利健益亞太股份有限公司。統一編號：90077872。</p>
+        <p>防詐騙提醒：本公司不會主動要求您操作 ATM 或透露存款餘額。</p>
+    `;
+    const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: pageText });
+    const shoppingSignals = analyzeShoppingScamSignals({ html: pageText, url: sanitized.href });
+    const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: pageText });
+    const fakeSuntory = checkBrandSimilarity('suntory-wellness-sale.example.shop', []);
+    const fakePageBrandSignals = analyzePageBrandSignals({
+        hostname: 'suntory-wellness-sale.example.shop',
+        text: '<title>SUNTORY WELLNESS 三得利健康網路商店 限時優惠</title>'
+    });
+    const hasFinancialSignal = !isVerifiedSafeRootDomain(parsed.hostname, []) &&
+        hasFinancialPhishingText(pageText);
+    const hasOfficialFlowSignal = !isVerifiedSafeRootDomain(parsed.hostname, []) &&
+        hasOfficialFlowPath(sanitized.href);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isVerifiedSafeRootDomain(parsed.hostname, []) ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isVerifiedSafeRootDomain(parsed.hostname, []),
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerce.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: 'safe', details: '受信賴三得利健康網路商店官方電商根網域：suntory.com.tw' }
+        }
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.equal(sanitized.href, 'https://wellness.suntory.com.tw/suntory/product/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['gclid', 'utm_source'].sort());
+    assert.equal(parts.registrableDomain, 'suntory.com.tw');
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('suntory.com.tw'));
+    assert.ok(matchesDomainList(parsed.hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain('suntory.com.tw', []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(ecommerce.matched, true);
+    assert.ok(ecommerce.categories.includes('cart'));
+    assert.ok(ecommerce.categories.includes('contact'));
+    assert.ok(ecommerce.categories.includes('policy'));
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(checkBrandSimilarity(parsed.hostname, []).matched, false);
+    assert.equal(fakeSuntory.matched, true);
+    assert.equal(fakeSuntory.brandName, '三得利健康網路商店');
+    assert.equal(fakePageBrandSignals.matched, true);
+    assert.equal(hasFinancialSignal, false);
+    assert.equal(hasOfficialFlowSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('suntory.com.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-suntory.com.tw', []), false);
+    assert.match(brandApiSource, /"SUNTORY WELLNESS": \["suntory\.com\.tw"\]/);
+    assert.match(brandApiSource, /"新加坡商三得利健益亞太股份有限公司": \["suntory\.com\.tw"\]/);
+});
+
+test('OBgE 台灣官方網站不應因男士美妝商城與促銷語意誤判為高風險', () => {
+    const rawUrl = 'https://www.obge.tw/products/natural-cover-foundation-stick?utm_source=instagram&fbclid=abc123';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const parts = getDomainParts(parsed.hostname);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageText = `
+        <title>OBgE Official 台灣官方網站｜韓國男士美妝品牌</title>
+        <meta name="description" content="OBgE 韓國美妝品牌 No.1，台灣官方網站提供彩妝、肌膚保養、防曬與頭髮保養商品">
+        <link rel="canonical" href="https://www.obge.tw/products/natural-cover-foundation-stick">
+        <script src="https://static.shoplineapp.com/assets/storefront.js"></script>
+        <h1>OBgE Taiwan Official</h1>
+        <a href="/cart">購物車</a><a href="/checkout">結帳</a><a href="/pages/anti-fraud">防詐騙宣導</a>
+        <button>加入購物車</button><button>立即購買</button>
+        <p>全館購滿 NT$1,000 免運費，付款方式、配送方式、購物須知、隱私政策、退款及退貨政策。</p>
+        <p>客服信箱：obge_cs@adapt.tw，客服電話：0979-019-392。</p>
+        <p>公司名：台灣愛戴特有限公司。統一編號：90435532。地址：臺北市信義區基隆路1段163號14樓之1。</p>
+    `;
+    const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: pageText });
+    const shoppingSignals = analyzeShoppingScamSignals({ html: pageText, url: sanitized.href });
+    const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: pageText });
+    const fakeObge = checkBrandSimilarity('obge-sale.example.shop', []);
+    const fakePageBrandSignals = analyzePageBrandSignals({
+        hostname: 'obge-sale.example.shop',
+        text: '<title>OBgE Taiwan Official 限時優惠</title><p>台灣愛戴特官方美妝商城</p>'
+    });
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isVerifiedSafeRootDomain(parsed.hostname, []) ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isVerifiedSafeRootDomain(parsed.hostname, []),
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerce.matched ? 'safe' : 'unknown' },
+            domainAnalysis: { status: 'safe', details: '受信賴 OBgE 台灣官方商城根網域：obge.tw' }
+        }
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.equal(sanitized.href, 'https://www.obge.tw/products/natural-cover-foundation-stick');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_source'].sort());
+    assert.equal(parts.registrableDomain, 'obge.tw');
+    assert.ok(riskConfig.trustedEcommerceRootDomains.includes('obge.tw'));
+    assert.ok(matchesDomainList(parsed.hostname, whitelist));
+    assert.equal(isTrustedEcommerceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain('obge.tw', []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(ecommerce.matched, true);
+    assert.ok(ecommerce.categories.includes('platform'));
+    assert.ok(ecommerce.categories.includes('cart'));
+    assert.ok(ecommerce.categories.includes('contact'));
+    assert.ok(ecommerce.categories.includes('policy'));
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(checkBrandSimilarity(parsed.hostname, []).matched, false);
+    assert.equal(fakeObge.matched, true);
+    assert.equal(fakeObge.brandName, 'OBgE');
+    assert.equal(fakePageBrandSignals.matched, true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('obge.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-obge.tw', []), false);
+    assert.match(brandApiSource, /"OBgE": \["obge\.tw"\]/);
+    assert.match(brandApiSource, /"台灣愛戴特有限公司": \["obge\.tw"\]/);
 });
 
 test('DJI 官方 Store 子網域應視為可信全球品牌商城', () => {

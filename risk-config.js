@@ -26,10 +26,12 @@ window.RISK_CONFIG = {
         'momoshop.com.tw', 'friday.tw', 'uni-prosperity.com.tw',
         'uni-lions.com.tw', 'sunsetgoods.tw', 'theaxiomstore.com',
         'tristahandmade.com', 'szshop.com.tw', 'shenghongpaper.com',
-        'dji.com', 'shopee.tw', 'shp.ee', 'ikyu.com'
+        'dji.com', 'shopee.tw', 'shp.ee', 'ikyu.com', 'suntory.com.tw',
+        'obge.tw'
     ],
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
+        '591.com.tw', '591.to',
         'mababy.com', 'sunpay.com.tw', 'mypay.com.tw', 'spay.com.tw',
         '39buy.co', '39buy.com.tw', 'icdf.org.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
@@ -72,12 +74,12 @@ window.RISK_CONFIG = {
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
-        'aka.ms', 'shp.ee', 'cht.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
+        'aka.ms', 'shp.ee', 'cht.tw', '591.to', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
-        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw',
+        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw', '591.to',
         'ecloud.life', 'link.utaggo.com.tw'
     ],
     emailTrackingRedirectors: [
@@ -235,6 +237,8 @@ window.RISK_CONFIG = {
         { name: 'Trista微笑女孩手作革物', keywords: ['trista', 'tristahandmade', '微笑女孩手作革物', '手作革物'], domains: ['tristahandmade.com'] },
         { name: 'SZ SHOP', keywords: ['szshop', 'sz shop', '富影貿易', '攝影器材', '攝影主機'], domains: ['szshop.com.tw'] },
         { name: '聖弘紙藝', keywords: ['shenghongpaper', '聖弘紙藝', '聖弘紙藝專賣店'], domains: ['shenghongpaper.com'] },
+        { name: '三得利健康網路商店', keywords: ['suntory', 'suntorywellness', '三得利', '三得利健康網路商店', '三得利健益'], domains: ['suntory.com.tw'] },
+        { name: 'OBgE', keywords: ['obge', 'obgeofficial', 'obge taiwan', '台灣愛戴特', '台灣愛戴特有限公司'], domains: ['obge.tw'] },
         { name: '中華磊山慈愛社', keywords: ['ls-love', 'lslove', '磊山慈愛社', '中華磊山慈愛社', '讓愛看見希望'], domains: ['ls-love.org'] },
         { name: '國際合作發展基金會', keywords: ['icdf', 'taiwanicdf', '國合會', '國際合作發展基金會', '0728日本熊本賑災專案', '熊本賑災'], domains: ['icdf.org.tw', '39buy.co'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
