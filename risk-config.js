@@ -43,7 +43,7 @@ window.RISK_CONFIG = {
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw',
         'cathay-cube.com.tw', 'cube-app.tw', 'globalmyb2b.com',
-        'cathayrobo.com'
+        'cathayrobo.com', 'cathaylife.com.tw'
     ],
     trustedGovernmentServiceDomains: [
         'imigrasi.go.id'
@@ -228,6 +228,7 @@ window.RISK_CONFIG = {
     ],
     protectedBrands: [
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
+        { name: '國泰人壽', keywords: ['cathaylife'], domains: ['cathaylife.com.tw', 'cathaylife.tw'] },
         { name: '國泰世華', keywords: ['cathay', 'cathaybk', 'globalmyb2b', 'cathayrobo'], domains: ['cathaybk.com.tw', 'cathay-cube.com.tw', 'cube-app.tw', 'globalmyb2b.com', 'cathayrobo.com'] },
         { name: '玉山銀行', keywords: ['esun', 'esunbank'], domains: ['esunbank.com.tw', 'esunbank.com', 'esun.co'] },
         { name: '永豐銀行', keywords: ['sinopac'], domains: ['sinopac.com', 'mma.tw'] },

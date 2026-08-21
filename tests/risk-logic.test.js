@@ -2886,6 +2886,43 @@ test('國泰智能投資 cathayrobo.com 官方網域應視為可信金融服務'
     assert.match(brandApiSource, /"國泰智能投資": \["cathayrobo\.com"\]/);
 });
 
+test('國泰人壽 cathaylife.com.tw 官方網域不應被 cathay 品牌規則誤判', () => {
+    const rawUrl = 'https://www.cathaylife.com.tw/official/?utm_source=google&utm_medium=search';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'www.cathaylife.com.tw';
+    const financialText = `${rawUrl} 國泰人壽保險股份有限公司 信用卡 帳戶 verification`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const cathayLifeBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰人壽');
+    const hasFinancialPhishingSignal = !isVerifiedSafeRootDomain(hostname, []) &&
+        hasFinancialPhishingText(financialText);
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('cathaylife.com.tw'));
+    assert.ok(cathayLifeBrand.domains.includes('cathaylife.com.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(checkBrandSimilarity(hostname, []).matched, false);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(hasFinancialPhishingSignal, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('cathaylife.com.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-cathaylife.com.tw', []), false);
+    assert.equal(checkBrandSimilarity('fake-cathaylife.com.tw', []).matched, true);
+    assert.match(brandApiSource, /"國泰人壽保險股份有限公司": \["cathaylife\.com\.tw", "cathaylife\.tw"\]/);
+});
+
 test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
     const rawUrl = 'https://591.to/rGRj?utm_source=facebook&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
