@@ -2780,7 +2780,44 @@ test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
     assert.equal(isVerifiedSafeRootDomain('cathay-cube.com.tw.evil.shop', []), false);
     assert.equal(isVerifiedSafeRootDomain('fake-cathay-cube.com.tw', []), false);
-    assert.match(brandApiSource, /"國泰世華銀行": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw"\]/);
+    assert.match(brandApiSource, /"國泰世華銀行": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw"\]/);
+});
+
+test('國泰世華採用的 cube-app.tw 應視為可信 CUBE App 安全短網址', () => {
+    const rawUrl = 'https://cube-app.tw/A1B2C3?utm_source=sms&utm_medium=message';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'cube-app.tw';
+    const financialText = `${rawUrl} 國泰世華 CUBE App 信用卡 帳戶異常 verification`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('cube-app.tw'));
+    assert.ok(riskConfig.urlShorteners.includes('cube-app.tw'));
+    assert.ok(riskConfig.safeShorteners.includes('cube-app.tw'));
+    assert.ok(cathayBrand.domains.includes('cube-app.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.safeShorteners), true);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(!isVerifiedSafeRootDomain(hostname) && hasFinancialPhishingText(financialText), false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('cube-app.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-cube-app.tw', []), false);
+    assert.match(brandApiSource, /"CUBE App": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw"\]/);
 });
 
 test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
