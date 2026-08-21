@@ -49,6 +49,27 @@ function makeFetcher() {
   };
 }
 
+function makeJackFetcher() {
+  return async (input) => {
+    const url = String(input);
+    if (url.includes('t187ap03_L') || url.includes('t187ap03_P') || url.includes('mopsfin_t187ap03_O') || url.includes('mopsfin_t187ap03_R')) {
+      return jsonResponse([]);
+    }
+    if (url.includes('426D5542') && url.includes('85422023')) {
+      return jsonResponse([{
+        President_No: '85422023',
+        Business_Name: '杰克行李箱維修工作室',
+        Business_Current_Status_Desc: '核准設立',
+        Business_Address: '新竹市北區金雅里金農路100號1樓',
+        Business_Setup_Approve_Date: '1090528',
+        Business_Organization_Type_Desc: '獨資',
+        Agency_Desc: '新竹市政府'
+      }]);
+    }
+    return jsonResponse([]);
+  };
+}
+
 test('validates Taiwan tax IDs before querying public registries', async () => {
   const { isValidTaiwanTaxId } = await endpointModulePromise;
   assert.equal(isValidTaiwanTaxId('11913502'), true);
@@ -109,6 +130,40 @@ test('copied company registration data does not turn an unrelated domain into an
   assert.equal(result.domainMatched, false);
   assert.equal(result.verified, false);
   assert.match(result.disclosure, /尚未直接證明/);
+});
+
+test('trusted company domain mappings show small business registration data without page tax IDs', async () => {
+  const { verifyCompanyWebsite, getTrustedCompanyDomainMapping } = await endpointModulePromise;
+
+  const mapping = getTrustedCompanyDomainMapping('www.jack-hsinchu.com');
+  assert.equal(mapping.taxIds[0], '85422023');
+  assert.equal(mapping.names[0], '杰克行李箱維修工作室');
+  assert.equal(getTrustedCompanyDomainMapping('fake-jack-hsinchu.com'), null);
+  assert.equal(getTrustedCompanyDomainMapping('jack-hsinchu.com.evil.shop'), null);
+
+  const result = await verifyCompanyWebsite({
+    domain: 'www.jack-hsinchu.com',
+    fetcher: makeJackFetcher()
+  });
+
+  assert.equal(result.status, 'verified-domain');
+  assert.equal(result.verified, true);
+  assert.equal(result.domainMatched, true);
+  assert.equal(result.registrationMatched, true);
+  assert.equal(result.nameMatched, true);
+  assert.equal(result.trustedDomainMappingMatched, true);
+  assert.equal(result.companies[0].taxId, '85422023');
+  assert.equal(result.companies[0].name, '杰克行李箱維修工作室');
+  assert.equal(result.companies[0].status, '核准設立');
+  assert.equal(result.companies[0].address, '新竹市北區金雅里金農路100號1樓');
+  assert.equal(result.companies[0].organizationType, '獨資');
+  assert.equal(result.companies[0].domainMatchType, 'trusted-company-domain-mapping');
+  assert.equal(result.companies[0].trustedDomainMapped, true);
+  assert.match(result.disclosure, /可信網域對應統編/);
+  assert.ok(result.evidence.some(item => item.type === 'trusted-company-domain-mapping' && item.directDomainMatch));
+  assert.ok(result.evidence.some(item => item.type === 'business-registration' && !item.directDomainMatch));
+  assert.equal(result.evidence.some(item => item.type === 'market-disclosure'), false);
+  assert.equal(result.evidence.every(item => item.source && item.sourceUrl), true);
 });
 
 test('government second-level domains do not cross-match unrelated public company disclosures', async () => {

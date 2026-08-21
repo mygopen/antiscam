@@ -3466,6 +3466,7 @@ const { useState, useEffect, useRef } = React;
                         domainMatched: !!companyVerificationData?.domainMatched,
                         activeRegistration: companyVerificationData?.activeRegistration !== false,
                         registrationMatched: hasRegisteredBusinessIdentity,
+                        trustedDomainMappingMatched: !!companyVerificationData?.trustedDomainMappingMatched,
                         confidenceScore: Number(companyVerificationData?.confidenceScore || 0),
                         company: verifiedCompany,
                         companies: companyVerificationData?.companies || [],

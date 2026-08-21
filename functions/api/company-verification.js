@@ -1,3 +1,8 @@
+import {
+  trustedCompanyDomainMappingVersion,
+  trustedCompanyDomainMappings
+} from './trusted-company-domain-mappings.js';
+
 const GCIS_COMPANY_ENDPOINT = 'https://data.gcis.nat.gov.tw/od/data/api/5F64D864-61CB-4D0D-8AD9-492047CC1EA6';
 const GCIS_BUSINESS_ENDPOINT = 'https://data.gcis.nat.gov.tw/od/data/api/426D5542-5F05-43EB-83F9-F1300F14E1F1';
 
@@ -172,14 +177,39 @@ function buildFindBizUrl(taxId) {
   return 'https://findbiz.nat.gov.tw/fts/query/QueryBar/queryInit.do?queryString=' + encodeURIComponent(taxId);
 }
 
+export function getTrustedCompanyDomainMapping(domain) {
+  const scannedDomain = normalizeHostname(domain);
+  if (!scannedDomain) return null;
+  return trustedCompanyDomainMappings.find(mapping =>
+    (mapping.domains || []).some(mappedDomain => compareWebsiteDomain(scannedDomain, mappedDomain).matched)
+  ) || null;
+}
+
+function getMappedTaxIds(mapping) {
+  return (mapping?.taxIds || []).map(value => String(value || '').replace(/\D/g, '')).filter(isValidTaiwanTaxId);
+}
+
+function getMappedNames(mapping) {
+  return (mapping?.names || []).map(cleanText).filter(Boolean);
+}
+
 export async function verifyCompanyWebsite({ domain, taxIds = [], names = [], fetcher = fetch }) {
   const scannedDomain = normalizeHostname(domain);
   if (!scannedDomain || !scannedDomain.includes('.')) {
     return { checked: false, status: 'invalid', verified: false, domainMatched: false, registrationMatched: false, companies: [], evidence: [] };
   }
 
-  const validTaxIds = [...new Set(taxIds.map(value => String(value || '').replace(/\D/g, '')).filter(isValidTaiwanTaxId))].slice(0, 3);
-  const claimedNames = [...new Set(names.map(cleanText).filter(Boolean))].slice(0, 4);
+  const trustedDomainMapping = getTrustedCompanyDomainMapping(scannedDomain);
+  const mappedTaxIds = getMappedTaxIds(trustedDomainMapping);
+  const mappedTaxIdSet = new Set(mappedTaxIds);
+  const validTaxIds = [...new Set([
+    ...taxIds.map(value => String(value || '').replace(/\D/g, '')).filter(isValidTaiwanTaxId),
+    ...mappedTaxIds
+  ])].slice(0, 4);
+  const claimedNames = [...new Set([
+    ...names.map(cleanText).filter(Boolean),
+    ...getMappedNames(trustedDomainMapping)
+  ])].slice(0, 6);
   const marketResults = await Promise.allSettled(MARKET_SOURCES.map(async source => {
     const records = await fetchJson(source.url, fetcher);
     return records.map(record => normalizeMarketRecord(record, source));
@@ -198,14 +228,16 @@ export async function verifyCompanyWebsite({ domain, taxIds = [], names = [], fe
   const companiesByTaxId = new Map();
 
   for (const registration of registrations) {
+    const trustedDomainMapped = mappedTaxIdSet.has(registration.taxId);
     companiesByTaxId.set(registration.taxId, {
       ...registration,
       website: null,
       stockCode: null,
       market: null,
       nameMatched: claimedNames.some(name => companyNamesMatch(name, registration.name)),
-      domainMatched: false,
-      domainMatchType: 'none'
+      trustedDomainMapped,
+      domainMatched: trustedDomainMapped,
+      domainMatchType: trustedDomainMapped ? 'trusted-company-domain-mapping' : 'none'
     });
   }
   for (const market of marketMatches) {
@@ -249,6 +281,17 @@ export async function verifyCompanyWebsite({ domain, taxIds = [], names = [], fe
   const evidence = [];
 
   for (const company of companies.slice(0, 4)) {
+    if (company.trustedDomainMapped) {
+      const mappingEvidence = (trustedDomainMapping?.evidence || []).find(item => item.type === 'official-site') || {};
+      evidence.push({
+        type: 'trusted-company-domain-mapping',
+        source: mappingEvidence.source || '可信網域對應統編人工審核',
+        sourceUrl: mappingEvidence.sourceUrl || trustedDomainMapping?.officialUrl || 'https://' + scannedDomain + '/',
+        directDomainMatch: true,
+        matchType: company.domainMatchType,
+        matchedFields: mappingEvidence.matchedFields || ['網域', '統一編號']
+      });
+    }
     if (registrationTaxIds.includes(company.taxId) && company.registrationAuthority) {
       evidence.push({
         type: 'business-registration',
@@ -258,7 +301,7 @@ export async function verifyCompanyWebsite({ domain, taxIds = [], names = [], fe
         matchedFields: ['統一編號', '公司/商業名稱', '登記狀態']
       });
     }
-    if (company.domainMatched) {
+    if (company.domainMatched && company.disclosureSource) {
       evidence.push({
         type: 'market-disclosure',
         source: company.disclosureSource,
@@ -271,6 +314,7 @@ export async function verifyCompanyWebsite({ domain, taxIds = [], names = [], fe
     }
   }
 
+  const hasTrustedDomainMapping = companies.some(company => company.trustedDomainMapped);
   const confidenceScore = Math.min(40, (verified ? 30 : (domainMatched ? 15 : 0)) + (registrationMatched ? 10 : 0) + (verified && nameMatched ? 5 : 0));
   const allUnavailable = marketUnavailable && (registrationResults.length === 0 || registrationResults.every(result => result.status === 'rejected'));
   const status = verified ? 'verified-domain' : (domainMatched ? 'inactive-domain-record' : (registrationMatched ? 'registered-business' : (allUnavailable ? 'unavailable' : 'not-found')));
@@ -284,11 +328,14 @@ export async function verifyCompanyWebsite({ domain, taxIds = [], names = [], fe
     activeRegistration,
     confidenceScore,
     scannedDomain,
+    trustedDomainMappingMatched: hasTrustedDomainMapping,
     companies,
     evidence,
     checkedAt: new Date().toISOString(),
     disclosure: verified
-      ? '公開發行市場資料中申報的公司網址與本網域相符。'
+      ? (hasTrustedDomainMapping
+        ? '可信網域對應統編資料可連結本網域與公開登記主體，且登記狀態仍為有效。'
+        : '公開發行市場資料中申報的公司網址與本網域相符。')
       : (domainMatched
         ? '公開市場資料中的公司網址與本網域相符，但目前登記狀態並非核准設立，應進一步複核。'
         : (registrationMatched
@@ -318,6 +365,7 @@ export async function onRequest(context) {
   const normalizedCacheUrl = new URL(context.request.url);
   normalizedCacheUrl.search = '';
   normalizedCacheUrl.searchParams.set('domain', normalizeHostname(domain));
+  normalizedCacheUrl.searchParams.set('trustedMapVersion', trustedCompanyDomainMappingVersion);
   if (taxIds.length) normalizedCacheUrl.searchParams.set('taxIds', [...new Set(taxIds)].sort().join(','));
   if (names.length) normalizedCacheUrl.searchParams.set('names', [...new Set(names)].sort().join('|'));
   const cacheKey = cache ? new Request(normalizedCacheUrl.toString(), { method: 'GET' }) : null;
