@@ -2330,6 +2330,16 @@ test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
     assert.equal(isOfficialTaiwanGovDomain('gov-tw-login.shop'), false);
 });
 
+test('台灣 gov.tw 官方網域應顯示政府機關網域驗證與頁面單位資訊', () => {
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    assert.match(appSource, /govAgencySignals:\s*analyzeGovernmentAgencySignals/);
+    assert.match(appSource, /政府機關網域驗證/);
+    assert.match(appSource, /kcg\.gov\.tw/);
+    assert.match(appSource, /高雄市政府/);
+    assert.match(appSource, /主管\/申請單位/);
+    assert.match(appSource, /台灣政府官方網域：/);
+});
+
 test('台灣 gov.tw 官方網域應跳過 AI 品牌覆寫，避免被誤改成詐騙', () => {
     const domain = '500.gov.tw';
     const aiResult = { isGenericScam: true, isFakeBrand: false };

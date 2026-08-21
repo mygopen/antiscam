@@ -439,6 +439,7 @@ const { useState, useEffect, useRef } = React;
             sensitiveFields: { count: 0, highRiskCount: 0, lowRiskCount: 0, examples: [] },
             externalResources: { count: 0, formActionCount: 0, iframeCount: 0, suspiciousCount: 0, suspiciousIframeCount: 0, suspiciousScriptCount: 0, examples: [] },
             downloadSignals: { apkUrlCount: 0, installKeywordCount: 0, dynamicDownloadCount: 0, suspiciousPath: false, suspiciousPathFragments: [], examples: [] },
+            govAgencySignals: { official: false, matched: false, siteName: '', agencyName: '', rootAgency: '', rootDomain: '', evidence: [], details: '' },
             pageBrandSignals: { matched: false, brandName: null, keyword: null, source: null },
             urgencySignals: { count: 0, examples: [] },
             trustSignals: { score: 0, matched: false, reasons: [] },
@@ -616,6 +617,98 @@ const { useState, useEffect, useRef } = React;
                 subdomainLabels: parts.length > registeredSize ? parts.slice(0, -registeredSize) : [],
                 rootLabel: parts.length >= registeredSize ? parts[parts.length - registeredSize] : (parts[0] || ''),
                 registrableDomain: parts.length >= registeredSize ? parts.slice(-registeredSize).join('.') : parts.join('.')
+            };
+        };
+
+        const TAIWAN_GOV_ROOT_AGENCY_NAMES = {
+            'gov.tw': '中華民國政府',
+            'kcg.gov.tw': '高雄市政府',
+            'taipei.gov.tw': '臺北市政府',
+            'ntpc.gov.tw': '新北市政府',
+            'tycg.gov.tw': '桃園市政府',
+            'taichung.gov.tw': '臺中市政府',
+            'tainan.gov.tw': '臺南市政府'
+        };
+
+        const cleanDisplayText = (value) => String(value || '')
+            .replace(/[\u0000-\u001f\u007f]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        const chooseGovernmentSiteName = (candidates = [], rootAgency = '') => {
+            const genericTitles = new Set(['首頁', '網站導覽', '最新消息', '公告訊息', '查詢服務']);
+            const root = cleanDisplayText(rootAgency);
+            for (const rawCandidate of candidates) {
+                const cleaned = cleanDisplayText(rawCandidate);
+                if (!cleaned) continue;
+                const segments = cleaned
+                    .split(/\s*(?:[|｜\-–—]|::|＞|>|\/)\s*/)
+                    .map(segment => cleanDisplayText(segment))
+                    .filter(segment => segment.length >= 2 && !genericTitles.has(segment));
+                const preferred = segments.find(segment => root && segment !== root && !segment.includes('javascript')) ||
+                    segments.find(segment => !segment.includes('javascript')) ||
+                    cleaned;
+                if (preferred) return preferred.slice(0, 40);
+            }
+            return '';
+        };
+
+        const extractGovernmentAgencyName = (text) => {
+            const source = cleanDisplayText(text);
+            const labelPattern = /(主管機關|主辦單位|協辦單位|承辦單位|公告單位|申請單位|服務機關|發布單位|聯絡單位|承辦機關|機關名稱|單位)[:：\s　]*(.{0,80}?)(?=(?:地址|電話|傳真|信箱|服務時間|公告內容|申請時間|諮詢專線|$))/g;
+            const agencyPattern = /((?:[\u4e00-\u9fff]{2,4}[市縣])?政府[\u4e00-\u9fff]{1,16}(?:局|處|所|中心|公所|署|部|會|辦公室|管理處|管理署)|[\u4e00-\u9fff]{2,24}(?:部|會|署|局|處|所|公所|中心))/;
+            let match;
+            while ((match = labelPattern.exec(source)) !== null) {
+                const agency = cleanDisplayText(match[2].match(agencyPattern)?.[1] || '');
+                if (agency && !/(網站資料開放宣告|隱私權|網路安全政策)/.test(agency)) return agency;
+            }
+
+            return cleanDisplayText(source.match(agencyPattern)?.[1] || '');
+        };
+
+        const analyzeGovernmentAgencySignals = (doc, rawText = '', fullUrl = '') => {
+            let hostname = '';
+            try { hostname = new URL(fullUrl).hostname.toLowerCase(); } catch (e) { }
+            const normalizedHostname = normalizeHostname(hostname);
+            const official = isOfficialTaiwanGovDomain(normalizedHostname);
+            if (!official) return createEmptyPageSignals().govAgencySignals;
+
+            const { registrableDomain } = getDomainParts(normalizedHostname);
+            const rootAgency = TAIWAN_GOV_ROOT_AGENCY_NAMES[registrableDomain] || '';
+            const metaCandidates = [];
+            if (doc) {
+                doc.querySelectorAll('meta[property="og:title"], meta[property="og:site_name"], meta[name="application-name"]').forEach(el => {
+                    metaCandidates.push(el.getAttribute('content') || '');
+                });
+            }
+            const siteName = chooseGovernmentSiteName([doc?.title || '', ...metaCandidates], rootAgency);
+            const pageText = [
+                rawText || '',
+                doc?.title || '',
+                doc?.body?.textContent || '',
+                ...metaCandidates
+            ].join('\n');
+            const agencyName = extractGovernmentAgencyName(pageText) || rootAgency;
+            const evidence = [
+                siteName ? { label: '頁面名稱', value: siteName } : null,
+                agencyName ? { label: '主管/申請單位', value: agencyName } : null,
+                rootAgency && rootAgency !== agencyName ? { label: '政府根網域', value: rootAgency } : null,
+                registrableDomain ? { label: '網域根', value: registrableDomain } : null
+            ].filter(Boolean);
+            const matched = evidence.length > 1 || !!siteName || !!agencyName;
+            const details = matched
+                ? `已辨識為台灣政府官方網域${siteName ? `；頁面名稱「${siteName}」` : ''}${agencyName ? `；機關/單位「${agencyName}」` : ''}`
+                : '已辨識為台灣政府官方網域，但未能從頁面內容擷取明確機關名稱';
+
+            return {
+                official,
+                matched,
+                siteName,
+                agencyName,
+                rootAgency,
+                rootDomain: registrableDomain,
+                evidence,
+                details
             };
         };
 
@@ -1309,6 +1402,7 @@ const { useState, useEffect, useRef } = React;
                     examples: externalResources.slice(0, 3)
                 },
                 downloadSignals: analyzeDownloadSignals(doc, rawText, fullUrl),
+                govAgencySignals: analyzeGovernmentAgencySignals(doc, rawText, fullUrl),
                 pageBrandSignals: analyzePageBrandSignals(doc, fullUrl, rawText),
                 urgencySignals: analyzeUrgencySignals(doc, rawText),
                 trustSignals: analyzeTrustSignals(doc, rawText, fullUrl),
@@ -2277,6 +2371,7 @@ const { useState, useEffect, useRef } = React;
             const fakeServiceKeywords = getRiskList('fakeServiceKeywords');
             const isFakeService = fakeServiceKeywords.some(kw => domain.includes(kw) || finalDomain.includes(kw)) && !isWhitelisted;
             const pageSignals = siteStatusData.pageSignals || defaultSiteStatus.pageSignals;
+            const govAgencySignals = pageSignals.govAgencySignals || createEmptyPageSignals().govAgencySignals;
             const pageBrandSignals = pageSignals.pageBrandSignals || createEmptyPageSignals().pageBrandSignals;
             const urgencySignals = pageSignals.urgencySignals || createEmptyPageSignals().urgencySignals;
             const sensitiveFieldCount = pageSignals.sensitiveFields?.count || 0;
@@ -2536,7 +2631,8 @@ const { useState, useEffect, useRef } = React;
             const addTrustSignal = (condition, score, reason) => {
                 if (condition) trustValidationSignals.push({ score, reason });
             };
-            addTrustSignal(isOfficialTaiwanGov, 100, '台灣政府官方網域');
+            const govAgencyTrustLabel = govAgencySignals.agencyName || govAgencySignals.siteName || '';
+            addTrustSignal(isOfficialTaiwanGov, 100, govAgencyTrustLabel ? `台灣政府官方網域：${govAgencyTrustLabel}` : '台灣政府官方網域');
             addTrustSignal(isTrustedGlobalRootDomain, 80, '全球頂級可信根網域');
             addTrustSignal(isTrustedEcommerceRootDomain, 90, `Trusted E-commerce Root Domain：${registrableDomain}`);
             addTrustSignal(isTrustedTaiwanServiceRootDomain, 80, `可信台灣民營服務網域：${registrableDomain}`);
@@ -3244,6 +3340,22 @@ const { useState, useEffect, useRef } = React;
                         details: isConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'
                     },
                     siteContent: { status: siteContentStatus, label: '網站內容狀態', details: siteContentMsg },
+                    govAgency: isOfficialTaiwanGov ? {
+                        status: govAgencySignals.matched ? 'safe' : 'info',
+                        label: '政府機關網域驗證',
+                        details: govAgencySignals.details || '已辨識為台灣政府官方網域，本項不納入商業公司驗證',
+                        official: true,
+                        siteName: govAgencySignals.siteName || '',
+                        agencyName: govAgencySignals.agencyName || '',
+                        rootAgency: govAgencySignals.rootAgency || '',
+                        rootDomain: govAgencySignals.rootDomain || registrableDomain,
+                        evidence: govAgencySignals.evidence || []
+                    } : {
+                        hidden: true,
+                        status: 'unknown',
+                        label: '政府機關網域驗證',
+                        details: ''
+                    },
 
                     domainAnalysis: {
                         status: domainAnalysisStatus,
@@ -4633,7 +4745,7 @@ const { useState, useEffect, useRef } = React;
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.3.10</div></div></header>
+                    <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm bg-opacity-95 backdrop-blur-sm"><div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between"><a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity"><img src="https://ik.imagekit.io/mygopen/menu-logo.png?updatedAt=1767058877480" alt="麥擱騙 Logo" className="h-8" /><h1 className="font-bold text-lg md:text-xl text-gray-800 tracking-tight">麥擱騙｜詐騙網址幫你查</h1></a><div className="text-xs text-gray-400 font-medium hidden md:block">v2.3.11</div></div></header>
                     <main className="flex-grow flex flex-col items-center justify-start pt-8 pb-12 px-4 md:pt-16 md:px-6"><div className="w-full max-w-3xl">
                         <div className="text-center mb-10 md:mb-12 animate-fade-in"><h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-4 leading-tight">遠離網路詐騙<br className="md:hidden" /><span className="text-brand-red">從檢查網址開始</span></h2><p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">輸入網址，即時分析網站特徵、流量與黑名單資料庫，保護個資安全。</p></div>
                         <div className="bg-white rounded-2xl shadow-soft p-2 md:p-3 mb-8 transform transition-all hover:shadow-lg border border-gray-100">
@@ -4871,6 +4983,36 @@ const { useState, useEffect, useRef } = React;
                                         </h3>
                                     </div>
                                 </div>
+
+                                {result.checks.govAgency && !result.checks.govAgency.hidden && (
+                                    <div className="mb-6 p-4 md:p-5 border-2 rounded-2xl shadow-sm animate-fade-in bg-green-50 border-green-300">
+                                        <div className="flex items-start gap-3">
+                                            <ShieldCheck size={28} className="flex-shrink-0 mt-0.5 text-green-700" />
+                                            <div className="min-w-0 w-full">
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                    <h4 className="font-extrabold text-lg md:text-xl text-green-900">政府機關網域驗證</h4>
+                                                    <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-green-200 text-green-900">
+                                                        台灣政府官方網域
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm md:text-base text-gray-800 leading-relaxed font-semibold">
+                                                    {result.checks.govAgency.details}
+                                                </p>
+
+                                                {(result.checks.govAgency.evidence || []).length > 0 && (
+                                                    <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 bg-white/90 border border-gray-200 rounded-xl p-4 text-sm">
+                                                        {(result.checks.govAgency.evidence || []).map((item, index) => (
+                                                            <div key={(item.label || 'gov') + index} className={item.label === '頁面名稱' ? 'sm:col-span-2' : ''}>
+                                                                <dt className="inline font-bold text-gray-500">{item.label}：</dt>
+                                                                <dd className="inline font-semibold text-gray-800 break-all">{item.value}</dd>
+                                                            </div>
+                                                        ))}
+                                                    </dl>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {result.checks.companyWebsite && (result.checks.companyWebsite.companies || []).length > 0 && (
                                     <div className={'mb-6 p-4 md:p-5 border-2 rounded-2xl shadow-sm animate-fade-in ' + (result.checks.companyWebsite.verified ? 'bg-green-50 border-green-300' : (result.checks.companyWebsite.domainMatched ? 'bg-yellow-50 border-yellow-300' : 'bg-blue-50 border-blue-200'))}>
@@ -5121,11 +5263,13 @@ const { useState, useEffect, useRef } = React;
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-fade-in bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
                                             {Object.values(result.checks).map((check, idx) => {
+                                                if (!check || check.hidden) return null;
                                                 if (check.label === '轉址/短網址' && check.status === 'safe') return null;
                                                 // 已經在上方大面板提煉過的結論，就不在專家模式中重複顯示，保持精簡
                                                 if (check.label === '網站內容狀態' || check.label === '網域特徵分析') return null;
 
                                                 const renderIcon = () => {
+                                                    if (check.label === '政府機關網域驗證') return <ShieldCheck size={20} className={check.status === 'safe' ? 'text-green-500' : 'text-blue-500'} />;
                                                     if (check.label === '註冊商信譽') return <Flag size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
 	                                                    if (check.label === 'WHOIS 身份隱藏') return <UserX size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
 	                                                    if (check.label === '子網域深度') return <Layers size={20} className={check.status === 'warning' ? 'text-yellow-500' : 'text-green-500'} />;
