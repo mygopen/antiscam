@@ -41,7 +41,7 @@ window.RISK_CONFIG = {
         'zk-school.com', 'gowedding.tw', 'jack-hsinchu.com'
     ],
     trustedFinancialServiceDomains: [
-        'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co'
+        'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw'
     ],
     trustedGovernmentServiceDomains: [
         'imigrasi.go.id'
@@ -74,12 +74,12 @@ window.RISK_CONFIG = {
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
-        'aka.ms', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
+        'aka.ms', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
-        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw', '591.to', 'esun.co',
+        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw',
         'ecloud.life', 'link.utaggo.com.tw'
     ],
     emailTrackingRedirectors: [
@@ -228,6 +228,7 @@ window.RISK_CONFIG = {
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
         { name: '國泰世華', keywords: ['cathay', 'cathaybk'], domains: ['cathaybk.com.tw'] },
         { name: '玉山銀行', keywords: ['esun', 'esunbank'], domains: ['esunbank.com.tw', 'esunbank.com', 'esun.co'] },
+        { name: '永豐銀行', keywords: ['sinopac'], domains: ['sinopac.com', 'mma.tw'] },
         { name: '台新銀行', keywords: ['taishin', 'taishinbank'], domains: ['taishinbank.com.tw'] },
         { name: '富邦銀行', keywords: ['fubon', 'taipeifubon'], domains: ['fubon.com', 'taipeifubon.com.tw', 'fuboncharity.org.tw'] },
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },

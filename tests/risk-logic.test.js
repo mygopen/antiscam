@@ -2710,6 +2710,46 @@ test('玉山銀行官方短網址 esun.co 應視為可信金融服務與安全�
     assert.match(brandApiSource, /"玉山銀行": \["esunbank\.com\.tw", "esunbank\.com", "esun\.co"\]/);
 });
 
+test('永豐銀行 MMA 官方短網址 mma.tw 應視為可信金融服務與安全縮網址', () => {
+    const rawUrl = 'https://mma.tw/kycsurvey/?utm_source=sms&utm_medium=message';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'mma.tw';
+    const officialDestination = 'mma.sinopac.com';
+    const financialText = `${rawUrl} MMA金融交易網 永豐銀行 信用卡 帳戶異常 verify`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const sinopacBrand = riskConfig.protectedBrands.find(brand => brand.name === '永豐銀行');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('mma.tw'));
+    assert.ok(riskConfig.urlShorteners.includes('mma.tw'));
+    assert.ok(riskConfig.safeShorteners.includes('mma.tw'));
+    assert.ok(sinopacBrand.domains.includes('mma.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.safeShorteners), true);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain(officialDestination, whitelist), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(!isVerifiedSafeRootDomain(hostname) && hasFinancialPhishingText(financialText), false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('mma.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-mma.tw', []), false);
+    assert.match(brandApiSource, /"MMA金融交易網": \["sinopac\.com", "mma\.tw"\]/);
+    assert.match(brandApiSource, /"MMA交易金融網": \["sinopac\.com", "mma\.tw"\]/);
+});
+
 test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
     const rawUrl = 'https://591.to/rGRj?utm_source=facebook&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
