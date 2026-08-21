@@ -2780,7 +2780,7 @@ test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
     assert.equal(isVerifiedSafeRootDomain('cathay-cube.com.tw.evil.shop', []), false);
     assert.equal(isVerifiedSafeRootDomain('fake-cathay-cube.com.tw', []), false);
-    assert.match(brandApiSource, /"國泰世華銀行": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw"\]/);
+    assert.match(brandApiSource, /"國泰世華銀行": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw", "globalmyb2b\.com", "cathayrobo\.com"\]/);
 });
 
 test('國泰世華採用的 cube-app.tw 應視為可信 CUBE App 安全短網址', () => {
@@ -2818,6 +2818,72 @@ test('國泰世華採用的 cube-app.tw 應視為可信 CUBE App 安全短網址
     assert.equal(isVerifiedSafeRootDomain('cube-app.tw.evil.shop', []), false);
     assert.equal(isVerifiedSafeRootDomain('fake-cube-app.tw', []), false);
     assert.match(brandApiSource, /"CUBE App": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw"\]/);
+});
+
+test('國泰世華 GlobalMyB2B 官方網域應視為可信企業金融服務', () => {
+    const rawUrl = 'https://www.globalmyb2b.com/GEBANK/Login.aspx?utm_source=bookmark&utm_medium=web';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'www.globalmyb2b.com';
+    const financialText = `${rawUrl} 國泰世華全球企業網路銀行 帳戶 登入 verification`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('globalmyb2b.com'));
+    assert.ok(cathayBrand.domains.includes('globalmyb2b.com'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), false);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('globalmyb2b.com.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-globalmyb2b.com', []), false);
+    assert.match(brandApiSource, /"GlobalMyB2B": \["globalmyb2b\.com"\]/);
+});
+
+test('國泰智能投資 cathayrobo.com 官方網域應視為可信金融服務', () => {
+    const rawUrl = 'https://www.cathayrobo.com/welcome/?utm_source=cathay&utm_medium=referral';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'www.cathayrobo.com';
+    const financialText = `${rawUrl} 國泰智能投資 信用卡 帳戶 verification`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('cathayrobo.com'));
+    assert.ok(cathayBrand.domains.includes('cathayrobo.com'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), false);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('cathayrobo.com.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-cathayrobo.com', []), false);
+    assert.match(brandApiSource, /"國泰智能投資": \["cathayrobo\.com"\]/);
 });
 
 test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
