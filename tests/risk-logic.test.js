@@ -2674,6 +2674,42 @@ test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網�
     assert.equal(override.riskScore, 0);
 });
 
+test('玉山銀行官方短網址 esun.co 應視為可信金融服務與安全縮網址', () => {
+    const rawUrl = 'https://esun.co/MJce6?utm_source=sms&utm_medium=message';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'esun.co';
+    const officialDestination = 'www.esunbank.com';
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const esunBrand = riskConfig.protectedBrands.find(brand => brand.name === '玉山銀行');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('esun.co'));
+    assert.ok(riskConfig.urlShorteners.includes('esun.co'));
+    assert.ok(riskConfig.safeShorteners.includes('esun.co'));
+    assert.ok(esunBrand.domains.includes('esun.co'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+    assert.equal(matchesDomainList(hostname, riskConfig.safeShorteners), true);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain(officialDestination, whitelist), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('esun.co.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-esun.co', []), false);
+    assert.match(brandApiSource, /"玉山銀行": \["esunbank\.com\.tw", "esunbank\.com", "esun\.co"\]/);
+});
+
 test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
     const rawUrl = 'https://591.to/rGRj?utm_source=facebook&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
