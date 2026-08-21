@@ -2750,6 +2750,39 @@ test('永豐銀行 MMA 官方短網址 mma.tw 應視為可信金融服務與安�
     assert.match(brandApiSource, /"MMA交易金融網": \["sinopac\.com", "mma\.tw"\]/);
 });
 
+test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服務', () => {
+    const rawUrl = 'https://www.cathay-cube.com.tw/cathaybk/personal/product/credit-card/cards/cube?utm_source=google&utm_medium=search';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const hostname = 'www.cathay-cube.com.tw';
+    const financialText = `${rawUrl} 國泰世華銀行 CUBE 信用卡 verification`;
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('cathay-cube.com.tw'));
+    assert.ok(cathayBrand.domains.includes('cathay-cube.com.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(hasFinancialPhishingText(financialText), true);
+    assert.equal(!isVerifiedSafeRootDomain(hostname) && hasFinancialPhishingText(financialText), false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.equal(isVerifiedSafeRootDomain('cathay-cube.com.tw.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-cathay-cube.com.tw', []), false);
+    assert.match(brandApiSource, /"國泰世華銀行": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw"\]/);
+});
+
 test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
     const rawUrl = 'https://591.to/rGRj?utm_source=facebook&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);

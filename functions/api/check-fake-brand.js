@@ -192,7 +192,10 @@ const localBrandMap = {
         "中華郵政": ["post.gov.tw"], 
         "中國信託": ["ctbcbank.com"], "ctbc bank": ["ctbcbank.com"], "ctbc": ["ctbcbank.com"],
         // 👇 把重複的刪掉，只留這一行即可：
-        "國泰世華": ["cathaybk.com.tw", "cathayins.tw"],
+        "國泰世華": ["cathaybk.com.tw", "cathay-cube.com.tw", "cathayins.tw"],
+        "國泰世華銀行": ["cathaybk.com.tw", "cathay-cube.com.tw"],
+        "國泰世華商業銀行": ["cathaybk.com.tw", "cathay-cube.com.tw"],
+        "CUBE App": ["cathaybk.com.tw", "cathay-cube.com.tw"],
         "國泰產險": ["cathay-ins.com.tw", "cathayins.tw"],
         "玉山銀行": ["esunbank.com.tw", "esunbank.com", "esun.co"],
         "E.SUN Bank": ["esunbank.com.tw", "esunbank.com", "esun.co"],

@@ -41,7 +41,8 @@ window.RISK_CONFIG = {
         'zk-school.com', 'gowedding.tw', 'jack-hsinchu.com'
     ],
     trustedFinancialServiceDomains: [
-        'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw'
+        'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw',
+        'cathay-cube.com.tw'
     ],
     trustedGovernmentServiceDomains: [
         'imigrasi.go.id'
@@ -226,7 +227,7 @@ window.RISK_CONFIG = {
     ],
     protectedBrands: [
         { name: '中國信託', keywords: ['ctbc', 'ctbcbank'], domains: ['ctbcbank.com', 'ctbc.tw'] },
-        { name: '國泰世華', keywords: ['cathay', 'cathaybk'], domains: ['cathaybk.com.tw'] },
+        { name: '國泰世華', keywords: ['cathay', 'cathaybk'], domains: ['cathaybk.com.tw', 'cathay-cube.com.tw'] },
         { name: '玉山銀行', keywords: ['esun', 'esunbank'], domains: ['esunbank.com.tw', 'esunbank.com', 'esun.co'] },
         { name: '永豐銀行', keywords: ['sinopac'], domains: ['sinopac.com', 'mma.tw'] },
         { name: '台新銀行', keywords: ['taishin', 'taishinbank'], domains: ['taishinbank.com.tw'] },
