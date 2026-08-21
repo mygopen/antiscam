@@ -38,7 +38,7 @@ window.RISK_CONFIG = {
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
         'noncodingai.com', 'fuboncharity.org.tw', 'utaggo.com.tw',
-        'zk-school.com', 'gowedding.tw'
+        'zk-school.com', 'gowedding.tw', 'jack-hsinchu.com'
     ],
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com'
@@ -239,6 +239,7 @@ window.RISK_CONFIG = {
         { name: '聖弘紙藝', keywords: ['shenghongpaper', '聖弘紙藝', '聖弘紙藝專賣店'], domains: ['shenghongpaper.com'] },
         { name: '三得利健康網路商店', keywords: ['suntory', 'suntorywellness', '三得利', '三得利健康網路商店', '三得利健益'], domains: ['suntory.com.tw'] },
         { name: 'OBgE', keywords: ['obge', 'obgeofficial', 'obge taiwan', '台灣愛戴特', '台灣愛戴特有限公司'], domains: ['obge.tw'] },
+        { name: '杰克行李箱維修工作室', keywords: ['jackhsinchu', 'jack-hsinchu', '杰克行李箱維修', '杰克拉桿箱維修', '杰克工作室'], domains: ['jack-hsinchu.com'] },
         { name: '中華磊山慈愛社', keywords: ['ls-love', 'lslove', '磊山慈愛社', '中華磊山慈愛社', '讓愛看見希望'], domains: ['ls-love.org'] },
         { name: '國際合作發展基金會', keywords: ['icdf', 'taiwanicdf', '國合會', '國際合作發展基金會', '0728日本熊本賑災專案', '熊本賑災'], domains: ['icdf.org.tw', '39buy.co'] },
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },

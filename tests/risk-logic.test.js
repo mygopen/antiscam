@@ -4599,6 +4599,86 @@ test('GoWedding 婚禮掏心話官方婚禮資訊平台不應誤判為高風險'
     assert.equal(isVerifiedSafeRootDomain('fake-gowedding.tw', []), false);
 });
 
+test('新竹杰克行李箱維修工作室官方網站不應因在地維修服務與 LINE 聯絡誤判為高風險', () => {
+    const rawUrl = 'https://www.jack-hsinchu.com/?utm_source=google&utm_medium=maps';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>杰克行李箱維修｜新竹行李箱維修工作室</title>
+                <meta name="description" content="新竹在地行李箱維修工作室，提供輪子、拉桿、把手、拉鍊、鎖頭與基本保養服務">
+            </head>
+            <body>
+                <main>
+                    <h1>杰克行李箱維修工作室</h1>
+                    <p>新竹市北區金雅里金農路100號1樓，提供行李箱輪子破損、把手斷裂、拉桿伸縮異常、拉鍊損壞與鎖頭維修。</p>
+                    <p>Line 聯絡資訊、Google 店家資訊與現場維修公告請以官方頁面為準。</p>
+                    <p>電話 0906281658。統一編號 85422023。營業時間週二至週五 10:00 - 20:00，週六 10:00 - 17:00。</p>
+                    <a href="/contact">聯絡我們</a><a href="/repair">維修項目</a>
+                </main>
+            </body>
+        </html>`;
+    const shoppingSignals = analyzeShoppingScamSignals({ html, url: sanitized.href });
+    const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
+    const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: html });
+    const fakeJack = checkBrandSimilarity('jack-hsinchu-repair.example.shop', []);
+    const fakePageBrandSignals = analyzePageBrandSignals({
+        hostname: 'jack-hsinchu-repair.example.shop',
+        text: '<title>杰克行李箱維修工作室 新竹限時維修優惠</title>'
+    });
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        whitelist,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isWhitelisted ? 0 : (shoppingSignals.matched ? 75 : 25),
+        isTrustedAllowlist: isWhitelisted,
+        checks: {
+            shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
+            ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
+            domainAnalysis: {
+                status: isWhitelisted ? 'safe' : 'warning',
+                details: isWhitelisted ? '受信賴新竹在地行李箱維修工作室官方網域：jack-hsinchu.com' : '網域命名結構無明顯異常'
+            },
+            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' }
+        }
+    });
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+
+    assert.equal(sanitized.href, 'https://www.jack-hsinchu.com/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('jack-hsinchu.com'));
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
+    assert.equal(matchesDomainList('jack-hsinchu.com', whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(isVerifiedSafeRootDomain('jack-hsinchu.com', []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(shoppingSignals.matched, false);
+    assert.equal(ecommerceSignals.matched, false);
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(checkBrandSimilarity(parsed.hostname, []).matched, false);
+    assert.equal(fakeJack.matched, true);
+    assert.equal(fakeJack.brandName, '杰克行李箱維修工作室');
+    assert.equal(fakePageBrandSignals.matched, true);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(override.riskScore, 0);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('jack-hsinchu.com.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-jack-hsinchu.com', []), false);
+    assert.match(brandApiSource, /"杰克行李箱維修工作室": \["jack-hsinchu\.com"\]/);
+    assert.match(brandApiSource, /"jack-hsinchu": \["jack-hsinchu\.com"\]/);
+});
+
 test('Nocoding AI 大學正規課程網站不應因新網域、賺錢文案與結帳頁誤判為高風險', () => {
     const rawUrl = 'https://noncodingai.com/buy/?utm_source=facebook&utm_campaign=ai-course';
     const parsed = new URL(rawUrl);
