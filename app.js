@@ -260,6 +260,14 @@ const { useState, useEffect, useRef } = React;
             return cleanA === cleanB || cleanA.endsWith('.' + cleanB) || cleanB.endsWith('.' + cleanA);
         };
 
+        const isKnownUrlShortenerDomain = (hostname) => {
+            const cleanHostname = normalizeHostname(hostname);
+            return getRiskList('urlShorteners').some(domain => {
+                const cleanDomain = normalizeHostname(domain);
+                return cleanHostname === cleanDomain || cleanHostname.endsWith('.' + cleanDomain);
+            });
+        };
+
         const isTrustedGlobalDomain = (hostname) => {
             return getRiskList('trustedGlobalDomains').some(domain => isSameRootDomain(hostname, domain));
         };
@@ -1804,6 +1812,95 @@ const { useState, useEffect, useRef } = React;
             return await fetchJsonSafely(`/api/trace?url=${encodeURIComponent(url)}`, null);
         };
 
+        const resolvePrimaryScanTarget = async (targetDomain, fullUrl, scanOptions = {}) => {
+            const inputDomain = normalizeHostname(targetDomain);
+            const baseResult = {
+                targetDomain: inputDomain,
+                fullUrl,
+                scanOptions: {
+                    ...scanOptions,
+                    inputDomain,
+                    inputScanUrl: fullUrl,
+                    resolvedFromShortener: false,
+                    unresolvedShortener: false
+                },
+                traceData: null,
+                resolvedFromShortener: false,
+                unresolvedShortener: false
+            };
+
+            if (!isKnownUrlShortenerDomain(inputDomain)) return baseResult;
+
+            const traceData = await withTimeout(fetchTraceData(fullUrl), 11000, null);
+            const traceOptions = {
+                ...baseResult.scanOptions,
+                preResolvedTrace: traceData,
+                tracePreflightCompleted: true,
+                traceObservedAt: traceData?.observedAt || null
+            };
+            const hasResolvedDestination = Number(traceData?.redirectCount || 0) > 0 &&
+                !!traceData?.finalUrl;
+
+            if (!hasResolvedDestination) {
+                return {
+                    ...baseResult,
+                    scanOptions: {
+                        ...traceOptions,
+                        unresolvedShortener: true
+                    },
+                    traceData,
+                    unresolvedShortener: true
+                };
+            }
+
+            try {
+                const finalUrl = new URL(traceData.finalUrl);
+                if (finalUrl.protocol !== 'http:' && finalUrl.protocol !== 'https:') throw new Error('unsupported_protocol');
+
+                const destinationSanitized = sanitizeUrlForRiskScoring(finalUrl.href);
+                const destinationDomain = normalizeHostname(finalUrl.hostname);
+                return {
+                    targetDomain: destinationDomain,
+                    fullUrl: destinationSanitized.href,
+                    scanOptions: {
+                        ...traceOptions,
+                        sanitizedUrl: destinationSanitized.href,
+                        removedTrackingParams: [...new Set([
+                            ...(scanOptions.removedTrackingParams || []),
+                            ...destinationSanitized.removedTrackingParams
+                        ])],
+                        removedVolatileParams: [...new Set([
+                            ...(scanOptions.removedVolatileParams || []),
+                            ...destinationSanitized.removedVolatileParams
+                        ])],
+                        removedParams: [...new Set([
+                            ...(scanOptions.removedParams || []),
+                            ...destinationSanitized.removedParams
+                        ])],
+                        resolvedFromShortener: true,
+                        unresolvedShortener: false,
+                        resolvedFinalUrl: finalUrl.href,
+                        primarySanitizedUrl: destinationSanitized.href,
+                        destinationRemovedTrackingParams: destinationSanitized.removedTrackingParams,
+                        destinationRemovedVolatileParams: destinationSanitized.removedVolatileParams
+                    },
+                    traceData,
+                    resolvedFromShortener: true,
+                    unresolvedShortener: false
+                };
+            } catch (err) {
+                return {
+                    ...baseResult,
+                    scanOptions: {
+                        ...traceOptions,
+                        unresolvedShortener: true
+                    },
+                    traceData,
+                    unresolvedShortener: true
+                };
+            }
+        };
+
         const checkOfficialAlerts = async (domain, fullUrl) => {
             try {
                 const params = new URLSearchParams({
@@ -2013,6 +2110,12 @@ const { useState, useEffect, useRef } = React;
         const simulateScan = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
             const rawScanUrl = scanOptions.rawUrl || fullUrl;
             const sanitizedScanUrl = scanOptions.sanitizedUrl || fullUrl;
+            const inputDomain = normalizeHostname(scanOptions.inputDomain || targetDomain);
+            const inputScanUrl = scanOptions.inputScanUrl || fullUrl;
+            const resolvedFromShortener = scanOptions.resolvedFromShortener === true;
+            const unresolvedShortener = scanOptions.unresolvedShortener === true;
+            const preResolvedTrace = scanOptions.preResolvedTrace || null;
+            const tracePreflightCompleted = scanOptions.tracePreflightCompleted === true;
             const removedTrackingParamsForScan = [...new Set(scanOptions.removedTrackingParams || [])];
             const removedVolatileParamsForScan = [...new Set(scanOptions.removedVolatileParams || [])];
             const removedParamsForScan = [...new Set(scanOptions.removedParams || [
@@ -2075,7 +2178,9 @@ const { useState, useEffect, useRef } = React;
 
             const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
-            const isInputShortener = shorteners.some(s => domain === s || domain.endsWith('.' + s));
+            const isInputShortener = shorteners.some(s => inputDomain === s || inputDomain.endsWith('.' + s));
+            const isOfficialInputShortener = isInputShortener && isVerifiedSafeRootDomain(inputDomain, currentWhitelist);
+            const hasUnresolvedPublicShortener = unresolvedShortener && isInputShortener && !isOfficialInputShortener;
             const nestedUrls = extractNestedUrls(fullUrl);
             const nestedDomains = nestedUrls.map(item => {
                 try { return new URL(item).hostname.toLowerCase(); } catch (e) { return ''; }
@@ -2091,6 +2196,12 @@ const { useState, useEffect, useRef } = React;
                 linkStats: { total: 0, internal: 0, external: 0 },
                 analyticsIdentifiers: [],
                 pageSignals: createEmptyPageSignals()
+            };
+            const unresolvedShortenerSiteStatus = {
+                ...defaultSiteStatus,
+                status: 'unresolved-shortener',
+                msg: '公共縮網址的最終目的地尚未解析，不以中介頁內容進行品牌或網站風險判定',
+                source: 'shortener-preflight'
             };
             const trustedEcommerceSiteStatus = {
                 status: 'trusted',
@@ -2111,16 +2222,24 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
                 withTimeout(fetchSiteSeoData(fullUrl), 5000, { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} }),
-                withTimeout(isTrustedEcommerceRootDomain ? Promise.resolve(trustedEcommerceSiteStatus) : checkSiteAvailability(fullUrl, {
-                    rawUrl: rawScanUrl,
-                    sanitizedUrl: sanitizedScanUrl,
-                    removedVolatileParams: removedVolatileParamsForScan
-                }), 5000, defaultSiteStatus),
+                withTimeout(
+                    isTrustedEcommerceRootDomain
+                        ? Promise.resolve(trustedEcommerceSiteStatus)
+                        : (hasUnresolvedPublicShortener
+                            ? Promise.resolve(unresolvedShortenerSiteStatus)
+                            : checkSiteAvailability(fullUrl, {
+                                rawUrl: rawScanUrl,
+                                sanitizedUrl: sanitizedScanUrl,
+                                removedVolatileParams: removedVolatileParamsForScan
+                            })),
+                    5000,
+                    defaultSiteStatus
+                ),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
                 withTimeout(checkTrancoRank(domain), 5000, { status: 'unavailable', rank: null }),
                 withTimeout(fetchRDAPData(domain), 6000, { date: null, expirationDate: null, registrationPeriodDays: null, privacyDetected: false, registrarName: null, registrantName: null, registrantOrganization: null }),
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
-                withTimeout(fetchTraceData(fullUrl), 11000, null),
+                withTimeout(tracePreflightCompleted ? Promise.resolve(preResolvedTrace) : fetchTraceData(fullUrl), 11000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
                 withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { isUnsafe: false }), 4000, { isUnsafe: false }),
                 withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] }),
@@ -2194,7 +2313,14 @@ const { useState, useEffect, useRef } = React;
                 !!securityHeadersData.missingAll;
             const traceChain = traceData ? traceData.chain : [];
             const hasUaDifference = !!traceData?.uaDifference;
-            const hasUaCloakingRisk = !isWhitelisted && hasUaDifference && !!traceData?.isHighRisk;
+            const hasUaCloakingRisk = hasUaDifference && !!traceData?.isHighRisk;
+            let traceFinalHostname = inputDomain;
+            try {
+                traceFinalHostname = normalizeHostname(new URL(traceData?.finalUrl || inputScanUrl).hostname);
+            } catch (err) { }
+            const isTraceHighRiskSameRoot = !!traceData?.isHighRisk && isSameRootDomain(inputDomain, traceFinalHostname);
+            const hasHighRiskRedirectTrace = !!traceData?.isHighRisk &&
+                (isInputShortener || hasUaDifference || !isTraceHighRiskSameRoot);
             const uaCloakingDetails = hasUaDifference
                 ? `Mobile 最終網址: ${traceData.mobileFinalUrl || '無法判定'}；Desktop 最終網址: ${traceData.desktopFinalUrl || '無法判定'}`
                 : 'Mobile 與 Desktop 檢測路徑未發現明顯差異';
@@ -2316,9 +2442,10 @@ const { useState, useEffect, useRef } = React;
                 try {
                     const finalUrlObj = new URL(siteStatusData.finalUrl);
                     finalDomain = finalUrlObj.hostname.toLowerCase();
-                    const cleanDomain = domain.replace(/^www\./, '');
+                    const redirectSourceDomain = resolvedFromShortener ? inputDomain : domain;
+                    const cleanDomain = redirectSourceDomain.replace(/^www\./, '');
                     const cleanFinalDomain = finalDomain.replace(/^www\./, '');
-                    if (cleanDomain !== cleanFinalDomain) {
+                    if (resolvedFromShortener || cleanDomain !== cleanFinalDomain) {
                         isRedirected = true;
                         // 修正：同樣改為嚴格的網域比對
                         isKnownShortener = shorteners.some(s => cleanDomain === s || cleanDomain.endsWith('.' + s));
@@ -2328,10 +2455,8 @@ const { useState, useEffect, useRef } = React;
                         isSameRootRedirect = isSameRoot;
 
                         redirectDetails = `偵測到轉址至: ${finalDomain}`;
-                        if (isKnownShortener) redirectDetails += ' (短網址服務)';
+                        if (isKnownShortener) redirectDetails += ` (由短網址 ${cleanDomain} 解析)`;
                         else if (isSameRoot) redirectDetails += ' (內部子網域跳轉)'; // 標記為內部跳轉
-
-                        finalHyphenCount = (finalDomain.match(/-/g) || []).length;
 
                         finalHyphenCount = (finalDomain.match(/-/g) || []).length;
                         isFinalFakeGov = finalDomain.includes('gov') && !finalDomain.endsWith('.gov') && !finalDomain.endsWith('.gov.tw');
@@ -2409,7 +2534,7 @@ const { useState, useEffect, useRef } = React;
             const hasNetlifyAppRandomRisk = hasNetlifyAppBaselineRisk &&
                 (hasNetlifyAppRandomSubdomain || hasRandomizedPathToken || hasSuspiciousParams || hasNestedSuspiciousParams);
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
-            const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
+            const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov && !hasHighRiskRedirectTrace;
             const isTrustedPaymentGatewayOrApiEndpoint = hasTrustedAllowlistOverride &&
                 (isGlobalPaymentGatewayDomain(domain) || (isTrustedGlobalRootDomain && hasPaymentOrApiPath));
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
@@ -2790,6 +2915,10 @@ const { useState, useEffect, useRef } = React;
             } else if (isApkSite) {
                 riskScore = 100; // 👈 誘騙下載 APK 強制判死刑 (100分)
 
+            } else if (hasUaCloakingRisk) {
+                riskScore = 100;
+            } else if (hasHighRiskRedirectTrace) {
+                riskScore = 100;
             } else if (isGoogleFlaggedForRisk) {
                 // 👇 加入 Google 的防護邏輯 (如果是白名單被 Google 誤判，則尊重白名單)
                 riskScore = 100;
@@ -2837,6 +2966,7 @@ const { useState, useEffect, useRef } = React;
                 if (hasNewOneYearRegistrationRisk) riskScore += 15;
                 if (hasMissingAllSecurityHeadersRaw) riskScore += hasMissingAllSecurityHeaders ? 45 : 15;
                 if (hasMissingMxRecordsRaw) riskScore += hasMissingMxRecords ? 45 : 15;
+                if (isTraceHighRiskSameRoot && !isInputShortener && !isWhitelisted) riskScore += 15;
 
                 // 3. 其他特徵分析 (僅在非白名單時計算)
                 if (!isWhitelisted) {
@@ -2861,25 +2991,9 @@ const { useState, useEffect, useRef } = React;
                         }
                     }
 
-                    // 隱匿型跳板防禦維持不變
-                    else if (isInputShortener && fullUrl.length > targetDomain.length + 20) {
-                        riskScore = 100;
-                    }
-
-                    if (hasUaCloakingRisk) {
-                        riskScore += 90;
-                    } else if (traceData && traceData.isHighRisk) {
-                        const currentFinalDomain = finalDomain || domain;
-                        const isSameRoot = currentFinalDomain.replace(/^www\./, '').endsWith(domain.replace(/^www\./, '')) || domain.replace(/^www\./, '').endsWith(currentFinalDomain.replace(/^www\./, ''));
-
-                        if (isFinalSafePlatform) {
-                            riskScore += 0;
-                        } else if (isSameRoot) {
-                            // 👇 修正：同網域內部的追蹤異常(如 JS Loop) 有極大可能是 Cloudflare 人機驗證，給予 15 分的輕微扣分即可，有其他特徵才會變為中風險
-                            riskScore += 15; 
-                        } else {
-                            riskScore += 80;
-                        }
+                    // 公共縮網址若暫時無法解析，只能判定目的地未知，不能視為安全或直接當成詐騙。
+                    else if (hasUnresolvedPublicShortener) {
+                        riskScore = Math.max(riskScore, 40);
                     }
 
                     if (hasEmailTrackingPhishingPattern) riskScore += 85;
@@ -2997,10 +3111,6 @@ const { useState, useEffect, useRef } = React;
                 }
             }
 
-            const traceFinalDomain = (finalDomain || domain).replace(/^www\./, '');
-            const traceInputDomain = domain.replace(/^www\./, '');
-            const isTraceHighRiskSameRoot = !!traceData?.isHighRisk &&
-                (traceFinalDomain.endsWith(traceInputDomain) || traceInputDomain.endsWith(traceFinalDomain));
             const hasTrustedCommercialWeakSignalContext =
                 isTrustedTLD ||
                 domain.endsWith('.tw') ||
@@ -3227,16 +3337,18 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisDetails = '⚠️ 這是社群平台，我們無法看到裡面的貼文，要多加小心留意！';
                 siteContentMsg = '社群平台內容受隱私保護，無法自動掃描';
             }
-            // 改善點 2：新增寄生跳板的專屬警告文字 (放在最上面優先判斷)
-            else if (isRedirected && isKnownShortener && !isFinalWhitelisted) {
+            else if (isInputShortener && traceData?.isHighRisk) {
                 domainAnalysisStatus = 'danger';
-                domainAnalysisDetails = '🚨 偵測到「寄生網域」詐騙：利用合法社群連結，秘密跳轉至危險網站！';
+                domainAnalysisDetails = `🚨 縮網址轉址追蹤偵測到高風險行為：${traceData.riskReason || '目的地或轉址鏈異常'}。`;
+            }
+            else if (isRedirected && isKnownShortener && !isFinalWhitelisted) {
+                domainAnalysisStatus = 'warning';
+                domainAnalysisDetails = `公共縮網址 ${inputDomain} 已解析至 ${finalDomain}；風險評分以最終目的地為主，縮網址服務本身不作為安全背書。`;
             }
 
-            // 新增這段：隱匿型跳板警告
-            else if (!isRedirected && isInputShortener && fullUrl.length > targetDomain.length + 12) {
-                domainAnalysisStatus = 'danger';
-                domainAnalysisDetails = '🚨 隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地，極度可疑！';
+            else if (hasUnresolvedPublicShortener) {
+                domainAnalysisStatus = 'warning';
+                domainAnalysisDetails = `無法確認公共縮網址 ${inputDomain} 的最終目的地；目前只能列為中度提醒，請勿將縮網址服務本身視為安全證明。`;
             }
 
             else if (isFakeGov || isFinalFakeGov) {
@@ -3309,15 +3421,23 @@ const { useState, useEffect, useRef } = React;
             } else if (hasSuspiciousExternalTrustedRedirect) {
                 redirectStatus = 'danger';
                 redirectCheckDetails = `未知純數字子網域跨網域轉址至可信大站 (${finalDomain})，疑似用來閃避內容檢測`;
+            } else if (hasHighRiskRedirectTrace) {
+                redirectStatus = 'danger';
+                redirectCheckDetails = `轉址追蹤偵測異常：${traceData.riskReason || '目的地或轉址行為具有高風險'}`;
+            } else if (isTraceHighRiskSameRoot) {
+                redirectStatus = 'warning';
+                redirectCheckDetails = `同一主網域內的轉址追蹤異常：${traceData.riskReason || '可能是登入或防護流程，需搭配其他訊號判斷'}`;
+            } else if (hasUnresolvedPublicShortener) {
+                redirectStatus = 'warning';
+                redirectCheckDetails = `公共縮網址 ${inputDomain} 的最終目的地暫時無法解析，不提供安全結論`;
             } else if (traceData && traceData.redirectCount >= 3) {
                 redirectStatus = 'warning';
                 redirectCheckDetails = `偵測到 ${traceData.redirectCount} 次轉址 - [有多次轉址風險]${finalDomain ? ` (最終導向: ${finalDomain})` : ''}`;
             } else if (isRedirected) {
                 redirectStatus = isKnownShortener ? 'warning' : 'safe';
-                redirectCheckDetails = redirectDetails;
-            } else if (traceData && traceData.isHighRisk) {
-                redirectStatus = 'warning';
-                redirectCheckDetails = `後端偵測異常: ${traceData.riskReason}`;
+                redirectCheckDetails = isKnownShortener
+                    ? `原始縮網址 ${inputDomain} 已解析至 ${finalDomain}；本次結果以最終目的地為主`
+                    : redirectDetails;
             }
 
             const hasConfirmedSiteContentThreat = hasOfficialAlert ||
@@ -3345,7 +3465,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasStrongCofactsRisk || hasJobTaskScamSignal || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk, riskFlags: { confirmedScamDomain: isConfirmedScam, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasStrongCofactsRisk || hasJobTaskScamSignal || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk || hasHighRiskRedirectTrace, riskFlags: { confirmedScamDomain: isConfirmedScam, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3654,13 +3774,22 @@ const { useState, useEffect, useRef } = React;
                 : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : (isFallbackNetlifyApp ? fallbackNetlifyDetails : (isFallbackWeeblyHostedSite ? fallbackWeeblyDetails : fallbackDetails))));
             return {
                 domain: targetDomain,
+                inputDomain: normalizeHostname(scanOptions.inputDomain || targetDomain),
+                inputScanUrl: scanOptions.inputScanUrl || fullUrl,
+                primaryDomain: fallbackDomain,
+                primaryUrl: fullUrl,
+                resolvedFromShortener: scanOptions.resolvedFromShortener === true,
+                unresolvedShortener: scanOptions.unresolvedShortener === true,
+                resolvedFinalUrl: scanOptions.resolvedFinalUrl || null,
+                traceObservedAt: scanOptions.traceObservedAt || null,
+                traceVariants: scanOptions.preResolvedTrace?.variants || null,
                 scannedUrl: fullUrl,
                 rawUrl,
                 sanitizedUrl,
                 removedTrackingParams,
                 removedVolatileParams,
                 removedParams,
-                traceChain: [],
+                traceChain: scanOptions.preResolvedTrace?.chain || [],
                 riskScore: fallbackRiskScore,
                 risk_flag: true,
                 riskFlags: { scanRuntimeError: true, confirmedScamDomain: isFallbackConfirmedScam, errorMessage: err?.message || '' },
@@ -3752,17 +3881,103 @@ const { useState, useEffect, useRef } = React;
         };
 
         const runRiskScanSafely = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
-            const fallbackResult = createScanFailureResult(targetDomain, fullUrl, scanOptions);
+            let preparedTarget;
+            try {
+                preparedTarget = await resolvePrimaryScanTarget(targetDomain, fullUrl, scanOptions);
+            } catch (err) {
+                preparedTarget = {
+                    targetDomain,
+                    fullUrl,
+                    scanOptions: {
+                        ...scanOptions,
+                        inputDomain: normalizeHostname(targetDomain),
+                        inputScanUrl: fullUrl,
+                        unresolvedShortener: isKnownUrlShortenerDomain(targetDomain)
+                    },
+                    resolvedFromShortener: false,
+                    unresolvedShortener: isKnownUrlShortenerDomain(targetDomain)
+                };
+            }
+
+            const fallbackResult = createScanFailureResult(
+                preparedTarget.targetDomain,
+                preparedTarget.fullUrl,
+                preparedTarget.scanOptions
+            );
+            fallbackResult.inputDomain = normalizeHostname(targetDomain);
+            fallbackResult.inputScanUrl = fullUrl;
+            fallbackResult.primaryDomain = normalizeHostname(preparedTarget.targetDomain);
+            fallbackResult.primaryUrl = preparedTarget.fullUrl;
+            fallbackResult.resolvedFromShortener = preparedTarget.resolvedFromShortener;
+            fallbackResult.unresolvedShortener = preparedTarget.unresolvedShortener;
             try {
                 return await withTimeout(
-                    simulateScan(targetDomain, fullUrl, currentWhitelist, scanOptions),
-                    18000,
+                    simulateScan(
+                        preparedTarget.targetDomain,
+                        preparedTarget.fullUrl,
+                        currentWhitelist,
+                        preparedTarget.scanOptions
+                    ),
+                    20000,
                     fallbackResult
                 ) || fallbackResult;
             } catch (err) {
                 console.error('風險掃描流程異常，已改用保守備援結果:', err);
-                return createScanFailureResult(targetDomain, fullUrl, scanOptions, err);
+                return createScanFailureResult(
+                    preparedTarget.targetDomain,
+                    preparedTarget.fullUrl,
+                    preparedTarget.scanOptions,
+                    err
+                );
             }
+        };
+
+        const runRiskAndBrandScan = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
+            const inputIsShortener = isKnownUrlShortenerDomain(targetDomain);
+            const inputIsSocial = getRiskList('socialMediaDomains').some(domain =>
+                normalizeHostname(targetDomain) === normalizeHostname(domain) ||
+                normalizeHostname(targetDomain).endsWith('.' + normalizeHostname(domain))
+            );
+            const initialSkipBrandAnalysis = shouldSkipAiBrandAnalysis(targetDomain, currentWhitelist);
+            const fetchBrandAnalysis = (url) => withTimeout(
+                fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(url)}`, null),
+                7000,
+                null
+            );
+
+            if (!inputIsShortener) {
+                const [scanData, brandDataRes] = await Promise.all([
+                    runRiskScanSafely(targetDomain, fullUrl, currentWhitelist, scanOptions),
+                    (inputIsSocial || initialSkipBrandAnalysis)
+                        ? Promise.resolve(null)
+                        : fetchBrandAnalysis(fullUrl)
+                ]);
+                return {
+                    scanData,
+                    brandDataRes,
+                    skipAiBrandAnalysis: initialSkipBrandAnalysis,
+                    isSocialTarget: inputIsSocial
+                };
+            }
+
+            const scanData = await runRiskScanSafely(targetDomain, fullUrl, currentWhitelist, scanOptions);
+            const primaryUrl = scanData.primaryUrl || scanData.scannedUrl || fullUrl;
+            let primaryHostname = normalizeHostname(scanData.primaryDomain || scanData.domain || targetDomain);
+            try {
+                primaryHostname = normalizeHostname(new URL(primaryUrl).hostname);
+            } catch (err) { }
+
+            const isSocialTarget = getRiskList('socialMediaDomains').some(domain =>
+                primaryHostname === normalizeHostname(domain) ||
+                primaryHostname.endsWith('.' + normalizeHostname(domain))
+            );
+            const skipAiBrandAnalysis = scanData.unresolvedShortener === true ||
+                shouldSkipAiBrandAnalysis(primaryHostname, currentWhitelist);
+            const brandDataRes = (!scanData.isInvalid && !isSocialTarget && !skipAiBrandAnalysis)
+                ? await fetchBrandAnalysis(primaryUrl)
+                : null;
+
+            return { scanData, brandDataRes, skipAiBrandAnalysis, isSocialTarget };
         };
 
         const getHighRiskSummaryReasons = (scanData) => {
@@ -4102,14 +4317,12 @@ const { useState, useEffect, useRef } = React;
                     inputHadExplicitScheme: parsedInput.hasExplicitScheme
                 };
                 const riskScoringUrl = sanitizedForRisk.href;
-                const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
-
-                const [scanData, brandDataRes] = await Promise.all([
-                    runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, scanOptions),
-                    skipAiBrandAnalysis
-                        ? Promise.resolve(null)
-                        : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(riskScoringUrl)}`, null), 7000, null)
-                ]);
+                const { scanData, brandDataRes, skipAiBrandAnalysis } = await runRiskAndBrandScan(
+                    urlObj.hostname,
+                    riskScoringUrl,
+                    externalWhitelist,
+                    scanOptions
+                );
                 scanData.inputUrl = urlObj.href;
                 scanData.sanitizedUrl = riskScoringUrl;
                 scanData.removedTrackingParams = sanitizedForRisk.removedTrackingParams;
@@ -4620,7 +4833,6 @@ const { useState, useEffect, useRef } = React;
                     inputHadExplicitScheme: parsedInput.hasExplicitScheme
                 };
                 const riskScoringUrl = sanitizedForRisk.href;
-                const urlToParse = riskScoringUrl;
 
                 let loadingTimer = null;
 
@@ -4655,18 +4867,17 @@ const { useState, useEffect, useRef } = React;
 
                     if (document.activeElement) document.activeElement.blur();
 
-                    // 👇 判斷輸入網址是否為社群平台
-                    const isSocialInput = getRiskList('socialMediaDomains').some(s => urlObj.hostname === s || urlObj.hostname.endsWith('.' + s));
-                    const skipAiBrandAnalysis = shouldSkipAiBrandAnalysis(urlObj.hostname, externalWhitelist);
-
-                    // 平行處理
-                    const [scanData, brandDataRes] = await Promise.all([
-                        runRiskScanSafely(urlObj.hostname, riskScoringUrl, externalWhitelist, scanOptions),
-                        // 👇 如果是社群或台灣政府網址，直接跳過後端 AI 品牌分析，避免誤覆寫官方網域
-                        (isSocialInput || skipAiBrandAnalysis)
-                            ? Promise.resolve(null) 
-                            : withTimeout(fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(urlToParse)}`, null), 7000, null)
-                    ]);
+                    const {
+                        scanData,
+                        brandDataRes,
+                        skipAiBrandAnalysis,
+                        isSocialTarget: isSocialInput
+                    } = await runRiskAndBrandScan(
+                        urlObj.hostname,
+                        riskScoringUrl,
+                        externalWhitelist,
+                        scanOptions
+                    );
                     scanData.inputUrl = parsedInput.href;
                     scanData.sanitizedUrl = riskScoringUrl;
                     scanData.removedTrackingParams = sanitizedForRisk.removedTrackingParams;
@@ -4726,7 +4937,9 @@ const { useState, useEffect, useRef } = React;
                     // 👇 新增：GA4 網址檢測行為追蹤
                     if (typeof gtag === 'function') {
                         gtag('event', 'url_check', {
-                            'target_domain': urlObj.hostname,      // 民眾查的網域
+                            'target_domain': urlObj.hostname,      // 民眾原始查詢網域
+                            'destination_domain': scanData.domain || urlObj.hostname,
+                            'short_url_resolved': scanData.resolvedFromShortener ? 'yes' : 'no',
                             'risk_score': scanData.riskScore,       // 系統判定的風險分數
                             'is_blocked': scanData.blocklistListed ? 'yes' : 'no', // 是否在黑名單內
                             'detected_brand': brandDataRes?.detectedBrand || 'none' // AI 偵測到的品牌
@@ -5016,7 +5229,28 @@ const { useState, useEffect, useRef } = React;
                                         </div>
                                     </div>
                                 )}
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6"><div><div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">目標網域</div><h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3></div><div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600"><Globe size={16} className="text-brand-red" /><span>伺服器: {result.details.serverCountry}</span></div></div>
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                                    <div className="min-w-0">
+                                        <div className="text-sm text-gray-400 font-mono mb-1 tracking-wide uppercase">
+                                            {result.resolvedFromShortener ? '最終目的地網域' : '目標網域'}
+                                        </div>
+                                        <h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3>
+                                        {result.resolvedFromShortener && result.inputDomain && (
+                                            <div className="mt-2 text-sm text-gray-500 break-all">
+                                                原始縮網址：{result.inputUrl || result.inputScanUrl || result.inputDomain}
+                                            </div>
+                                        )}
+                                        {result.unresolvedPublicShortener && result.inputDomain && (
+                                            <div className="mt-2 text-sm font-medium text-amber-700 break-all">
+                                                原始縮網址：{result.inputUrl || result.inputScanUrl || result.inputDomain}（目的地尚未確認）
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600">
+                                        <Globe size={16} className="text-brand-red" />
+                                        <span>伺服器: {result.details.serverCountry}</span>
+                                    </div>
+                                </div>
                                 <RiskMeter score={result.riskScore} />
 
                                 {/* ================= 核心結論區塊 (精簡版) ================= */}

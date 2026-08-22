@@ -464,7 +464,9 @@ test('前端會把 User-Agent cloaking 接入風險旗標與報告卡片', () =>
     const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
 
     assert.match(source, /const hasUaCloakingRisk/);
-    assert.match(source, /riskScore \+= 90/);
+    assert.match(source, /else if \(hasUaCloakingRisk\) \{\s*riskScore = 100;/);
+    assert.match(source, /const hasHighRiskRedirectTrace/);
+    assert.match(source, /hasTrustedAllowlistOverride =[^;]+!hasHighRiskRedirectTrace/);
     assert.match(source, /uaCloaking: hasUaCloakingRisk/);
     assert.match(source, /userAgentCloaking/);
     assert.match(source, /裝置導向差異/);
@@ -3845,6 +3847,26 @@ test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {
     assert.equal(matchesDomainList('link.t.co', riskConfig.urlShorteners), true);
     assert.equal(matchesDomainList('not.co', riskConfig.urlShorteners), false);
     assert.equal(matchesDomainList('static.com', riskConfig.urlShorteners), false);
+});
+
+test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const indexSource = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8');
+
+    assert.match(appSource, /const resolvePrimaryScanTarget = async/);
+    assert.match(appSource, /preResolvedTrace: traceData/);
+    assert.match(appSource, /targetDomain: destinationDomain/);
+    assert.match(appSource, /primaryUrl: fullUrl/);
+    assert.match(appSource, /const runRiskAndBrandScan = async/);
+    assert.match(appSource, /fetchBrandAnalysis\(primaryUrl\)/);
+    assert.match(appSource, /const hasUnresolvedPublicShortener =/);
+    assert.match(appSource, /result\.unresolvedPublicShortener && result\.inputDomain/);
+    assert.match(appSource, /hasUnresolvedPublicShortener\s*\? Promise\.resolve\(unresolvedShortenerSiteStatus\)/);
+    assert.match(appSource, /riskScore = Math\.max\(riskScore, 40\)/);
+    assert.match(appSource, /風險評分以最終目的地為主/);
+    assert.match(appSource, /最終目的地網域/);
+    assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
+    assert.match(indexSource, /app\.js\?v=20260822-short-url-destination/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {

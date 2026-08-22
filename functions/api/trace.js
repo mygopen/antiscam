@@ -1,5 +1,6 @@
 const MAX_REDIRECTS = 6;
 const PROFILE_TIMEOUT = 9000;
+const MAX_HTML_LENGTH = 256 * 1024;
 
 const USER_AGENT_PROFILES = [
   {
@@ -42,6 +43,7 @@ function normalizeTargetUrl(value) {
   try {
     const url = new URL(withScheme);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!isSafeOutboundUrl(url)) return null;
     return url.href;
   } catch (err) {
     return null;
@@ -54,6 +56,58 @@ function getHostname(url) {
   } catch (err) {
     return '';
   }
+}
+
+function parseIpv4(hostname) {
+  const parts = String(hostname || '').split('.');
+  if (parts.length !== 4 || parts.some(part => !/^\d{1,3}$/.test(part))) return null;
+  const octets = parts.map(Number);
+  if (octets.some(value => value < 0 || value > 255)) return null;
+  return octets;
+}
+
+function isBlockedIpv4(octets) {
+  if (!octets) return false;
+  const [a, b] = octets;
+  return a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224;
+}
+
+function isBlockedHostname(hostname) {
+  const normalized = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (!normalized) return true;
+  if (normalized === 'localhost' || normalized.endsWith('.localhost') ||
+      normalized.endsWith('.local') || normalized.endsWith('.internal') ||
+      normalized.endsWith('.home.arpa')) return true;
+
+  const ipv4 = parseIpv4(normalized);
+  if (ipv4) return isBlockedIpv4(ipv4);
+
+  if (normalized.includes(':')) {
+    const compact = normalized.replace(/^0+/, '').toLowerCase();
+    if (normalized === '::' || normalized === '::1' ||
+        /^f[cd]/.test(compact) || /^fe[89ab]/.test(compact)) return true;
+
+    const mappedIpv4 = normalized.match(/(?:^|:)ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+    if (mappedIpv4 && isBlockedIpv4(parseIpv4(mappedIpv4[1]))) return true;
+  }
+
+  return false;
+}
+
+function isSafeOutboundUrl(url) {
+  return !!url &&
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    !url.username &&
+    !url.password &&
+    !isBlockedHostname(url.hostname);
 }
 
 function getComparableRoot(hostname) {
@@ -79,7 +133,7 @@ function isSameSiteUrl(a, b) {
 }
 
 function resolveNextUrl(rawValue, currentUrl) {
-  const raw = String(rawValue || '').replace(/&amp;/g, '&').trim();
+  const raw = decodeHtmlAttribute(rawValue).trim();
   if (!raw) return { ok: false, reason: 'empty_redirect', raw };
 
   try {
@@ -87,17 +141,82 @@ function resolveNextUrl(rawValue, currentUrl) {
     if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
       return { ok: false, reason: 'non_http_redirect', raw, href: nextUrl.href };
     }
+    if (nextUrl.username || nextUrl.password) {
+      return { ok: false, reason: 'credentialed_redirect', raw, href: nextUrl.href };
+    }
+    if (isBlockedHostname(nextUrl.hostname)) {
+      return { ok: false, reason: 'blocked_private_target', raw, href: nextUrl.href };
+    }
     return { ok: true, href: nextUrl.href };
   } catch (err) {
     return { ok: false, reason: 'invalid_redirect_url', raw };
   }
 }
 
-function extractClientRedirect(html) {
+function decodeHtmlAttribute(value) {
+  const decodeCodePoint = (raw, radix) => {
+    const codePoint = parseInt(raw, radix);
+    return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+      ? String.fromCodePoint(codePoint)
+      : '';
+  };
+
+  return String(value || '')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(?:39|x27);/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => decodeCodePoint(code, 10))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => decodeCodePoint(code, 16));
+}
+
+function getTagAttribute(tag, name) {
+  const escapedName = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = "(?:^|\\s)" + escapedName + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))";
+  const match = String(tag || '').match(new RegExp(pattern, 'i'));
+  return match ? decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? '') : '';
+}
+
+function extractKnownProviderRedirect(html, currentUrl) {
+  const hostname = getHostname(currentUrl);
+  if (hostname !== 'reurl.cc' && !hostname.endsWith('.reurl.cc')) return null;
+
+  const inputTags = String(html || '').match(/<input\b[^>]*>/gi) || [];
+  for (const tag of inputTags) {
+    const id = getTagAttribute(tag, 'id').toLowerCase();
+    const name = getTagAttribute(tag, 'name').toLowerCase();
+    const type = getTagAttribute(tag, 'type').toLowerCase();
+    if ((id === 'target' || name === 'target') && (!type || type === 'hidden')) {
+      const value = getTagAttribute(tag, 'value');
+      if (value) return value;
+    }
+  }
+
+  return null;
+}
+
+function isClientRedirectShell(html) {
+  const visibleText = decodeHtmlAttribute(String(html || '')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(?:script|style|noscript)\b[\s\S]*?<\/(?:script|style|noscript)>/gi, ' ')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return visibleText.length <= 300;
+}
+
+function extractClientRedirect(html, currentUrl) {
   const text = String(html || '');
   const metaMatch = text.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["']?\s*\d+\s*;\s*url=([^"'>\s]+)/i) ||
     text.match(/content=["']?\s*\d+\s*;\s*url=([^"'>\s]+)["']?[^>]+http-equiv=["']?refresh/i);
   if (metaMatch) return metaMatch[1];
+
+  const providerRedirect = extractKnownProviderRedirect(text, currentUrl);
+  if (providerRedirect) return providerRedirect;
+
+  // location.href inside a search button or event handler is not an automatic redirect.
+  if (!isClientRedirectShell(text)) return null;
 
   const jsAssignMatch = text.match(/(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i);
   if (jsAssignMatch) return jsAssignMatch[1];
@@ -106,6 +225,18 @@ function extractClientRedirect(html) {
   if (jsCallMatch) return jsCallMatch[1];
 
   return null;
+}
+
+function isDangerousRedirectReason(reason) {
+  return ['non_http_redirect', 'credentialed_redirect', 'blocked_private_target'].includes(reason);
+}
+
+function describeInvalidRedirect(reason, value, clientSide = false) {
+  const prefix = clientSide ? '前端轉址' : '轉址';
+  if (reason === 'non_http_redirect') return `偵測到${prefix}使用非 HTTP 協定 (${value})，常見於誘導開啟 App、外部錢包或規避掃描。`;
+  if (reason === 'credentialed_redirect') return `偵測到${prefix}網址內嵌帳密 (${value})，已拒絕連線。`;
+  if (reason === 'blocked_private_target') return `偵測到${prefix}指向本機或私有網路 (${value})，已拒絕連線。`;
+  return `偵測到無法解析的${prefix}目標 (${value})`;
 }
 
 async function traceWithProfile(targetUrl, profile) {
@@ -153,10 +284,8 @@ async function traceWithProfile(targetUrl, profile) {
         const resolved = resolveNextUrl(location, currentUrl);
         if (!resolved.ok) {
           status = resolved.reason;
-          isHighRisk = resolved.reason === 'non_http_redirect';
-          riskReason = resolved.reason === 'non_http_redirect'
-            ? `偵測到非 HTTP 轉址 (${resolved.href || resolved.raw})，常見於誘導開啟 App、外部錢包或規避掃描。`
-            : `偵測到無法解析的轉址目標 (${resolved.raw})`;
+          isHighRisk = isDangerousRedirectReason(resolved.reason);
+          riskReason = describeInvalidRedirect(resolved.reason, resolved.href || resolved.raw, false);
           redirectChain.push({
             url: resolved.href || resolved.raw || location,
             status: 'invalid-redirect',
@@ -181,22 +310,20 @@ async function traceWithProfile(targetUrl, profile) {
         if (contentType.includes('text/html')) {
           let text = '';
           try {
-            text = await response.text();
+            text = (await response.text()).slice(0, MAX_HTML_LENGTH);
           } catch (err) {
             status = 'body_unavailable';
             riskReason = '已取得網頁回應，但無法讀取內容。';
             break;
           }
 
-          const nextUrlStr = extractClientRedirect(text);
+          const nextUrlStr = extractClientRedirect(text, currentUrl);
           if (nextUrlStr) {
             const resolved = resolveNextUrl(nextUrlStr, currentUrl);
             if (!resolved.ok) {
               status = resolved.reason;
-              isHighRisk = resolved.reason === 'non_http_redirect';
-              riskReason = resolved.reason === 'non_http_redirect'
-                ? `偵測到前端非 HTTP 轉址 (${resolved.href || resolved.raw})，常見於誘導開啟 App 或規避掃描。`
-                : `偵測到前端轉址但無法解析 (${resolved.raw})`;
+              isHighRisk = isDangerousRedirectReason(resolved.reason);
+              riskReason = describeInvalidRedirect(resolved.reason, resolved.href || resolved.raw, true);
               redirectChain.push({
                 url: resolved.href || resolved.raw || nextUrlStr,
                 status: 'invalid-client-redirect',
@@ -240,10 +367,12 @@ async function traceWithProfile(targetUrl, profile) {
     }
 
     return {
+      inputUrl: targetUrl,
       profile: profile.key,
       profileLabel: profile.label,
       finalUrl: currentUrl,
       redirectCount,
+      resolvedDestination: redirectCount > 0,
       chain: redirectChain,
       isHighRisk,
       riskReason,
@@ -270,15 +399,16 @@ export async function onRequest(context) {
     const primaryTrace = mobileTrace || desktopTrace;
     const uaDifference = !!(mobileTrace?.finalUrl && desktopTrace?.finalUrl) &&
       !isSameSiteUrl(mobileTrace.finalUrl, desktopTrace.finalUrl);
-    const mobileOnlyRisk = uaDifference && !isSameSiteUrl(targetUrl, mobileTrace.finalUrl);
-    const isHighRisk = !!(primaryTrace?.isHighRisk || desktopTrace?.isHighRisk || mobileOnlyRisk);
+    const isHighRisk = !!(primaryTrace?.isHighRisk || desktopTrace?.isHighRisk || uaDifference);
     const riskReason = primaryTrace?.riskReason ||
       desktopTrace?.riskReason ||
-      (mobileOnlyRisk ? `偵測到 Mobile/Desktop 導向不同主網域：Mobile=${getHostname(mobileTrace.finalUrl)}，Desktop=${getHostname(desktopTrace.finalUrl)}` : '');
+      (uaDifference ? `偵測到 Mobile/Desktop 導向不同主網域：Mobile=${getHostname(mobileTrace.finalUrl)}，Desktop=${getHostname(desktopTrace.finalUrl)}` : '');
 
     return jsonResponse({
+      inputUrl: targetUrl,
       finalUrl: primaryTrace?.finalUrl || targetUrl,
       redirectCount: primaryTrace?.redirectCount || 0,
+      resolvedDestination: !!primaryTrace?.resolvedDestination,
       chain: primaryTrace?.chain || [],
       isHighRisk,
       riskReason,
@@ -288,7 +418,8 @@ export async function onRequest(context) {
       variants: {
         mobile: mobileTrace,
         desktop: desktopTrace
-      }
+      },
+      observedAt: new Date().toISOString()
     });
   } catch (err) {
     return jsonResponse({
