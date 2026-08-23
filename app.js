@@ -867,7 +867,11 @@ const { useState, useEffect, useRef } = React;
         };
 
         const isBenignCommerceBrandReference = (brandName, keyword, contexts) => {
-            if (brandName === 'Apple' && contexts.length > 0 && contexts.every(context => /(?:-apple-system|apple-system|font-family)/i.test(context))) {
+            const appleMetadataPattern = /(?:-apple-system|apple-system|font-family|apple-touch-icon|apple-touch-startup-image)/i;
+            const appleImpersonationPattern = /(apple\s*id|帳戶|賬戶|驗證|認證|異常|停權|凍結|密碼|otp|信用卡|卡號|verify|verification|account|password)/i;
+            if (brandName === 'Apple' && contexts.length > 0 && contexts.every(context =>
+                appleMetadataPattern.test(context) && !appleImpersonationPattern.test(context)
+            )) {
                 return true;
             }
 
@@ -2037,6 +2041,7 @@ const { useState, useEffect, useRef } = React;
             }
             try {
                 const params = new URLSearchParams({ domain });
+                params.set('trustedMapVersion', String(RISK_CONFIG.companyVerificationVersion || 'current'));
                 const taxIds = [...new Set(businessSignals.taxIds || [])].slice(0, 3);
                 const names = [...new Set(businessSignals.names || [])].slice(0, 4);
                 if (taxIds.length > 0) params.set('taxIds', taxIds.join(','));

@@ -166,6 +166,54 @@ test('trusted company domain mappings show small business registration data with
   assert.equal(result.evidence.every(item => item.source && item.sourceUrl), true);
 });
 
+test("trusted company domain mapping verifies What'Sub against Equal2 registration data", async () => {
+  const { verifyCompanyWebsite, getTrustedCompanyDomainMapping } = await endpointModulePromise;
+  const fetcher = async (input) => {
+    const url = String(input);
+    if (url.includes('t187ap03_L') || url.includes('t187ap03_P') || url.includes('mopsfin_t187ap03_O') || url.includes('mopsfin_t187ap03_R')) {
+      return jsonResponse([]);
+    }
+    if (url.includes('5F64D864') && url.includes('90888561')) {
+      return jsonResponse([{
+        Business_Accounting_NO: '90888561',
+        Company_Status_Desc: '核准設立',
+        Company_Name: '等於貳有限公司',
+        Capital_Stock_Amount: 1000000,
+        Responsible_Name: '潘令傑',
+        Company_Location: '臺北市士林區大南路347號3樓',
+        Register_Organization_Desc: '臺北市政府',
+        Company_Setup_Date: '1100324'
+      }]);
+    }
+    return jsonResponse([]);
+  };
+
+  const mapping = getTrustedCompanyDomainMapping('whatsub.equal2.app');
+  assert.equal(mapping.taxIds[0], '90888561');
+  assert.equal(mapping.names[0], '等於貳有限公司');
+  assert.equal(getTrustedCompanyDomainMapping('whatsub.equal2.app.evil.shop'), null);
+  assert.equal(getTrustedCompanyDomainMapping('fake-equal2.app'), null);
+
+  const result = await verifyCompanyWebsite({
+    domain: 'whatsub.equal2.app',
+    fetcher
+  });
+
+  assert.equal(result.status, 'verified-domain');
+  assert.equal(result.verified, true);
+  assert.equal(result.domainMatched, true);
+  assert.equal(result.registrationMatched, true);
+  assert.equal(result.nameMatched, true);
+  assert.equal(result.trustedDomainMappingMatched, true);
+  assert.equal(result.companies[0].taxId, '90888561');
+  assert.equal(result.companies[0].name, '等於貳有限公司');
+  assert.equal(result.companies[0].status, '核准設立');
+  assert.equal(result.companies[0].domainMatchType, 'trusted-company-domain-mapping');
+  assert.match(result.disclosure, /可信網域對應統編/);
+  assert.ok(result.evidence.some(item => item.type === 'trusted-company-domain-mapping' && item.directDomainMatch));
+  assert.ok(result.evidence.some(item => item.type === 'business-registration' && !item.directDomainMatch));
+});
+
 test('government second-level domains do not cross-match unrelated public company disclosures', async () => {
   const { verifyCompanyWebsite } = await endpointModulePromise;
   const fetcher = async (input) => {

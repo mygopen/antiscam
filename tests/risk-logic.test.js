@@ -1335,7 +1335,11 @@ function getPageBrandKeywordContexts(haystack, keyword) {
 }
 
 function isBenignCommerceBrandReference(brandName, keyword, contexts) {
-    if (brandName === 'Apple' && contexts.length > 0 && contexts.every(context => /(?:-apple-system|apple-system|font-family)/i.test(context))) {
+    const appleMetadataPattern = /(?:-apple-system|apple-system|font-family|apple-touch-icon|apple-touch-startup-image)/i;
+    const appleImpersonationPattern = /(apple\s*id|帳戶|賬戶|驗證|認證|異常|停權|凍結|密碼|otp|信用卡|卡號|verify|verification|account|password)/i;
+    if (brandName === 'Apple' && contexts.length > 0 && contexts.every(context =>
+        appleMetadataPattern.test(context) && !appleImpersonationPattern.test(context)
+    )) {
         return true;
     }
 
@@ -2642,6 +2646,21 @@ test('CSS 的 -apple-system 字型不應被誤認為 Apple 品牌仿冒', () => 
     });
 
     assert.equal(cssOnly.matched, false);
+    assert.equal(realImpersonation.matched, true);
+    assert.equal(realImpersonation.brandName, 'Apple');
+});
+
+test('apple-touch-icon 網站圖示不應被誤認為 Apple 品牌仿冒', () => {
+    const iconOnly = analyzePageBrandSignals({
+        hostname: 'whatsub.equal2.app',
+        text: '<link rel="apple-touch-icon" href="/apple-touch-icon-180.png"><h1>What\'Sub 自動上字幕工具</h1>'
+    });
+    const realImpersonation = analyzePageBrandSignals({
+        hostname: 'account-check.example',
+        text: '<link rel="apple-touch-icon" href="/apple-touch-icon.png"><h1>Apple ID 帳戶異常，請立即驗證</h1>'
+    });
+
+    assert.equal(iconOnly.matched, false);
     assert.equal(realImpersonation.matched, true);
     assert.equal(realImpersonation.brandName, 'Apple');
 });
@@ -3976,7 +3995,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260823-unverified-commerce-risk-v6/);
+    assert.match(indexSource, /app\.js\?v=20260823-whatsub-trust-v2/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -6676,6 +6695,62 @@ test('一般 MX 或零星電商文字不再啟用可信弱訊號降分上限', (
     assert.doesNotMatch(weakContextBlock, /pageTrustSignals\.matched/);
     assert.match(appSource, /const hasUnverifiedCommerceRisk =/);
     assert.match(appSource, /if \(hasUnverifiedCommerceRisk\) riskScore = Math\.max\(riskScore, 85\)/);
+});
+
+test("What'Sub 官方網站不應因新 .app 網域、數字品牌名或 Apple 圖示誤判為高風險", () => {
+    const rawUrl = 'https://whatsub.equal2.app/?utm_source=youtube&utm_campaign=launch';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const html = `
+        <html lang="zh-TW">
+            <head>
+                <title>What'Sub｜AI 自動上字幕工具</title>
+                <meta name="description" content="壹加壹推出的影片自動上字幕工具">
+                <link rel="apple-touch-icon" href="/apple-touch-icon-180.png">
+            </head>
+            <body>
+                <h1>What'Sub 自動上字幕工具</h1>
+                <p>本服務由等於貳股份有限公司提供。</p>
+                <p>統一編號 90888561</p>
+                <a href="/studio/">打開我的專案</a>
+                <button>服務條款</button><button>隱私權政策</button><button>聯絡我們</button>
+                <footer>最後更新 2026 年 8 月</footer>
+            </body>
+        </html>`;
+    const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
+    const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: html });
+    const override = applyTrustedAllowlistRiskOverride({
+        hostname: parsed.hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: override.riskScore,
+        isTrustedAllowlist: override.hasTrustedAllowlistOverride,
+        checks: {
+            domainAnalysis: { status: 'safe', details: '受信賴台灣民營服務官方網域' },
+            pageBrand: { status: pageBrandSignals.matched ? 'danger' : 'safe' },
+            age: { status: isWhitelisted ? 'safe' : 'warning' }
+        }
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('equal2.app'));
+    assert.equal(riskConfig.companyVerificationVersion, '2026-08-23-1');
+    assert.equal(sanitized.href, 'https://whatsub.equal2.app/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_source'].sort());
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(override.hasTrustedAllowlistOverride, true);
+    assert.equal(override.blocklistListedForRisk, false);
+    assert.equal(override.googleFlaggedForRisk, false);
+    assert.equal(scanData.riskScore, 0);
+    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(isVerifiedSafeRootDomain('equal2.app.evil.shop', []), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-equal2.app', []), false);
+    assert.match(fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8'), /params\.set\('trustedMapVersion', String\(RISK_CONFIG\.companyVerificationVersion/);
 });
 
 test('檢舉通報功能已從首頁、截圖與聊天小幫手完整移除', () => {

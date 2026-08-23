@@ -1,4 +1,5 @@
 window.RISK_CONFIG = {
+    companyVerificationVersion: '2026-08-23-1',
     socialMediaDomains: [
         'facebook.com', 'fb.com', 'fb.me', 'instagram.com', 'ig.me',
         'twitter.com', 'x.com', 'tiktok.com', 'youtube.com', 'youtu.be', 't.me',
@@ -38,7 +39,8 @@ window.RISK_CONFIG = {
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
         'noncodingai.com', 'fuboncharity.org.tw', 'utaggo.com.tw',
-        'zk-school.com', 'gowedding.tw', 'jack-hsinchu.com'
+        'zk-school.com', 'gowedding.tw', 'jack-hsinchu.com',
+        'equal2.app'
     ],
     trustedFinancialServiceDomains: [
         'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw',
