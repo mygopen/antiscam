@@ -300,6 +300,10 @@ const { useState, useEffect, useRef } = React;
             return getRiskList('confirmedScamDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
+        const isManualHighRiskDomain = (hostname) => {
+            return getRiskList('manualHighRiskDomains').some(domain => isSameRootDomain(hostname, domain));
+        };
+
         const isVerifiedSafeRootDomain = (hostname, whitelist = []) => {
             return isOfficialTaiwanGovDomain(hostname) ||
                 isTrustedGlobalDomain(hostname) ||
@@ -456,7 +460,7 @@ const { useState, useEffect, useRef } = React;
             businessIdentitySignals: { score: 0, matched: false, names: [], taxIds: [], hasTaxId: false, reasons: [] },
             lineOfficialSignals: { matched: false, urls: [], reason: '' },
             ecommerceTrustSignals: { score: 0, matched: false, reasons: [], categories: [] },
-            shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasAliziOrderSystem: false, hasMerchantInfo: false },
+            shoppingScamSignals: { score: 0, matched: false, reasonCount: 0, reasons: [], keywordCount: 0, formFieldCount: 0, imageCount: 0, linkCount: 0, hasOrderForm: false, hasAliziOrderSystem: false, hasMerchantInfo: false, hasCommerceOffer: false, hasTemplateDemoMarker: false, hasOnePageStructure: false, stockImageCount: 0, catalogPriceCount: 0, unverifiedCommerceReasons: [] },
             jobTaskScamSignals: { score: 0, matched: false, reasons: [], jobMatches: [], moneyMatches: [], taskMatches: [], identityMatches: [], hasJobFacade: false, hasMoneyFlow: false, hasTaskMechanics: false, hasIdentityCollection: false },
             regulatedTobaccoSalesSignals: { score: 0, matched: false, reasons: [], productMatches: [], salesMatches: [], hasPriceSignal: false, hasLinePurchaseSignal: false }
         });
@@ -863,6 +867,10 @@ const { useState, useEffect, useRef } = React;
         };
 
         const isBenignCommerceBrandReference = (brandName, keyword, contexts) => {
+            if (brandName === 'Apple' && contexts.length > 0 && contexts.every(context => /(?:-apple-system|apple-system|font-family)/i.test(context))) {
+                return true;
+            }
+
             const isConvenienceStoreBrand = ['統一超商', '全家便利商店'].includes(brandName);
             if (!isConvenienceStoreBrand || contexts.length === 0) return false;
 
@@ -883,7 +891,8 @@ const { useState, useEffect, useRef } = React;
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
 
-            const textParts = [rawText || '', doc?.title || ''];
+            const rawBrandText = String(rawText || '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ');
+            const textParts = [rawBrandText, doc?.title || ''];
             if (doc) {
                 doc.querySelectorAll('meta[name="description"], meta[property="og:title"], meta[property="og:site_name"], img[alt], [aria-label], link[rel*="icon"]').forEach(el => {
                     ['content', 'alt', 'aria-label', 'href'].forEach(attr => textParts.push(el.getAttribute(attr) || ''));
@@ -1168,9 +1177,9 @@ const { useState, useEffect, useRef } = React;
 
             const haystack = decodeSignalText(textParts.join('\n'));
             const keywordGroups = {
-                shopping: ['立即購買', '馬上訂購', '立即訂購', '立即搶購', '加入購物車', '結帳', '下單', '訂單', '購買', '特價', '優惠價', '原價', '折扣', '限時', '限量', '最後', '免運', '貨到付款', '宅配', '超商取貨', '七天鑑賞', '全台配送'],
-                fields: ['姓名', '收件人', '手機', '電話', '地址', '宅配地址', '配送地址', '規格', '數量', '備註', '付款方式'],
-                socialProof: ['顧客好評', '客戶評價', '五星', '已售出', '熱銷', '回購', '見證', '買家', '評價'],
+                shopping: ['立即購買', '馬上訂購', '立即訂購', '立即搶購', '加入購物車', '結帳', '下單', '訂單', '購買', '特價', '優惠價', '原價', '折扣', '限時', '限量', '最後', '免運', '貨到付款', '宅配', '超商取貨', '七天鑑賞', '全台配送', 'add to cart', 'checkout', 'shop now', 'buy now', 'place order', 'order placed', 'shopping cart', 'my cart', 'browse collection', 'free shipping'],
+                fields: ['姓名', '收件人', '手機', '電話', '地址', '宅配地址', '配送地址', '規格', '數量', '備註', '付款方式', 'full name', 'phone number', 'shipping address', 'billing address', 'payment method', 'quantity'],
+                socialProof: ['顧客好評', '客戶評價', '五星', '已售出', '熱銷', '回購', '見證', '買家', '評價', 'customer reviews', 'best seller', 'bestseller', 'five stars'],
                 tracking: ['ldtag_cl', 'lt_r', 'fbclid', 'gclid', 'utm_', 'click_id', 'campaign', 'ad_id'],
                 lineContact: ['加入line', '加line', 'line客服', '官方line', 'line id', 'lineid', 'line帳號', 'line好友', '私訊客服', '聯繫客服下單', '截圖傳給客服', '客服確認訂單', 'lin.ee', 'line.me/r/ti/p', 'line://']
             };
@@ -1189,14 +1198,26 @@ const { useState, useEffect, useRef } = React;
             const imageCount = doc ? doc.querySelectorAll('img').length : 0;
             const linkCount = doc ? doc.querySelectorAll('a[href]').length : 0;
             const hasOrderForm = formCount > 0 && (formFieldCount >= 2 || keywordGroups.fields.some(keyword => haystack.includes(keyword.toLowerCase())));
+            const stockImageCount = (String(rawText || '').match(/(?:images\.pexels\.com|picsum\.photos|images\.unsplash\.com)/gi) || []).length;
+            const catalogPriceCount = (haystack.match(/(?:\bprice\s*[:=]\s*["']?\d{1,6}(?:\.\d{1,2})?|\b(?:usd|ntd)\s*\$?\s*\d{1,6}(?:\.\d{1,2})?|[$€£]\s*\d{1,6}(?:\.\d{1,2})?)/gi) || []).length;
+            const shoppingKeywordMatches = keywordGroups.shopping.filter(keyword => haystack.includes(keyword.toLowerCase()));
+            const hasCartActionKeyword = /(加入購物車|立即購買|馬上訂購|add to cart|checkout|buy now|place order|shopping cart)/i.test(haystack);
+            const hasCommerceOffer = shoppingKeywordMatches.length >= 2 && (catalogPriceCount >= 2 || hasOrderForm || hasCartActionKeyword);
             const merchantInfoKeywords = ['統一編號', '公司名稱', '有限公司', '股份有限公司', '客服電話', '退換貨', '退貨政策', '隱私權政策', '服務條款', '聯絡地址'];
-            const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+            const merchantIdentityKeywords = ['company name', 'business address', 'registered address', 'customer service', 'contact us'];
+            const merchantPolicyKeywords = ['privacy policy', 'terms of service', 'refund policy', 'return policy', 'shipping policy'];
+            const merchantIdentityMatches = merchantIdentityKeywords.filter(keyword => haystack.includes(keyword));
+            const merchantPolicyMatches = merchantPolicyKeywords.filter(keyword => haystack.includes(keyword));
+            const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) ||
+                merchantIdentityMatches.length >= 2 ||
+                (merchantIdentityMatches.length >= 1 && merchantPolicyMatches.length >= 2);
             const imageHeavy = imageCount >= 6 && linkCount <= 3;
             const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageHeavy || hasOrderForm);
             const highPressureSalesKeywords = ['貨到付款', '免運', '限量', '立即搶購', '馬上訂購'];
-            const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時/i.test(haystack);
+            const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時|limited time.{0,24}(buy|shop|offer|deal)|(?:buy|shop|offer|deal).{0,24}limited time/i.test(haystack);
             const hasCodSalesPitch = highPressureSalesKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) || hasLimitedPurchasePitch;
             const hasAliziOrderSystem = /(?:\/public\/alizi\/|alizi-order|alizibooking|www\.alizi\.net)/i.test(haystack);
+            const hasTemplateDemoMarker = /(?:demo mode|demo checkout|sample store|test order|order placed.{0,60}demo)/i.test(haystack);
             const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
             const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
             const hasLineContactSignal = lineContactMatches.length > 0;
@@ -1234,6 +1255,10 @@ const { useState, useEffect, useRef } = React;
             const effectiveReasons = hasCourseProviderTrust
                 ? reasons.filter(reason => !courseSuppressedReasons.has(reason))
                 : reasons;
+            const unverifiedCommerceReasons = [];
+            if (hasTemplateDemoMarker) unverifiedCommerceReasons.push('英文模板或示範結帳流程');
+            if (stockImageCount >= 4) unverifiedCommerceReasons.push('大量商品圖片使用通用圖庫');
+            if (hasCommerceOffer && !hasMerchantInfo) unverifiedCommerceReasons.push('提供商品與結帳功能，但缺少明確商家及政策資訊');
 
             return {
                 score: Math.min(100, effectiveReasons.length * 18 + Math.min(30, matchedKeywords.length * 3)),
@@ -1247,6 +1272,12 @@ const { useState, useEffect, useRef } = React;
                 hasOrderForm,
                 hasAliziOrderSystem,
                 hasMerchantInfo,
+                hasCommerceOffer,
+                hasTemplateDemoMarker,
+                hasOnePageStructure,
+                stockImageCount,
+                catalogPriceCount,
+                unverifiedCommerceReasons,
                 hasCourseProviderTrust,
                 hasLineContactSignal,
                 hasLineOrderContext,
@@ -1474,14 +1505,44 @@ const { useState, useEffect, useRef } = React;
             const detectCrawlerBlock = (text, httpCode = 0) => {
                 const haystack = String(text || '').toLowerCase();
                 if ([403, 429].includes(Number(httpCode))) return true;
-                return /(access denied|request blocked|forbidden|verify you are human|checking your browser|cf-chl|cloudflare|akamai|incapsula|imperva|datadome|bot detection|anti[- ]?bot)/i.test(haystack);
+                const directBlockMarkers = [
+                    'access denied',
+                    'request blocked',
+                    'request has been blocked',
+                    'verify you are human',
+                    'checking your browser',
+                    'cf-chl-',
+                    '/cdn-cgi/challenge-platform/',
+                    'challenges.cloudflare.com/turnstile',
+                    'bot detection',
+                    'anti-bot'
+                ];
+                if (directBlockMarkers.some(marker => haystack.includes(marker))) return true;
+
+                const hasWafVendor = /(cloudflare|akamai|incapsula|imperva|datadome)/i.test(haystack);
+                const hasChallengeContext = /(captcha|security challenge|security check|challenge required|automated traffic)/i.test(haystack);
+                return hasWafVendor && hasChallengeContext;
             };
             const getCrawlerCandidates = () => {
                 return buildCrawlerCandidateUrls([sanitizedUrl, fullUrl, rawUrl], {
                     preferHttpFallback: options.inputHadExplicitScheme === false
                 });
             };
-            const isUsableCrawlerResult = (result) => result?.status === 'ok';
+            const hasActionableStaticPageSignals = (result) => {
+                const signals = result?.pageSignals || {};
+                const shopping = signals.shoppingScamSignals || {};
+                const downloads = signals.downloadSignals || {};
+                return !!shopping.hasCommerceOffer ||
+                    !!shopping.hasTemplateDemoMarker ||
+                    !!signals.regulatedTobaccoSalesSignals?.matched ||
+                    !!signals.jobTaskScamSignals?.matched ||
+                    !!signals.pageBrandSignals?.matched ||
+                    Number(downloads.apkUrlCount || 0) > 0 ||
+                    Number(downloads.installKeywordCount || 0) > 0 ||
+                    Number(signals.sensitiveFields?.highRiskCount || 0) > 0;
+            };
+            const isUsableCrawlerResult = (result) => result?.status === 'ok' ||
+                (result?.status === 'blank' && hasActionableStaticPageSignals(result));
             const rememberBestCrawlerResult = (best, result) => {
                 if (!result) return best;
                 if (!best) return result;
@@ -1586,7 +1647,9 @@ const { useState, useEffect, useRef } = React;
                         invisibleTags.forEach(el => el.remove());
                         const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, '').trim();
                         if (visibleText.length < 800) isBlank = true;
-                    } catch (e) { }
+                    } catch (e) {
+                        console.warn('Page content analysis failed', e);
+                    }
                 }
 
                 if (isBlank) {
@@ -2137,6 +2200,7 @@ const { useState, useEffect, useRef } = React;
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
             const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isTrustedFinancialServiceRootDomain || isTrustedGovernmentServiceRootDomain || isTrustedPublicInterestRootDomain || isConfiguredAllowlistDomain;
             const isConfirmedScam = !isWhitelisted && isConfirmedScamDomain(domain);
+            const isManualHighRisk = !isWhitelisted && isManualHighRiskDomain(domain);
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -2232,7 +2296,7 @@ const { useState, useEffect, useRef } = React;
                                 sanitizedUrl: sanitizedScanUrl,
                                 removedVolatileParams: removedVolatileParamsForScan
                             })),
-                    5000,
+                    9000,
                     defaultSiteStatus
                 ),
                 withTimeout(checkCommunityBlocklists(domain), 4000, false),
@@ -2392,8 +2456,9 @@ const { useState, useEffect, useRef } = React;
             const entropy = calculateEntropy(subdomainPart);
             const rootEntropy = calculateEntropy(rootLabel);
             
-            // 1. 長亂碼檢查 (既有邏輯：高數學亂度 或 12碼以上的英數組合)
-            const isLongGibberish = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
+            // 可讀的長英文品牌名不是亂碼；長度規則需同時帶有數字或高亂度。
+            const isLongGibberish = entropy > 3.6 ||
+                (/^[a-z0-9]{12,30}$/.test(subdomainPart) && /\d/.test(subdomainPart));
             // 👇 新增：極端亂碼檢查 (15碼以上的隨機英數，極高機率為釣魚專屬追蹤碼)
             const isExtremeGibberish = /^[a-z0-9]{15,50}$/.test(subdomainPart);
             // 👇 2. 新增：短亂碼 (DGA 演算法) 暴力檢查法
@@ -2731,6 +2796,18 @@ const { useState, useEffect, useRef } = React;
                     externalFormActionCount > 0 ||
                     suspiciousSubdomain.matched
                 );
+            const hasUnverifiedCommerceRisk = !isWhitelisted &&
+                !hasStrongEcommerceValidation &&
+                !!shoppingScamSignals.hasCommerceOffer &&
+                !shoppingScamSignals.hasMerchantInfo &&
+                !hasVerifiedBusinessEntity &&
+                !isHighTraffic &&
+                (isNewDomainUnderSixMonths || hasNewOneYearRegistrationRisk) &&
+                (
+                    !!shoppingScamSignals.hasTemplateDemoMarker ||
+                    Number(shoppingScamSignals.stockImageCount || 0) >= 4 ||
+                    !!shoppingScamSignals.hasOnePageStructure
+                );
             const hasShoppingLineContactRisk = !isWhitelisted &&
                 !hasStrongEcommerceValidation &&
                 !!shoppingScamSignals.hasLineContactSignal &&
@@ -2840,6 +2917,7 @@ const { useState, useEffect, useRef } = React;
 
             const hasConfirmedThreatSignal = blocklistListedForRisk ||
                 isConfirmedScam ||
+                isManualHighRisk ||
                 hasOfficialAlert ||
                 hasStrongCofactsRisk ||
                 isApkSite ||
@@ -2854,6 +2932,7 @@ const { useState, useEffect, useRef } = React;
                 hasUaCloakingRisk ||
                 isDownloadPhishingSignal ||
                 hasShoppingScamSignal ||
+                hasUnverifiedCommerceRisk ||
                 hasSuspiciousTldAdLandingRisk ||
                 hasFreeHostingSensitiveLinkRisk ||
                 hasCloudflarePagesDevRandomRisk ||
@@ -2910,6 +2989,8 @@ const { useState, useEffect, useRef } = React;
                 riskScore = 100;
             } else if (isConfirmedScam) {
                 riskScore = 100;
+            } else if (isManualHighRisk) {
+                riskScore = 90;
             } else if (hasOfficialAlertUrlMatch) {
                 riskScore = 100;
             } else if (isApkSite) {
@@ -3026,6 +3107,7 @@ const { useState, useEffect, useRef } = React;
                     if (hasRegulatedTobaccoSalesSignal) riskScore += 95;
                     if (hasJobTaskScamSignal) riskScore += 90;
                     if (hasShoppingScamSignal) riskScore += Math.min(85, 45 + shoppingScamSignals.reasonCount * 10);
+                    if (hasUnverifiedCommerceRisk) riskScore = Math.max(riskScore, 85);
                     if (hasShoppingLineContactRisk) riskScore += hasShoppingLandingUrlRisk ? 50 : 40;
                     if (highRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += Math.min(45, 20 + highRiskSensitiveFieldCount * 10);
                     else if (lowRiskSensitiveFieldCount > 0 && isLowTraffic) riskScore += 10;
@@ -3117,12 +3199,12 @@ const { useState, useEffect, useRef } = React;
                 hasRootDomainTrustBaseline ||
                 isTrustedTaiwanRegistrar ||
                 hasSmallBusinessTrustContext ||
-                trustValidationSignals.length > 0 ||
-                ecommerceTrustSignals.score > 0 ||
-                pageTrustSignals.matched;
+                hasTrustedValidation ||
+                hasStrongEcommerceValidation;
 
             const hasStrongRiskSignal = blocklistListedForRisk ||
                 isConfirmedScam ||
+                isManualHighRisk ||
                 hasOfficialAlert ||
                 hasStrongCofactsRisk ||
                 isApkSite ||
@@ -3156,6 +3238,7 @@ const { useState, useEffect, useRef } = React;
                 hasDisposableUnreadablePageRisk ||
                 hasShoppingLandingUrlRisk ||
                 hasShoppingScamSignal ||
+                hasUnverifiedCommerceRisk ||
                 hasRegulatedTobaccoSalesSignal ||
                 hasJobTaskScamSignal ||
                 hasShoppingLineContactRisk ||
@@ -3174,6 +3257,7 @@ const { useState, useEffect, useRef } = React;
             if (!isWhitelisted && !isSocialMedia) {
                 const hasDangerDetail = hasBrandSimilarity ||
                     isConfirmedScam ||
+                    isManualHighRisk ||
                     hasOfficialAlert ||
                     hasStrongCofactsRisk ||
                     hasEmailTrackingPhishingPattern ||
@@ -3201,6 +3285,7 @@ const { useState, useEffect, useRef } = React;
                     hasDisposableUnreadablePageRisk ||
                     hasShoppingLandingUrlRisk ||
                     hasShoppingScamSignal ||
+                    hasUnverifiedCommerceRisk ||
                     hasRegulatedTobaccoSalesSignal ||
                     hasJobTaskScamSignal ||
                     hasShoppingLineContactRisk ||
@@ -3240,6 +3325,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資。';
                 siteContentMsg = '危險：已確認為詐騙連結';
+            } else if (isManualHighRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `此網域已由人工審查列為高度交易與網站可信度風險；目前偵測到的新站、短期註冊、模板商城或商家資訊不足等證據，尚不等同已有獨立來源確認為詐騙。`;
+                siteContentMsg = '高度風險：人工審查列為交易與網站可信度高風險';
             } else if (hasOfficialAlert) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 官方警示資料命中：${officialAlertMatch.source} 已公告「${officialAlertMatch.title}」，${officialAlertMatch.warning}`;
@@ -3302,6 +3391,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑後綴廣告落地頁：${domain} 使用較常被濫用的網域後綴，原始網址含 ${rawAdLandingParamDetails.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且缺少可信白名單、商家實體或正規電商佐證。`;
                 siteContentMsg = '危險：可疑網域後綴搭配社群廣告落地頁';
+            } else if (hasUnverifiedCommerceRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `偵測到未驗證模板商城高風險組合：${shoppingScamSignals.unverifiedCommerceReasons.slice(0, 3).join('、')}；網域註冊未滿 6 個月，且缺少可核實的公司或商家實體資料。`;
+                siteContentMsg = '高度風險：新註冊模板商城缺少可驗證商家資訊';
             } else if (hasShoppingScamSignal) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到一頁式購物詐騙特徵：${shoppingScamSignals.reasons.slice(0, 3).join('、')}。`;
@@ -3441,10 +3534,12 @@ const { useState, useEffect, useRef } = React;
             }
 
             const hasConfirmedSiteContentThreat = hasOfficialAlert ||
+                isManualHighRisk ||
                 isApkSite ||
                 isDownloadPhishingSignal ||
                 hasPageBrandMismatch ||
                 hasShoppingScamSignal ||
+                hasUnverifiedCommerceRisk ||
                 hasShoppingLineContactRisk ||
                 hasJobTaskScamSignal ||
                 hasRegulatedTobaccoSalesSignal;
@@ -3465,7 +3560,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || hasStrongCofactsRisk || hasJobTaskScamSignal || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk || hasHighRiskRedirectTrace, riskFlags: { confirmedScamDomain: isConfirmedScam, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk || hasHighRiskRedirectTrace, riskFlags: { confirmedScamDomain: isConfirmedScam, manualHighRiskDomain: isManualHighRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3505,6 +3600,13 @@ const { useState, useEffect, useRef } = React;
                         status: isConfirmedScam ? 'danger' : 'safe',
                         label: '人工確認詐騙網域',
                         details: isConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'
+                    },
+                    manualHighRisk: {
+                        status: isManualHighRisk ? 'danger' : 'safe',
+                        label: '人工確認高風險網域',
+                        details: isManualHighRisk
+                            ? '人工審查已列為高度交易與網站可信度風險；此分類不等同已有獨立證據確認為詐騙'
+                            : '未命中人工確認高風險網域清單'
                     },
                     siteContent: { status: siteContentStatus, label: '網站內容狀態', details: siteContentMsg },
                     govAgency: isOfficialTaiwanGov && hasVerifiedGovernmentAgency ? {
@@ -3686,6 +3788,15 @@ const { useState, useEffect, useRef } = React;
                             : (jobTaskScamSignals.reasons.length > 0 ? jobTaskScamSignals.reasons.join('、') : '未偵測到求職網站搭配儲值、提領或任務金流的異常組合')
                     },
                     shoppingScam: { status: hasStrongEcommerceValidation ? 'info' : ((hasShoppingScamSignal || hasShoppingLineContactRisk) ? 'danger' : (shoppingScamSignals.matched || hasShoppingLandingUrlRisk ? 'warning' : 'safe')), label: '一頁式購物詐騙', details: hasStrongEcommerceValidation ? '偵測到購物頁特徵，但同時具備正規電商佐證，未單獨判為一頁式購物詐騙' : (shoppingScamSignals.matched ? `偵測到 ${shoppingScamSignals.reasonCount} 個購物詐騙頁特徵：${shoppingScamSignals.reasons.slice(0, 4).join('、')}` : (hasShoppingLandingUrlRisk ? '頁面內容未完整取得，無法確認購物頁結構；但網址本身已符合可疑購物落地頁特徵' : '未能從可讀 HTML 中確認一頁式購物結構')) },
+                    unverifiedCommerce: {
+                        status: hasUnverifiedCommerceRisk ? 'danger' : (shoppingScamSignals.hasCommerceOffer && !hasStrongEcommerceValidation ? 'warning' : 'safe'),
+                        label: '未驗證模板商城',
+                        details: hasUnverifiedCommerceRisk
+                            ? `${shoppingScamSignals.unverifiedCommerceReasons.slice(0, 4).join('、')}；新註冊網域且缺少公司公開資料或商家實體佐證`
+                            : (shoppingScamSignals.hasCommerceOffer && !hasStrongEcommerceValidation
+                                ? `${shoppingScamSignals.unverifiedCommerceReasons.slice(0, 4).join('、') || '偵測到商品與結帳功能，但尚未取得足夠商家佐證'}`
+                                : '未偵測到新站模板商城與商家資訊不足的高風險組合')
+                    },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
                     shoppingLanding: { status: (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數')) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
@@ -3727,6 +3838,7 @@ const { useState, useEffect, useRef } = React;
                 removedTrackingParams.length > 0;
             const fallbackDomain = normalizeHostname(targetDomain);
             const isFallbackConfirmedScam = isConfirmedScamDomain(fallbackDomain);
+            const isFallbackManualHighRisk = isManualHighRiskDomain(fallbackDomain);
             const isFallbackCloudflarePagesDev = isCloudflarePagesDevHostname(fallbackDomain);
             const isFallbackNetlifyApp = isNetlifyAppHostname(fallbackDomain);
             const isFallbackWeeblyHostedSite = fallbackDomain !== 'weebly.com' && isSameRootDomain(fallbackDomain, 'weebly.com');
@@ -3735,7 +3847,7 @@ const { useState, useEffect, useRef } = React;
             const fallbackHighEntropySubdomain = fallbackSubdomainPart !== 'www' &&
                 (
                     calculateEntropy(fallbackSubdomainPart) > 3.6 ||
-                    /^[a-z0-9]{12,30}$/i.test(fallbackSubdomainPart) ||
+                    (/^[a-z0-9]{12,30}$/i.test(fallbackSubdomainPart) && /\d/.test(fallbackSubdomainPart)) ||
                     (fallbackSubdomainPart.length >= 5 && !/[aeiou]/i.test(fallbackSubdomainPart)) ||
                     /[bcdfghjklmnpqrstvwxz]{4,}/i.test(fallbackSubdomainPart)
                 );
@@ -3751,6 +3863,7 @@ const { useState, useEffect, useRef } = React;
                 (hasGeneratedNetlifySubdomain(fallbackDomain) || fallbackCloudflarePagesRandomSubdomain);
             const fallbackDetails = '檢測流程暫時中斷，系統已避免頁面當掉；請稍後重試，或先不要在此網址輸入個資。';
             const fallbackConfirmedScamDetails = '此網域已由人工確認為詐騙連結；即使深度掃描暫時中斷，仍直接列為高度風險。';
+            const fallbackManualHighRiskDetails = '此網域已由人工審查列為高度交易與網站可信度風險；即使深度掃描暫時中斷，仍維持高度風險。此分類不等同已有獨立證據確認為詐騙。';
             const fallbackAdLandingDetails = `檢測流程逾時或中斷，但原始網址含 ${removedTrackingParams.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且網域使用可疑後綴；先以高風險處理。`;
             const fallbackCloudflarePagesDetails = isFallbackCloudflarePagesRandomRisk
                 ? `🚨 檢測流程逾時或中斷，但 ${fallbackDomain} 是 Cloudflare Pages 免費部署子網域，且子網域呈現短亂碼/不可讀命名（${fallbackSuspiciousSubdomain.reasons.slice(0, 3).join('、') || '子網域名稱隨機度偏高'}）；先以高風險處理。`
@@ -3761,17 +3874,21 @@ const { useState, useEffect, useRef } = React;
             const fallbackWeeblyDetails = '「weebly.com」是 Weebly 免費/低門檻架站子網域，代表使用者自建網站而非 Weebly 官方內容；即使深度掃描暫時中斷，也先維持中度風險並建議查證品牌、付款與客服資訊。';
             const fallbackRiskScore = isFallbackConfirmedScam
                 ? 100
+                : (isFallbackManualHighRisk
+                ? 90
                 : (isFallbackSuspiciousAdLanding
                 ? 85
-                : ((isFallbackCloudflarePagesRandomRisk || isFallbackNetlifyAppRandomRisk) ? 85 : 30));
-            const fallbackDomainStatus = isFallbackConfirmedScam || isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk || isFallbackNetlifyAppRandomRisk
+                : ((isFallbackCloudflarePagesRandomRisk || isFallbackNetlifyAppRandomRisk) ? 85 : 30)));
+            const fallbackDomainStatus = isFallbackConfirmedScam || isFallbackManualHighRisk || isFallbackSuspiciousAdLanding || isFallbackCloudflarePagesRandomRisk || isFallbackNetlifyAppRandomRisk
                 ? 'danger'
                 : 'warning';
             const fallbackDomainDetails = isFallbackConfirmedScam
                 ? fallbackConfirmedScamDetails
+                : (isFallbackManualHighRisk
+                ? fallbackManualHighRiskDetails
                 : (isFallbackSuspiciousAdLanding
                 ? fallbackAdLandingDetails
-                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : (isFallbackNetlifyApp ? fallbackNetlifyDetails : (isFallbackWeeblyHostedSite ? fallbackWeeblyDetails : fallbackDetails))));
+                : (isFallbackCloudflarePagesDev ? fallbackCloudflarePagesDetails : (isFallbackNetlifyApp ? fallbackNetlifyDetails : (isFallbackWeeblyHostedSite ? fallbackWeeblyDetails : fallbackDetails)))));
             return {
                 domain: targetDomain,
                 inputDomain: normalizeHostname(scanOptions.inputDomain || targetDomain),
@@ -3792,7 +3909,7 @@ const { useState, useEffect, useRef } = React;
                 traceChain: scanOptions.preResolvedTrace?.chain || [],
                 riskScore: fallbackRiskScore,
                 risk_flag: true,
-                riskFlags: { scanRuntimeError: true, confirmedScamDomain: isFallbackConfirmedScam, errorMessage: err?.message || '' },
+                riskFlags: { scanRuntimeError: true, confirmedScamDomain: isFallbackConfirmedScam, manualHighRiskDomain: isFallbackManualHighRisk, errorMessage: err?.message || '' },
                 blocklistListed: false,
                 isSocialMedia: false,
                 isWhitelisted: false,
@@ -3810,9 +3927,10 @@ const { useState, useEffect, useRef } = React;
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
                     cofactsReports: createScanCheck('unknown', 'Cofacts 群眾回報', '檢測流程未完整完成，無法查詢 Cofacts 群眾回報與查核資料'),
                     analyticsCluster: createScanCheck('unknown', '詐騙站群關聯', '檢測流程未完整完成，無法比對共享分析識別碼'),
-                    siteContent: createScanCheck(isFallbackConfirmedScam || isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackConfirmedScam ? fallbackConfirmedScamDetails : (isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails)),
+                    siteContent: createScanCheck(isFallbackConfirmedScam || isFallbackManualHighRisk || isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackConfirmedScam ? fallbackConfirmedScamDetails : (isFallbackManualHighRisk ? fallbackManualHighRiskDetails : (isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails))),
                     domainAnalysis: createScanCheck(fallbackDomainStatus, '網域特徵分析', fallbackDomainDetails),
                     confirmedScam: createScanCheck(isFallbackConfirmedScam ? 'danger' : 'safe', '人工確認詐騙網域', isFallbackConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'),
+                    manualHighRisk: createScanCheck(isFallbackManualHighRisk ? 'danger' : 'safe', '人工確認高風險網域', isFallbackManualHighRisk ? '人工審查已列為高度交易與網站可信度風險；此分類不等同已有獨立證據確認為詐騙' : '未命中人工確認高風險網域清單'),
                     traffic: createScanCheck('unknown', 'Tranco 流量排名', '檢測流程未完整完成，無法取得流量排名'),
                     serverLocation: createScanCheck('unknown', '伺服器所在國家', '無法自動判定伺服器所在國家'),
                     validation: createScanCheck('unknown', '次要可信驗證', '檢測流程未完整完成，尚未取得可信佐證'),
@@ -3848,6 +3966,7 @@ const { useState, useEffect, useRef } = React;
                     regulatedProduct: createScanCheck('safe', '電子菸/加熱菸販售', '未偵測到電子菸、加熱菸或煙彈的網路販售脈絡'),
                     jobTaskScam: createScanCheck('unknown', '假求職/任務金流', '檢測流程未完整完成，無法確認求職網站是否混入儲值、提領或任務金流'),
                     shoppingScam: createScanCheck('unknown', '一頁式購物詐騙', '未能從可讀 HTML 中確認一頁式購物結構'),
+                    unverifiedCommerce: createScanCheck('unknown', '未驗證模板商城', '檢測流程未完整完成，無法確認模板商城與商家佐證'),
                     lineContact: createScanCheck('safe', 'LINE 聯絡導流', '未偵測到 LINE 聯絡導流'),
                     shoppingLanding: createScanCheck(isFallbackSuspiciousAdLanding ? 'danger' : 'unknown', '購物/廣告落地頁網址', isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : '檢測流程未完整完成，無法確認購物/廣告落地頁特徵'),
                     brandSimilarity: createScanCheck('safe', '品牌相似網域', '未偵測到常見品牌相似網域'),
@@ -3993,6 +4112,7 @@ const { useState, useEffect, useRef } = React;
 
             addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
             addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
+            addReason(checks.manualHighRisk?.status === 'danger', '人工確認高風險網域');
             addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
             addReason(checks.cofactsReports?.status === 'danger', 'Cofacts 查核回應明確指出詐騙');
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
@@ -4003,6 +4123,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
+            addReason(checks.unverifiedCommerce?.status === 'danger', '新註冊模板商城缺少可驗證商家資訊');
             addReason(checks.lineContact?.status === 'danger', '要求加入 LINE 聯絡/下單');
             addReason(checks.shoppingLanding?.status === 'danger', '可疑購物/廣告落地頁網址');
             addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');

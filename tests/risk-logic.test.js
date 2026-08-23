@@ -356,6 +356,25 @@ function buildCrawlerCandidateUrls(urls, { preferHttpFallback = false } = {}) {
     return candidates;
 }
 
+function hasActionableStaticPageSignals(result) {
+    const signals = result?.pageSignals || {};
+    const shopping = signals.shoppingScamSignals || {};
+    const downloads = signals.downloadSignals || {};
+    return !!shopping.hasCommerceOffer ||
+        !!shopping.hasTemplateDemoMarker ||
+        !!signals.regulatedTobaccoSalesSignals?.matched ||
+        !!signals.jobTaskScamSignals?.matched ||
+        !!signals.pageBrandSignals?.matched ||
+        Number(downloads.apkUrlCount || 0) > 0 ||
+        Number(downloads.installKeywordCount || 0) > 0 ||
+        Number(signals.sensitiveFields?.highRiskCount || 0) > 0;
+}
+
+function isUsableCrawlerResult(result) {
+    return result?.status === 'ok' ||
+        (result?.status === 'blank' && hasActionableStaticPageSignals(result));
+}
+
 test('網址解析支援多層子網域與新版 TLD', () => {
     const parsed = parseUserUrl('https://hnjz.sqkszxt.online/');
 
@@ -429,6 +448,29 @@ test('API JSON 讀取失敗或非 ok 回應會回傳備援結果', async () => {
 
     assert.deepEqual(htmlResult, fallback);
     assert.deepEqual(errorResult, fallback);
+});
+
+test('可視文字少但已有商城或敏感行為訊號的靜態頁應保留分析結果', () => {
+    const templateStoreResult = {
+        status: 'blank',
+        pageSignals: {
+            shoppingScamSignals: {
+                hasCommerceOffer: true,
+                hasTemplateDemoMarker: true
+            }
+        }
+    };
+    const emptyShellResult = {
+        status: 'blank',
+        pageSignals: {}
+    };
+    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    assert.equal(isUsableCrawlerResult(templateStoreResult), true);
+    assert.equal(isUsableCrawlerResult(emptyShellResult), false);
+    assert.match(source, /const hasActionableStaticPageSignals =/);
+    assert.match(source, /result\?\.status === 'blank' && hasActionableStaticPageSignals\(result\)/);
+    assert.match(source, /\n\s*9000,\n\s*defaultSiteStatus/);
 });
 
 test('riskFlags raw 欄位應使用實際已定義的 raw 變數', () => {
@@ -823,6 +865,7 @@ function getHighRiskSummaryReasons(scanData) {
 
     addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
     addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
+    addReason(checks.manualHighRisk?.status === 'danger', '人工確認高風險網域');
     addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
     addReason(checks.cofactsReports?.status === 'danger', 'Cofacts 查核回應明確指出詐騙');
     addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
@@ -832,6 +875,8 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
+    addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
+    addReason(checks.unverifiedCommerce?.status === 'danger', '新註冊模板商城缺少可驗證商家資訊');
     addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
     addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
     addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
@@ -988,7 +1033,8 @@ function calculateEntropy(str) {
 function hasHighEntropySubdomain(domain) {
     const subdomainPart = domain.toLowerCase().split('.')[0];
     const entropy = calculateEntropy(subdomainPart);
-    const isLongGibberish = entropy > 3.6 || /^[a-z0-9]{12,30}$/.test(subdomainPart);
+    const isLongGibberish = entropy > 3.6 ||
+        (/^[a-z0-9]{12,30}$/.test(subdomainPart) && /\d/.test(subdomainPart));
     const lacksVowels = subdomainPart.length >= 5 && !/[aeiou]/i.test(subdomainPart);
     const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxz]{4,}/i.test(subdomainPart);
 
@@ -1289,6 +1335,10 @@ function getPageBrandKeywordContexts(haystack, keyword) {
 }
 
 function isBenignCommerceBrandReference(brandName, keyword, contexts) {
+    if (brandName === 'Apple' && contexts.length > 0 && contexts.every(context => /(?:-apple-system|apple-system|font-family)/i.test(context))) {
+        return true;
+    }
+
     const isConvenienceStoreBrand = ['統一超商', '全家便利商店'].includes(brandName);
     if (!isConvenienceStoreBrand || contexts.length === 0) return false;
 
@@ -1680,9 +1730,9 @@ function isDownloadPhishingSignal(signals) {
 function analyzeShoppingScamSignals({ html = '', url }) {
     const haystack = decodeSignalText(`${html}\n${url}`);
     const keywordGroups = {
-        shopping: ['立即購買', '馬上訂購', '立即訂購', '立即搶購', '加入購物車', '結帳', '下單', '訂單', '購買', '特價', '優惠價', '原價', '折扣', '限時', '限量', '最後', '免運', '貨到付款', '宅配', '超商取貨', '七天鑑賞', '全台配送'],
-        fields: ['姓名', '收件人', '手機', '電話', '地址', '宅配地址', '配送地址', '規格', '數量', '備註', '付款方式'],
-        socialProof: ['顧客好評', '客戶評價', '五星', '已售出', '熱銷', '回購', '見證', '買家', '評價'],
+        shopping: ['立即購買', '馬上訂購', '立即訂購', '立即搶購', '加入購物車', '結帳', '下單', '訂單', '購買', '特價', '優惠價', '原價', '折扣', '限時', '限量', '最後', '免運', '貨到付款', '宅配', '超商取貨', '七天鑑賞', '全台配送', 'add to cart', 'checkout', 'shop now', 'buy now', 'place order', 'order placed', 'shopping cart', 'my cart', 'browse collection', 'free shipping'],
+        fields: ['姓名', '收件人', '手機', '電話', '地址', '宅配地址', '配送地址', '規格', '數量', '備註', '付款方式', 'full name', 'phone number', 'shipping address', 'billing address', 'payment method', 'quantity'],
+        socialProof: ['顧客好評', '客戶評價', '五星', '已售出', '熱銷', '回購', '見證', '買家', '評價', 'customer reviews', 'best seller', 'bestseller', 'five stars'],
         tracking: ['ldtag_cl', 'lt_r', 'fbclid', 'gclid', 'utm_', 'click_id', 'campaign', 'ad_id'],
         lineContact: ['加入line', '加line', 'line客服', '官方line', 'line id', 'lineid', 'line帳號', 'line好友', '私訊客服', '聯繫客服下單', '截圖傳給客服', '客服確認訂單', 'lin.ee', 'line.me/r/ti/p', 'line://']
     };
@@ -1694,14 +1744,26 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     const imageCount = (html.match(/<img\b/gi) || []).length;
     const linkCount = (html.match(/<a\b[^>]*href=/gi) || []).length;
     const hasOrderForm = formCount > 0 && formFieldCount >= 2;
+    const stockImageCount = (html.match(/(?:images\.pexels\.com|picsum\.photos|images\.unsplash\.com)/gi) || []).length;
+    const catalogPriceCount = (haystack.match(/(?:\bprice\s*[:=]\s*["']?\d{1,6}(?:\.\d{1,2})?|\b(?:usd|ntd)\s*\$?\s*\d{1,6}(?:\.\d{1,2})?|[$€£]\s*\d{1,6}(?:\.\d{1,2})?)/gi) || []).length;
+    const shoppingKeywordMatches = keywordGroups.shopping.filter(keyword => haystack.includes(keyword.toLowerCase()));
+    const hasCartActionKeyword = /(加入購物車|立即購買|馬上訂購|add to cart|checkout|buy now|place order|shopping cart)/i.test(haystack);
+    const hasCommerceOffer = shoppingKeywordMatches.length >= 2 && (catalogPriceCount >= 2 || hasOrderForm || hasCartActionKeyword);
     const merchantInfoKeywords = ['統一編號', '公司名稱', '有限公司', '股份有限公司', '客服電話', '退換貨', '退貨政策', '隱私權政策', '服務條款', '聯絡地址'];
-    const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase()));
+    const merchantIdentityKeywords = ['company name', 'business address', 'registered address', 'customer service', 'contact us'];
+    const merchantPolicyKeywords = ['privacy policy', 'terms of service', 'refund policy', 'return policy', 'shipping policy'];
+    const merchantIdentityMatches = merchantIdentityKeywords.filter(keyword => haystack.includes(keyword));
+    const merchantPolicyMatches = merchantPolicyKeywords.filter(keyword => haystack.includes(keyword));
+    const hasMerchantInfo = merchantInfoKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) ||
+        merchantIdentityMatches.length >= 2 ||
+        (merchantIdentityMatches.length >= 1 && merchantPolicyMatches.length >= 2);
     const imageHeavy = imageCount >= 6 && linkCount <= 3;
     const hasOnePageStructure = matchedKeywords.length >= 4 && (linkCount <= 3 || imageHeavy || hasOrderForm);
     const highPressureSalesKeywords = ['貨到付款', '免運', '限量', '立即搶購', '馬上訂購'];
-    const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時/i.test(haystack);
+    const hasLimitedPurchasePitch = /限時.{0,12}(搶購|優惠|折扣|下單|訂購|購買)|(?:搶購|優惠|折扣|下單|訂購|購買).{0,12}限時|limited time.{0,24}(buy|shop|offer|deal)|(?:buy|shop|offer|deal).{0,24}limited time/i.test(haystack);
     const hasCodSalesPitch = highPressureSalesKeywords.some(keyword => haystack.includes(keyword.toLowerCase())) || hasLimitedPurchasePitch;
     const hasAliziOrderSystem = /(?:\/public\/alizi\/|alizi-order|alizibooking|www\.alizi\.net)/i.test(haystack);
+    const hasTemplateDemoMarker = /(?:demo mode|demo checkout|sample store|test order|order placed.{0,60}demo)/i.test(haystack);
     const hasTrackingLandingParam = keywordGroups.tracking.some(keyword => haystack.includes(keyword.toLowerCase()));
     const lineContactMatches = keywordGroups.lineContact.filter(keyword => haystack.includes(keyword.toLowerCase()));
     const hasLineContactSignal = lineContactMatches.length > 0;
@@ -1734,6 +1796,10 @@ function analyzeShoppingScamSignals({ html = '', url }) {
     const effectiveReasons = hasCourseProviderTrust
         ? reasons.filter(reason => !courseSuppressedReasons.has(reason))
         : reasons;
+    const unverifiedCommerceReasons = [];
+    if (hasTemplateDemoMarker) unverifiedCommerceReasons.push('英文模板或示範結帳流程');
+    if (stockImageCount >= 4) unverifiedCommerceReasons.push('大量商品圖片使用通用圖庫');
+    if (hasCommerceOffer && !hasMerchantInfo) unverifiedCommerceReasons.push('提供商品與結帳功能，但缺少明確商家及政策資訊');
 
     return {
         matched: effectiveReasons.length >= 2,
@@ -1746,11 +1812,40 @@ function analyzeShoppingScamSignals({ html = '', url }) {
         hasOrderForm,
         hasAliziOrderSystem,
         hasMerchantInfo,
+        hasCommerceOffer,
+        hasTemplateDemoMarker,
+        hasOnePageStructure,
+        stockImageCount,
+        catalogPriceCount,
+        unverifiedCommerceReasons,
         hasCourseProviderTrust,
         hasLineContactSignal,
         hasLineOrderContext,
         lineContactExamples: lineContactMatches.slice(0, 3)
     };
+}
+
+function hasUnverifiedCommerceRisk({
+    signals,
+    isWhitelisted = false,
+    hasStrongEcommerceValidation = false,
+    hasVerifiedBusinessEntity = false,
+    isHighTraffic = false,
+    isNewDomainUnderSixMonths = false,
+    hasNewOneYearRegistrationRisk = false
+}) {
+    return !isWhitelisted &&
+        !hasStrongEcommerceValidation &&
+        !!signals.hasCommerceOffer &&
+        !signals.hasMerchantInfo &&
+        !hasVerifiedBusinessEntity &&
+        !isHighTraffic &&
+        (isNewDomainUnderSixMonths || hasNewOneYearRegistrationRisk) &&
+        (
+            !!signals.hasTemplateDemoMarker ||
+            Number(signals.stockImageCount || 0) >= 4 ||
+            !!signals.hasOnePageStructure
+        );
 }
 
 function analyzeJobTaskScamSignals({ html = '', url }) {
@@ -2534,6 +2629,21 @@ test('Apple 官方網域與 iCloud 官方網域不應被品牌相似規則誤判
     assert.equal(checkBrandSimilarity('apple.com').matched, false);
     assert.equal(checkBrandSimilarity('support.apple.com').matched, false);
     assert.equal(checkBrandSimilarity('icloud.com').matched, false);
+});
+
+test('CSS 的 -apple-system 字型不應被誤認為 Apple 品牌仿冒', () => {
+    const cssOnly = analyzePageBrandSignals({
+        hostname: 'wellnesstalk.online',
+        text: `<style>body { font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; }</style><h1>Joyful Living</h1>`
+    });
+    const realImpersonation = analyzePageBrandSignals({
+        hostname: 'apple-account-check.example',
+        text: '<h1>Apple ID 帳戶異常，請立即驗證</h1>'
+    });
+
+    assert.equal(cssOnly.matched, false);
+    assert.equal(realImpersonation.matched, true);
+    assert.equal(realImpersonation.brandName, 'Apple');
 });
 
 test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單', () => {
@@ -3866,7 +3976,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260822-short-url-destination/);
+    assert.match(indexSource, /app\.js\?v=20260823-unverified-commerce-risk-v6/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -3875,6 +3985,7 @@ test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
     assert.equal(hasHighEntropySubdomain('a1b2c3d4e5f6g7h8.com'), true);
     assert.equal(hasHighEntropySubdomain('www.example.com'), false);
     assert.equal(hasHighEntropySubdomain('store.example.com'), false);
+    assert.equal(hasHighEntropySubdomain('wellnesstalk.online'), false);
 });
 
 test('轉址風險會抓到過深轉址、多重轉址與高風險短網址', () => {
@@ -6457,6 +6568,114 @@ test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認
     assert.match(appSource, /hasNetlifyAppRandomRisk/);
     assert.match(appSource, /isFallbackNetlifyAppRandomRisk/);
     assert.match(appSource, /Netlify 免費\/預設託管子網域/);
+});
+
+test('wellnesstalk.online 使用獨立人工高風險分類且不冒充已確認詐騙證據', () => {
+    const domain = 'wellnesstalk.online';
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const isManualHighRisk = matchesDomainList(domain, riskConfig.manualHighRiskDomains);
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isManualHighRisk ? 90 : 0,
+        checks: {
+            manualHighRisk: {
+                status: isManualHighRisk ? 'danger' : 'safe',
+                details: '人工審查列為高度交易與網站可信度風險'
+            }
+        }
+    });
+
+    assert.equal(isManualHighRisk, true);
+    assert.equal(matchesDomainList(`shop.${domain}`, riskConfig.manualHighRiskDomains), true);
+    assert.equal(matchesDomainList(`${domain}.safe.example`, riskConfig.manualHighRiskDomains), false);
+    assert.equal(matchesDomainList(`fake-${domain}`, riskConfig.manualHighRiskDomains), false);
+    assert.equal(matchesDomainList(domain, riskConfig.confirmedScamDomains), false);
+    assert.equal(scanData.riskScore, 90);
+    assert.deepEqual(scanData.summaryReasons, ['人工確認高風險網域']);
+    assert.match(appSource, /else if \(isManualHighRisk\) \{\s*riskScore = 90;/);
+    assert.match(appSource, /manualHighRiskDomain: isManualHighRisk/);
+    assert.match(appSource, /此分類不等同已有獨立證據確認為詐騙/);
+});
+
+test('英文示範模板商城會被辨識為未驗證商務高風險組合', () => {
+    const html = `
+        <!doctype html>
+        <title>Joyful Living | Curated Daily Essentials</title>
+        <nav>
+            <a href="#home">Home</a><a href="#products">Products</a>
+            <a href="#about">About</a><a href="#contact">Contact</a>
+        </nav>
+        <p>Free shipping on all orders</p>
+        <button>Add to Cart</button><button>Checkout</button>
+        <img src="https://images.pexels.com/photos/1/item.jpg">
+        <img src="https://images.pexels.com/photos/2/item.jpg">
+        <img src="https://picsum.photos/seed/3/600/400">
+        <img src="https://picsum.photos/seed/4/600/400">
+        <img src="https://images.unsplash.com/photo-5">
+        <script>
+            const products = [
+                { name: 'Lamp', price: 49.90 },
+                { name: 'Tray', price: 35.00 },
+                { name: 'Vase', price: 28.50 },
+                { name: 'Clock', price: 42.00 }
+            ];
+            function checkout() { alert('Order placed successfully! (demo mode)'); }
+        </script>`;
+    const signals = analyzeShoppingScamSignals({ html, url: 'https://wellnesstalk.online/' });
+    const risk = hasUnverifiedCommerceRisk({
+        signals,
+        isNewDomainUnderSixMonths: true,
+        hasNewOneYearRegistrationRisk: true
+    });
+
+    assert.equal(signals.hasCommerceOffer, true);
+    assert.equal(signals.hasTemplateDemoMarker, true);
+    assert.equal(signals.hasMerchantInfo, false);
+    assert.ok(signals.stockImageCount >= 4);
+    assert.ok(signals.catalogPriceCount >= 4);
+    assert.ok(signals.unverifiedCommerceReasons.includes('英文模板或示範結帳流程'));
+    assert.ok(signals.unverifiedCommerceReasons.includes('大量商品圖片使用通用圖庫'));
+    assert.equal(risk, true);
+});
+
+test('具有可核實商家政策或成熟網域的英文商店不會只因英文購物詞被升為高風險', () => {
+    const html = `
+        <title>Example Hardware Store</title>
+        <p>Example Hardware Company Ltd.</p>
+        <p>Business address: 100 Market Street</p>
+        <a href="mailto:support@example.com">Customer service</a>
+        <a href="/contact">Contact us</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/returns">Return Policy</a>
+        <button>Add to Cart</button><a href="/checkout">Checkout</a>
+        <script>const items = [{ price: 39.00 }, { price: 52.00 }];</script>`;
+    const signals = analyzeShoppingScamSignals({ html, url: 'https://shop.example.com/' });
+
+    assert.equal(signals.hasCommerceOffer, true);
+    assert.equal(signals.hasMerchantInfo, true);
+    assert.equal(hasUnverifiedCommerceRisk({
+        signals,
+        isNewDomainUnderSixMonths: true,
+        hasNewOneYearRegistrationRisk: true
+    }), false);
+    assert.equal(hasUnverifiedCommerceRisk({
+        signals: { ...signals, hasMerchantInfo: false },
+        isNewDomainUnderSixMonths: false,
+        hasNewOneYearRegistrationRisk: false
+    }), false);
+});
+
+test('一般 MX 或零星電商文字不再啟用可信弱訊號降分上限', () => {
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const weakContextBlock = appSource.match(/const hasTrustedCommercialWeakSignalContext =[\s\S]+?;\n\n\s*const hasStrongRiskSignal/)?.[0] || '';
+
+    assert.match(weakContextBlock, /hasTrustedValidation/);
+    assert.match(weakContextBlock, /hasStrongEcommerceValidation/);
+    assert.doesNotMatch(weakContextBlock, /trustValidationSignals\.length > 0/);
+    assert.doesNotMatch(weakContextBlock, /ecommerceTrustSignals\.score > 0/);
+    assert.doesNotMatch(weakContextBlock, /pageTrustSignals\.matched/);
+    assert.match(appSource, /const hasUnverifiedCommerceRisk =/);
+    assert.match(appSource, /if \(hasUnverifiedCommerceRisk\) riskScore = Math\.max\(riskScore, 85\)/);
 });
 
 test('檢舉通報功能已從首頁、截圖與聊天小幫手完整移除', () => {

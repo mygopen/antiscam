@@ -65,6 +65,9 @@ window.RISK_CONFIG = {
         'chesapeakeexpo.com',
         'shopkitchenette.com'
     ],
+    manualHighRiskDomains: [
+        'wellnesstalk.online'
+    ],
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',

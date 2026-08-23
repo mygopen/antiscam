@@ -80,10 +80,26 @@ function buildCrawlerCandidateUrls(urls) {
   return candidates;
 }
 
-function looksCrawlerBlocked(text, statusCode = 0) {
+export function looksCrawlerBlocked(text, statusCode = 0) {
   const haystack = String(text || '').toLowerCase();
   if ([403, 429].includes(Number(statusCode))) return true;
-  return /(access denied|request blocked|forbidden|verify you are human|checking your browser|cf-chl|cloudflare|akamai|incapsula|imperva|datadome|bot detection|anti[- ]?bot)/i.test(haystack);
+  const directBlockMarkers = [
+    'access denied',
+    'request blocked',
+    'request has been blocked',
+    'verify you are human',
+    'checking your browser',
+    'cf-chl-',
+    '/cdn-cgi/challenge-platform/',
+    'challenges.cloudflare.com/turnstile',
+    'bot detection',
+    'anti-bot'
+  ];
+  if (directBlockMarkers.some(marker => haystack.includes(marker))) return true;
+
+  const hasWafVendor = /(cloudflare|akamai|incapsula|imperva|datadome)/i.test(haystack);
+  const hasChallengeContext = /(captcha|security challenge|security check|challenge required|automated traffic)/i.test(haystack);
+  return hasWafVendor && hasChallengeContext;
 }
 
 const HEADER_PROFILES = [
