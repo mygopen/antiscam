@@ -61,6 +61,7 @@ window.RISK_CONFIG = {
         'calm-quokka-a2fe57.netlify.app',
         'wavesvote.netlify.app',
         'eukka.eu.cc',
+        'ioppk.eu.cc',
         'jsizg.com',
         'kackofworc.com',
         'chesapeakeexpo.com',
@@ -69,6 +70,12 @@ window.RISK_CONFIG = {
     manualHighRiskDomains: [
         'wellnesstalk.online'
     ],
+    confirmedScamProfiles: {
+        'ioppk.eu.cc': {
+            category: '假投票／LINE 帳號釣魚',
+            details: '此網域已確認以假投票頁誘導使用者提供或登入 LINE 帳號，屬帳號竊取型釣魚網站。'
+        }
+    },
     globalPaymentGatewayDomains: [
         'paypal.com', 'paypalobjects.com', 'stripe.com', 'checkout.com',
         'adyen.com', 'worldpay.com', 'braintreepayments.com', 'squareup.com',

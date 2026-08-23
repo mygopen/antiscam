@@ -131,6 +131,13 @@ test('Cofacts 網址比對會忽略廣告追蹤參數但保留訂單識別參數
     assert.doesNotMatch(first, /ldtag|utm_/);
 });
 
+test('Cofacts 同步不得把不同 eu.cc 租戶合併成整個共享根網域', async () => {
+    const { toRootDomain } = await syncModulePromise;
+    assert.equal(toRootDomain('ioppk.eu.cc'), 'ioppk.eu.cc');
+    assert.equal(toRootDomain('login.ioppk.eu.cc'), 'ioppk.eu.cc');
+    assert.equal(toRootDomain('eukka.eu.cc'), 'eukka.eu.cc');
+});
+
 test('人工 Cofacts 案例可比對原網域與子網域，但不誤中惡意後綴', async () => {
     const { findCofactsMatches, summarizeCofactsMatches } = await endpointModulePromise;
     const now = Date.parse('2026-07-17T00:00:00.000Z');

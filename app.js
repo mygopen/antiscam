@@ -621,7 +621,8 @@ const { useState, useEffect, useRef } = React;
                 'co.uk', 'org.uk', 'gov.uk',
                 'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
                 'com.hk', 'org.hk',
-                'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn'
+                'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
+                'eu.cc'
             ];
             const lastTwo = parts.slice(-2).join('.');
             const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
@@ -2205,6 +2206,7 @@ const { useState, useEffect, useRef } = React;
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
             const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isTrustedFinancialServiceRootDomain || isTrustedGovernmentServiceRootDomain || isTrustedPublicInterestRootDomain || isConfiguredAllowlistDomain;
             const isConfirmedScam = !isWhitelisted && isConfirmedScamDomain(domain);
+            const confirmedScamProfile = isConfirmedScam ? (RISK_CONFIG.confirmedScamProfiles?.[domain] || null) : null;
             const isManualHighRisk = !isWhitelisted && isManualHighRiskDomain(domain);
 
             // 👇 判斷是否為社群平台
@@ -2364,11 +2366,17 @@ const { useState, useEffect, useRef } = React;
 
             // TLS 憑證會定期續發，核發日不能代表網域註冊日。
             // 註冊年齡只接受 RDAP/WHOIS 明確的 registration/creation 日期。
-            const rdapDate = rdapData.date || null;
-            const rdapExpirationDate = rdapData.expirationDate || null;
-            const privacyDetected = rdapData.privacyDetected;
-            const registrarName = rdapData.registrarName || '';
-            const rdapQueriedDomain = rdapData.queriedDomain || registrableDomain || domain;
+            const isSharedEuCcTenant = domain !== 'eu.cc' && domain.endsWith('.eu.cc');
+            const ignoreSharedTenantRegistration = isSharedEuCcTenant || !!rdapData.registrationUnavailable;
+            const rdapDate = ignoreSharedTenantRegistration ? null : (rdapData.date || null);
+            const rdapExpirationDate = ignoreSharedTenantRegistration ? null : (rdapData.expirationDate || null);
+            const privacyDetected = ignoreSharedTenantRegistration ? false : rdapData.privacyDetected;
+            const registrarName = ignoreSharedTenantRegistration ? '' : (rdapData.registrarName || '');
+            const rdapRegistrantName = ignoreSharedTenantRegistration ? null : rdapData.registrantName;
+            const rdapRegistrantOrganization = ignoreSharedTenantRegistration ? null : rdapData.registrantOrganization;
+            const rdapQueriedDomain = ignoreSharedTenantRegistration
+                ? (registrableDomain || domain)
+                : (rdapData.queriedDomain || registrableDomain || domain);
             const serverInfo = geoLocationData || networkInfoData;
             const serverIp = serverInfo?.ip || resolvedIp || null;
             const serverCountryDetails = serverInfo?.isReal
@@ -2398,9 +2406,10 @@ const { useState, useEffect, useRef } = React;
             const isCloudflarePagesDev = isCloudflarePagesDevHostname(domain);
             const isNetlifyApp = isNetlifyAppHostname(domain);
             const isWeeblyHostedSite = domain !== 'weebly.com' && isSameRootDomain(domain, 'weebly.com');
-            const trancoRank = trancoData?.rank || null;
-            const trancoStatus = trancoData?.status || 'unavailable';
-            const trancoQueriedDomain = trancoData?.queriedDomain || domain;
+            const isEuCcHostedSite = isSharedEuCcTenant;
+            const trancoRank = isEuCcHostedSite ? null : (trancoData?.rank || null);
+            const trancoStatus = isEuCcHostedSite ? 'unranked' : (trancoData?.status || 'unavailable');
+            const trancoQueriedDomain = isEuCcHostedSite ? domain : (trancoData?.queriedDomain || domain);
             const trancoDateText = trancoData?.date ? ` (${trancoData.date})` : '';
             const hasRankedRootDomainFallback = trancoRank !== null &&
                 normalizeHostname(trancoQueriedDomain) !== domain &&
@@ -2441,7 +2450,9 @@ const { useState, useEffect, useRef } = React;
                 }
             } else if (isFreeHosting) {
                 trafficStatus = 'warning';
-                if (domain.endsWith('zeabur.app')) {
+                if (isEuCcHostedSite) {
+                    trafficDetails = '「eu.cc」是共享子網域服務；目前網域屬個別使用者建立的租戶，不得繼承 eu.cc 根網域的流量、年齡或信任。';
+                } else if (domain.endsWith('zeabur.app')) {
                     trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
                     trafficDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，任何人都可建立專案頁；需視為使用者自建臨時站，而非 Cloudflare 官方內容。';
@@ -2585,7 +2596,8 @@ const { useState, useEffect, useRef } = React;
             const hasCloudflarePagesDevBaselineRisk = !isWhitelisted && isCloudflarePagesDev;
             const hasNetlifyAppBaselineRisk = !isWhitelisted && isNetlifyApp;
             const hasWeeblyHostedBaselineRisk = !isWhitelisted && isWeeblyHostedSite;
-            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasNetlifyAppBaselineRisk || hasWeeblyHostedBaselineRisk;
+            const hasEuCcHostedBaselineRisk = !isWhitelisted && isEuCcHostedSite;
+            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasNetlifyAppBaselineRisk || hasWeeblyHostedBaselineRisk || hasEuCcHostedBaselineRisk;
             const hasCloudflarePagesDevRandomSubdomain = isHighEntropy ||
                 suspiciousSubdomain.reasons.some(reason =>
                     reason.includes('短隨機') ||
@@ -2669,9 +2681,9 @@ const { useState, useEffect, useRef } = React;
             const domainAgeDays = getPastAgeDays(rdapDate);
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
             const isNewDomainUnderSixMonths = domainAgeDays !== null && domainAgeDays < 183;
-            const registrationPeriodDays = rdapData.registrationPeriodDays !== null && rdapData.registrationPeriodDays !== undefined
+            const registrationPeriodDays = !ignoreSharedTenantRegistration && rdapData.registrationPeriodDays !== null && rdapData.registrationPeriodDays !== undefined
                 ? rdapData.registrationPeriodDays
-                : getDaysBetweenDates(rdapData.date, rdapExpirationDate);
+                : getDaysBetweenDates(rdapDate, rdapExpirationDate);
             const hasOneYearRegistrationPeriod = isOneYearRegistrationPeriod(registrationPeriodDays);
             const hasNewOneYearRegistrationRisk = !isWhitelisted &&
                 !isOfficialTaiwanGov &&
@@ -2683,8 +2695,8 @@ const { useState, useEffect, useRef } = React;
             const certExpiryText = certData?.notAfter ? `；有效至: ${new Date(certData.notAfter).toISOString().split('T')[0]}` : '';
             const isNewDomainWithNewCertificate = isVeryNewDomain && isVeryNewCertificate && !isWhitelisted;
             const normalizedRegistrantTextForBusiness = normalizeBusinessName([
-                rdapData.registrantName,
-                rdapData.registrantOrganization
+                rdapRegistrantName,
+                rdapRegistrantOrganization
             ].filter(Boolean).join(' '));
             const matchedBusinessEntityName = (businessIdentitySignals.names || []).find(name => {
                 const normalizedName = normalizeBusinessName(name);
@@ -2772,6 +2784,19 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousLandingParams &&
                 hasShoppingLandingRiskContext;
             const unreadablePageStatuses = ['blank', 'error', 'unknown', 'blocked'];
+            const hasVotePathSignal = (() => {
+                try {
+                    const decodedPath = decodeURIComponent(new URL(fullUrl).pathname).toLowerCase();
+                    return /(?:^|\/)(?:vote|voting|poll|投票)(?:\/|$)/i.test(decodedPath);
+                } catch (e) {
+                    return false;
+                }
+            })();
+            const hasFreeHostingVotePhishingRisk = !isWhitelisted &&
+                isFreeHosting &&
+                hasVotePathSignal &&
+                unreadablePageStatuses.includes(siteStatusData.status) &&
+                (isEuCcHostedSite || hasDisposableRootLabel || suspiciousSubdomain.matched || isLowTraffic);
             const hasDisposableShoppingLandingRisk = !isWhitelisted &&
                 hasDisposableRootLabel &&
                 hasSuspiciousLandingParams;
@@ -2854,8 +2879,8 @@ const { useState, useEffect, useRef } = React;
 
             const pageTrustSignals = pageSignals.trustSignals || createEmptyPageSignals().trustSignals;
             const normalizedRegistrantText = [
-                rdapData.registrantName,
-                rdapData.registrantOrganization,
+                rdapRegistrantName,
+                rdapRegistrantOrganization,
                 registrarName
             ].filter(Boolean).join(' ').toLowerCase();
             const compactRootLabel = rootLabel.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2941,6 +2966,7 @@ const { useState, useEffect, useRef } = React;
                 hasUnverifiedCommerceRisk ||
                 hasSuspiciousTldAdLandingRisk ||
                 hasFreeHostingSensitiveLinkRisk ||
+                hasFreeHostingVotePhishingRisk ||
                 hasCloudflarePagesDevRandomRisk ||
                 hasNetlifyAppRandomRisk ||
                 hasRegulatedTobaccoSalesSignal ||
@@ -2996,6 +3022,8 @@ const { useState, useEffect, useRef } = React;
             } else if (isConfirmedScam) {
                 riskScore = 100;
             } else if (isManualHighRisk) {
+                riskScore = 90;
+            } else if (hasFreeHostingVotePhishingRisk) {
                 riskScore = 90;
             } else if (hasOfficialAlertUrlMatch) {
                 riskScore = 100;
@@ -3139,8 +3167,8 @@ const { useState, useEffect, useRef } = React;
                     // 👇 修改：精準打擊單頁式詐騙，降低正常老網站的誤殺率 👇
                     if (siteStatusData.linkStats && siteStatusData.linkStats.total <= 1 && isLowTraffic) {
                         let isNewDomain = false;
-                        if (rdapData.date) {
-                            const regDate = new Date(rdapData.date);
+                        if (rdapDate) {
+                            const regDate = new Date(rdapDate);
                             const diffDays = Math.ceil(Math.abs(new Date() - regDate) / (1000 * 60 * 60 * 24));
                             if (diffDays < 365) isNewDomain = true; 
                         } // 查無 WHOIS 則不預設為新網域，交給其他特徵判斷
@@ -3235,6 +3263,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
                 hasFreeHostingSensitiveLinkRisk ||
+                hasFreeHostingVotePhishingRisk ||
                 hasSuspiciousTldAdLandingRisk ||
                 hasSuspiciousEmailTrackingHost ||
                 hasDeepSubdomainPhishingPattern ||
@@ -3271,6 +3300,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousExternalTrustedRedirect ||
                 externalFormActionCount > 0 ||
                 hasFreeHostingSensitiveLinkRisk ||
+                hasFreeHostingVotePhishingRisk ||
                 hasShoppingScamSignal ||
                 hasUnverifiedCommerceRisk ||
                 hasShoppingLineContactRisk ||
@@ -3365,8 +3395,8 @@ const { useState, useEffect, useRef } = React;
             // 👇 新增 APK 專屬的紅色警告卡片
             if (isConfirmedScam) {
                 domainAnalysisStatus = 'danger';
-                domainAnalysisDetails = '🚨 此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資。';
-                siteContentMsg = '危險：已確認為詐騙連結';
+                domainAnalysisDetails = `🚨 ${confirmedScamProfile?.details || '此網域已由人工確認為詐騙連結，請勿點擊或輸入任何個資。'}`;
+                siteContentMsg = confirmedScamProfile?.category ? `危險：${confirmedScamProfile.category}` : '危險：已確認為詐騙連結';
             } else if (isManualHighRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `此網域已由人工審查列為高度交易與網站可信度風險；目前偵測到的新站、短期註冊、模板商城或商家資訊不足等證據，尚不等同已有獨立來源確認為詐騙。`;
@@ -3429,6 +3459,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到假求職/任務金流詐騙特徵：${jobTaskScamSignals.reasons.slice(0, 3).join('、')}。`;
                 siteContentMsg = '危險：疑似假求職、任務儲值或提領詐騙';
+            } else if (hasFreeHostingVotePhishingRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = '🚨 共享／免費子網域上的投票頁拒絕爬蟲讀取內容，且缺少獨立可信佐證，符合假投票帳號釣魚常見規避型態。';
+                siteContentMsg = '危險：疑似假投票帳號釣魚頁';
             } else if (hasSuspiciousTldAdLandingRisk && !hasConditionalCompanyTrustApplied) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑後綴廣告落地頁：${domain} 使用較常被濫用的網域後綴，原始網址含 ${rawAdLandingParamDetails.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且缺少可信白名單、商家實體或正規電商佐證。`;
@@ -3533,7 +3567,9 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisDetails = '網域(或轉址目標)包含多個連字號 (-)，請稍加留意';
             } else if (isFreeHosting) {
                 domainAnalysisStatus = 'warning';
-                if (domain.endsWith('zeabur.app')) {
+                if (isEuCcHostedSite) {
+                    domainAnalysisDetails = '「eu.cc」是共享子網域服務，目前網址是獨立租戶站；不得以 eu.cc 根網域的歷史或排名作為安全背書。';
+                } else if (domain.endsWith('zeabur.app')) {
                     domainAnalysisDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
                     domainAnalysisDetails = '「pages.dev」是 Cloudflare Pages 的免費/預設部署子網域，代表使用者自建專案頁而非 Cloudflare 官方網站；未取得更多可信佐證前至少列為中度風險。';
@@ -3586,6 +3622,7 @@ const { useState, useEffect, useRef } = React;
                 isManualHighRisk ||
                 isApkSite ||
                 isDownloadPhishingSignal ||
+                hasFreeHostingVotePhishingRisk ||
                 hasPageBrandMismatch ||
                 hasShoppingScamSignal ||
                 hasUnverifiedCommerceRisk ||
@@ -3609,7 +3646,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, manualHighRiskDomain: isManualHighRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasFreeHostingVotePhishingRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, confirmedScamCategory: confirmedScamProfile?.category || '', manualHighRiskDomain: isManualHighRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, freeHostingVotePhishing: hasFreeHostingVotePhishingRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3648,7 +3685,7 @@ const { useState, useEffect, useRef } = React;
                     confirmedScam: {
                         status: isConfirmedScam ? 'danger' : 'safe',
                         label: '人工確認詐騙網域',
-                        details: isConfirmedScam ? '此網域已由人工確認為詐騙連結，直接列為高度風險' : '未命中人工確認詐騙網域清單'
+                        details: isConfirmedScam ? (confirmedScamProfile?.details || '此網域已由人工確認為詐騙連結，直接列為高度風險') : '未命中人工確認詐騙網域清單'
                     },
                     manualHighRisk: {
                         status: isManualHighRisk ? 'danger' : 'safe',
@@ -3803,19 +3840,21 @@ const { useState, useEffect, useRef } = React;
                             ))
                     },
                     age: {
-                        status: (isWhitelisted || hasConditionalCompanyTrustApplied) ? (isWhitelisted ? 'safe' : 'info') : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
+                        status: isEuCcHostedSite ? 'unknown' : ((isWhitelisted || hasConditionalCompanyTrustApplied) ? (isWhitelisted ? 'safe' : 'info') : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
                             (hasNewOneYearRegistrationRisk ? 'warning' :
-                            (domainAgeDays !== null ? (domainAgeDays < 365 ? 'warning' : 'safe') : 'unknown'))),
+                            (domainAgeDays !== null ? (domainAgeDays < 365 ? 'warning' : 'safe') : 'unknown')))),
                         label: '註冊時間',
-                        details: isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}公司官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替'))),
+                        details: isEuCcHostedSite ? 'eu.cc 為共享子網域服務，無法取得此租戶的獨立註冊日；不採用 eu.cc 母網域的註冊年齡' : (isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}公司官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替')))),
                         link: `https://who.is/whois/${rdapQueriedDomain}`
                     },
                     registrationPeriod: {
-                        status: hasConditionalCompanyTrustApplied ? 'info' : (hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown')),
+                        status: isEuCcHostedSite ? 'unknown' : (hasConditionalCompanyTrustApplied ? 'info' : (hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown'))),
                         label: '註冊週期',
-                        details: registrationPeriodDays !== null
+                        details: isEuCcHostedSite
+                            ? '共享子網域租戶沒有可獨立驗證的註冊週期；不採用 eu.cc 母網域的到期日'
+                            : (registrationPeriodDays !== null
                             ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk && !hasConditionalCompanyTrustApplied ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項不作風險加權' : ''}`
-                            : '無法自動判定註冊週期'
+                            : '無法自動判定註冊週期')
                     },
                     certificate: {
                         status: isNewDomainWithNewCertificate ? 'warning' : (certData?.notBefore ? 'info' : 'unknown'),
@@ -3839,6 +3878,13 @@ const { useState, useEffect, useRef } = React;
                         details: hasFreeHostingSensitiveLinkRisk
                             ? '免費架站/子網域服務搭配 token、驗證或一次性參數與隨機路徑，符合短期釣魚連結常見型態'
                             : '未偵測到免費子網域搭配敏感驗證參數的高風險組合'
+                    },
+                    votePhishing: {
+                        status: hasFreeHostingVotePhishingRisk ? 'danger' : 'safe',
+                        label: '假投票／帳號釣魚',
+                        details: hasFreeHostingVotePhishingRisk
+                            ? '共享／免費子網域的投票路徑拒絕爬蟲讀取，且沒有可驗證的獨立可信基線；不可因看不到表單就判為安全。'
+                            : '未偵測到共享子網域投票頁搭配爬蟲封鎖的高風險組合'
                     },
                     regulatedProduct: {
                         status: hasRegulatedTobaccoSalesSignal ? 'danger' : 'safe',
@@ -4187,6 +4233,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
             addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
             addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
+            addReason(checks.votePhishing?.status === 'danger', '共享子網域假投票／帳號釣魚特徵');
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');

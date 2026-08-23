@@ -1,5 +1,12 @@
 import { connect } from 'cloudflare:sockets';
 
+const SHARED_SUBDOMAIN_SUFFIXES = ['eu.cc'];
+
+function isSharedSubdomainTenant(hostname) {
+  const domain = String(hostname || '').trim().toLowerCase().replace(/^www\./, '');
+  return SHARED_SUBDOMAIN_SUFFIXES.some(suffix => domain !== suffix && domain.endsWith(`.${suffix}`));
+}
+
 // Helper: 自動提取主網域
 function getRegisteredDomain(hostname) {
   const parts = hostname.split('.');
@@ -10,7 +17,8 @@ function getRegisteredDomain(hostname) {
     "co.uk", "org.uk", "gov.uk", 
     "co.jp", "ne.jp", "ac.jp", "go.jp",
     "com.hk", "org.hk",
-    "com.cn", "org.cn", "gov.cn", "net.cn", "ac.cn"
+    "com.cn", "org.cn", "gov.cn", "net.cn", "ac.cn",
+    "eu.cc"
   ];
 
   const lastTwo = parts.slice(-2).join('.');
@@ -485,6 +493,20 @@ export async function onRequest(context) {
 
   const rootDomain = getRegisteredDomain(domain);
   const tld = rootDomain.split('.').pop();
+
+  // eu.cc tenants are delegated below the registry-visible eu.cc domain. RDAP/WHOIS
+  // lookups therefore return the provider's metadata, not the tenant's registration.
+  if (isSharedSubdomainTenant(rootDomain)) {
+    return jsonResponse({
+      events: [],
+      source: 'shared-subdomain-tenant',
+      queriedDomain: rootDomain,
+      registrationUnavailable: true,
+      reason: 'tenant_registration_not_available'
+    }, {
+      headers: { 'Cache-Control': 'no-store' }
+    });
+  }
 
   // 優先採用 IANA RDAP bootstrap，避免各註冊局更換端點後持續查詢舊網址。
   // fallback 僅在 IANA bootstrap 暫時無法取得時使用。

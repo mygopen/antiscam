@@ -3,6 +3,14 @@ const assert = require('node:assert/strict');
 
 const traceModulePromise = import('../functions/api/trace.js');
 
+test('不同 eu.cc 租戶不得被當成同一主網域', async () => {
+    const { getComparableRoot } = await traceModulePromise;
+    assert.equal(getComparableRoot('ioppk.eu.cc'), 'ioppk.eu.cc');
+    assert.equal(getComparableRoot('login.ioppk.eu.cc'), 'ioppk.eu.cc');
+    assert.equal(getComparableRoot('eukka.eu.cc'), 'eukka.eu.cc');
+    assert.notEqual(getComparableRoot('ioppk.eu.cc'), getComparableRoot('eukka.eu.cc'));
+});
+
 async function runTrace(targetUrl, fetchImpl) {
     const { onRequest } = await traceModulePromise;
     const originalFetch = globalThis.fetch;

@@ -3,7 +3,8 @@ const SECOND_LEVEL_TLDS = [
   'co.uk', 'org.uk', 'gov.uk',
   'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
   'com.hk', 'org.hk',
-  'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn'
+  'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
+  'eu.cc'
 ];
 
 function normalizeHostname(value) {
@@ -15,7 +16,7 @@ function normalizeHostname(value) {
     .replace(/^www\./, '');
 }
 
-function getRegistrableDomain(hostname) {
+export function getRegistrableDomain(hostname) {
   const parts = normalizeHostname(hostname).split('.').filter(Boolean);
   if (parts.length <= 2) return parts.join('.');
 

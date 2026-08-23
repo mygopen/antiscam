@@ -725,7 +725,8 @@ function applyTrustedCommercialWeakSignalCap({
     hasTrustedCommercialWeakSignalContext = false,
     hasCloudflarePagesDevBaselineRisk = false,
     hasNetlifyAppBaselineRisk = false,
-    hasWeeblyHostedBaselineRisk = false
+    hasWeeblyHostedBaselineRisk = false,
+    hasEuCcHostedBaselineRisk = false
 }) {
     if (
         !hasStrongRiskSignal &&
@@ -734,6 +735,7 @@ function applyTrustedCommercialWeakSignalCap({
         !hasCloudflarePagesDevBaselineRisk &&
         !hasNetlifyAppBaselineRisk &&
         !hasWeeblyHostedBaselineRisk &&
+        !hasEuCcHostedBaselineRisk &&
         riskScore >= 30 &&
         hasTrustedCommercialWeakSignalContext
     ) {
@@ -890,6 +892,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
     addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
     addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
+    addReason(checks.votePhishing?.status === 'danger', '共享子網域假投票／帳號釣魚特徵');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
     addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
@@ -1419,7 +1422,8 @@ function getDomainParts(hostname) {
         'co.uk', 'org.uk', 'gov.uk',
         'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
         'com.hk', 'org.hk',
-        'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn'
+        'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
+        'eu.cc'
     ];
     const lastTwo = parts.slice(-2).join('.');
     const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
@@ -4028,7 +4032,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260823-conditional-company-trust/);
+    assert.match(indexSource, /app\.js\?v=20260823-eucc-tenant-fix/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -6409,6 +6413,78 @@ test('人工確認高風險的 eu.cc 子網域 eukka.eu.cc 應直接升為高風
     assert.equal(matchesDomainList('fake-eukka.eu.cc', riskConfig.confirmedScamDomains), false);
     assert.equal(scanData.riskScore, 100);
     assert.deepEqual(scanData.summaryReasons, ['人工確認詐騙網域', '此 eu.cc 子網域已列入人工確認高風險清單，請勿點擊或輸入任何個資、帳密或付款資料']);
+});
+
+test('ioppk.eu.cc 假投票 LINE 帳號釣魚不得繼承 eu.cc 根網域信任', async () => {
+    const rawUrl = 'https://ioppk.eu.cc/vote';
+    const domain = new URL(rawUrl).hostname;
+    const domainParts = getDomainParts(domain);
+    const disposableRoot = analyzeDisposableRootLabel(domainParts.rootLabel);
+    const isFreeHosting = matchesDomainList(domain, riskConfig.freeHostingProviders);
+    const isConfirmedScam = matchesDomainList(domain, riskConfig.confirmedScamDomains);
+    const hasEuCcHostedBaselineRisk = domain !== 'eu.cc' && matchesDomainList(domain, ['eu.cc']);
+    const hasBlockedVoteRisk = isFreeHosting &&
+        /(?:^|\/)(?:vote|voting|poll)(?:\/|$)/i.test(new URL(rawUrl).pathname) &&
+        hasEuCcHostedBaselineRisk;
+    const scoreAfterTrustedCap = applyTrustedValidationCap({
+        riskScore: 90,
+        hasTrustedValidation: true,
+        hasFreeHostingPlatformBaselineRisk: hasEuCcHostedBaselineRisk
+    });
+    const scoreAfterCommercialCap = applyTrustedCommercialWeakSignalCap({
+        riskScore: scoreAfterTrustedCap,
+        hasTrustedCommercialWeakSignalContext: true,
+        hasEuCcHostedBaselineRisk
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : scoreAfterCommercialCap,
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: riskConfig.confirmedScamProfiles[domain].details
+            },
+            votePhishing: {
+                status: hasBlockedVoteRisk ? 'danger' : 'safe'
+            },
+            domainAnalysis: {
+                status: 'danger',
+                details: '假投票頁誘導使用者登入 LINE 帳號'
+            }
+        }
+    });
+    const { getRegistrableDomain } = await import(pathToFileURL(path.join(repoRoot, 'functions/api/tranco-rank.js')).href);
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+
+    assert.deepEqual(domainParts, {
+        subdomainLabels: [],
+        rootLabel: 'ioppk',
+        registrableDomain: 'ioppk.eu.cc'
+    });
+    assert.equal(disposableRoot.matched, true);
+    assert.equal(isFreeHosting, true);
+    assert.equal(hasEuCcHostedBaselineRisk, true);
+    assert.equal(hasBlockedVoteRisk, true);
+    assert.equal(getRegistrableDomain(domain), 'ioppk.eu.cc');
+    assert.equal(getRegistrableDomain('login.ioppk.eu.cc'), 'ioppk.eu.cc');
+    assert.equal(scoreAfterTrustedCap, 90);
+    assert.equal(scoreAfterCommercialCap, 90);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(scanData.riskScore, 100);
+    assert.ok(scanData.summaryReasons.includes('人工確認詐騙網域'));
+    assert.ok(scanData.summaryReasons.includes('共享子網域假投票／帳號釣魚特徵'));
+    assert.equal(matchesDomainList('login.ioppk.eu.cc', riskConfig.confirmedScamDomains), true);
+    assert.equal(matchesDomainList('ioppk.eu.cc.safe.example', riskConfig.confirmedScamDomains), false);
+    assert.equal(riskConfig.confirmedScamProfiles[domain].category, '假投票／LINE 帳號釣魚');
+    assert.match(appSource, /const hasEuCcHostedBaselineRisk =/);
+    assert.match(appSource, /const hasFreeHostingVotePhishingRisk =/);
+    assert.match(appSource, /const ignoreSharedTenantRegistration = isSharedEuCcTenant/);
+    assert.match(appSource, /const trancoRank = isEuCcHostedSite \? null/);
+    assert.match(appSource, /不採用 eu\.cc 母網域的註冊年齡/);
+
+    const rdapSource = fs.readFileSync(path.join(repoRoot, 'functions/api/rdap.js'), 'utf8');
+    assert.match(rdapSource, /source: 'shared-subdomain-tenant'/);
+    assert.match(rdapSource, /registrationUnavailable: true/);
+    assert.match(rdapSource, /reason: 'tenant_registration_not_available'/);
 });
 
 test('人工確認高風險的 fastgetmove H5 店鋪管理頁應直接升為高風險', () => {

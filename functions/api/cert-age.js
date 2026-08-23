@@ -11,7 +11,8 @@ function getRegisteredDomain(hostname) {
     'co.uk', 'org.uk', 'gov.uk',
     'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
     'com.hk', 'org.hk',
-    'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn'
+    'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
+    'eu.cc'
   ];
 
   const lastTwo = parts.slice(-2).join('.');

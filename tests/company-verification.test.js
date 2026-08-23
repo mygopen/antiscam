@@ -79,7 +79,7 @@ test('validates Taiwan tax IDs before querying public registries', async () => {
 });
 
 test('matches exact hosts and same company roots without suffix tricks', async () => {
-  const { compareWebsiteDomain } = await endpointModulePromise;
+  const { compareWebsiteDomain, getRegistrableDomain } = await endpointModulePromise;
   assert.deepEqual(compareWebsiteDomain('www.example.com.tw', 'https://example.com.tw/'), {
     matched: true,
     matchType: 'exact-host'
@@ -91,6 +91,8 @@ test('matches exact hosts and same company roots without suffix tricks', async (
   assert.equal(compareWebsiteDomain('example.com.tw.evil.shop', 'https://example.com.tw/').matched, false);
   assert.equal(compareWebsiteDomain('unrelated.com.au', 'https://official.com.au/').matched, false);
   assert.equal(compareWebsiteDomain('fake.kbro.com.tw', 'https://brand.kbro.com.tw/').matched, false);
+  assert.equal(compareWebsiteDomain('ioppk.eu.cc', 'https://eukka.eu.cc/').matched, false);
+  assert.equal(getRegistrableDomain('ioppk.eu.cc'), 'ioppk.eu.cc');
   assert.equal(compareWebsiteDomain('hs.kcg.gov.tw', 'http://www.vac.gov.tw/~shinhu/www/weclome.html').matched, false);
   assert.equal(compareWebsiteDomain('dept.kcg.gov.tw', 'https://www.kcg.gov.tw/').matched, true);
   assert.equal(compareWebsiteDomain('portal.ntu.edu.tw', 'https://www.nthu.edu.tw/').matched, false);

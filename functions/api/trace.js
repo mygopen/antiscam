@@ -110,13 +110,14 @@ function isSafeOutboundUrl(url) {
     !isBlockedHostname(url.hostname);
 }
 
-function getComparableRoot(hostname) {
+export function getComparableRoot(hostname) {
   const secondLevelTlds = [
     'com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'net.tw',
     'co.uk', 'org.uk', 'gov.uk',
     'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
     'com.hk', 'org.hk',
-    'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn'
+    'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
+    'eu.cc'
   ];
   const parts = String(hostname || '').toLowerCase().replace(/^www\./, '').split('.').filter(Boolean);
   if (parts.length <= 2) return parts.join('.');

@@ -16,7 +16,8 @@ const DOMAIN_SUFFIXES_WITH_SECOND_LEVEL = new Set([
     'org.tw',
     'edu.tw',
     'gov.tw',
-    'idv.tw'
+    'idv.tw',
+    'eu.cc'
 ]);
 const IGNORED_ROOT_DOMAINS = new Set([
     'fda.gov.tw',

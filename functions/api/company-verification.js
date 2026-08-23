@@ -17,12 +17,12 @@ const SECOND_LEVEL_SUFFIXES = new Set([
   'com.tw', 'org.tw', 'net.tw', 'gov.tw', 'edu.tw', 'mil.tw', 'idv.tw', 'game.tw', 'ebiz.tw', 'club.tw',
   'co.uk', 'org.uk', 'gov.uk', 'co.jp', 'ne.jp', 'or.jp', 'com.hk', 'com.cn', 'net.cn', 'org.cn',
   'com.au', 'net.au', 'org.au', 'co.nz', 'com.sg', 'com.my', 'co.kr', 'com.vn',
-  'co.in', 'com.br', 'com.mx', 'com.ph', 'com.tr', 'com.ar', 'co.za'
+  'co.in', 'com.br', 'com.mx', 'com.ph', 'com.tr', 'com.ar', 'co.za', 'eu.cc'
 ]);
 
 const SHARED_HOSTING_ROOTS = new Set([
   'kbro.com.tw', 'wixsite.com', 'weebly.com', 'wordpress.com', 'blogspot.com',
-  'shoplineapp.com', 'shopify.com', 'pages.dev', 'netlify.app', 'github.io'
+  'shoplineapp.com', 'shopify.com', 'pages.dev', 'netlify.app', 'github.io', 'eu.cc'
 ]);
 
 function cleanText(value) {
