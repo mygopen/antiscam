@@ -2636,6 +2636,7 @@ const { useState, useEffect, useRef } = React;
             const businessIdentitySignals = pageSignals.businessIdentitySignals || createEmptyPageSignals().businessIdentitySignals;
             const hasOfficialCompanyDomainMatch = !!companyVerificationData?.verified;
             const hasRegisteredBusinessIdentity = !!companyVerificationData?.registrationMatched;
+            const hasConditionalCompanyTrust = hasOfficialCompanyDomainMatch && !isWhitelisted && !isSocialMedia;
             const verifiedCompany = (companyVerificationData?.companies || [])[0] || null;
             const hasVerifiedGovernmentAgency = !!govAgencyVerificationData?.verified;
             const verifiedGovernmentAgency = (govAgencyVerificationData?.agencies || [])[0] || null;
@@ -2657,7 +2658,7 @@ const { useState, useEffect, useRef } = React;
                 cofactsRiskScore >= 60 &&
                 !cofactsRiskData?.hasConflict;
             const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
-            const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount > 0 || suspiciousDownloadPath);
+            const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount >= 2 || suspiciousDownloadPath);
             const hasSuspiciousDownloadLanding = suspiciousDownloadPath &&
                 (installKeywordCount > 0 || dynamicDownloadCount > 0 || suspiciousDownloadPathCount >= 2);
             const brandSimilarity = checkBrandSimilarity(domain, currentWhitelist);
@@ -3249,6 +3250,37 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingLineContactRisk ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform && !isTraceHighRiskSameRoot);
 
+            // 公司官網映射只抵銷弱訊號；任何明確威脅都會阻止條件式信任生效。
+            const hasConditionalCompanyTrustBlockingThreat = blocklistListedForRisk ||
+                isConfirmedScam ||
+                isManualHighRisk ||
+                hasOfficialAlert ||
+                hasStrongCofactsRisk ||
+                isGoogleFlaggedForRisk ||
+                isApkSite ||
+                isDownloadPhishingSignal ||
+                hasHighRiskRedirectTrace ||
+                hasUaCloakingRisk ||
+                hasEmailTrackingPhishingPattern ||
+                hasFinancialPhishingSignal ||
+                (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
+                hasLogisticsBrandPhishing ||
+                hasPageBrandMismatch ||
+                hasBrandSimilarity ||
+                hasHomographSignal ||
+                hasSuspiciousExternalTrustedRedirect ||
+                externalFormActionCount > 0 ||
+                hasFreeHostingSensitiveLinkRisk ||
+                hasShoppingScamSignal ||
+                hasUnverifiedCommerceRisk ||
+                hasShoppingLineContactRisk ||
+                hasRegulatedTobaccoSalesSignal ||
+                hasJobTaskScamSignal ||
+                isFakeGov ||
+                isFinalFakeGov ||
+                isFakeService;
+            const hasConditionalCompanyTrustApplied = hasConditionalCompanyTrust && !hasConditionalCompanyTrustBlockingThreat;
+
             if (!hasStrongRiskSignal && !isWhitelisted && !isSocialMedia && riskScore > 60) {
                 riskScore = 60;
             }
@@ -3299,6 +3331,10 @@ const { useState, useEffect, useRef } = React;
                 if (hasDangerDetail && riskScore < 70) riskScore = 70;
             }
 
+            if (hasConditionalCompanyTrustApplied) {
+                riskScore = Math.min(riskScore, 20);
+            }
+
             // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
             if (hasTrustedAllowlistOverride) riskScore = 0; // 修正白名單歸零邏輯
 
@@ -3319,6 +3355,7 @@ const { useState, useEffect, useRef } = React;
                                         ? `受信賴公益/宗教資訊網域：${registrableDomain}`
                                         : '受信賴的白名單網域')))));
             }
+            else if (hasConditionalCompanyTrustApplied) siteContentMsg = '公司官網映射已驗證；新網域、低流量與技術設定等弱訊號不提高風險，強威脅仍會優先攔截';
             else if (hasCrawlerBlockedTrustedContext) siteContentMsg = `頁面可能啟用 WAF/Anti-bot，已改以可信根網域 ${registrableDomain} 的排名/信任基線判斷，不因爬蟲阻擋扣為高風險`;
 
             // 決定網域特徵卡片的 UI 文字
@@ -3392,7 +3429,7 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到假求職/任務金流詐騙特徵：${jobTaskScamSignals.reasons.slice(0, 3).join('、')}。`;
                 siteContentMsg = '危險：疑似假求職、任務儲值或提領詐騙';
-            } else if (hasSuspiciousTldAdLandingRisk) {
+            } else if (hasSuspiciousTldAdLandingRisk && !hasConditionalCompanyTrustApplied) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到可疑後綴廣告落地頁：${domain} 使用較常被濫用的網域後綴，原始網址含 ${rawAdLandingParamDetails.slice(0, 4).join('、')} 等社群/廣告追蹤參數，且缺少可信白名單、商家實體或正規電商佐證。`;
                 siteContentMsg = '危險：可疑網域後綴搭配社群廣告落地頁';
@@ -3406,6 +3443,13 @@ const { useState, useEffect, useRef } = React;
             } else if (hasShoppingLineContactRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到一頁式購物/廣告落地頁要求加入 LINE 聯絡或下單，常見於詐騙導流。';
+            } else if (hasConditionalCompanyTrust && externalFormActionCount > 0) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `🚨 官網映射有效，但偵測到表單資料送往 ${externalFormActionCount} 個外部網域，因此不套用條件式信任。`;
+                siteContentMsg = '危險：表單資料送往外部網域';
+            } else if (hasConditionalCompanyTrustApplied) {
+                domainAnalysisStatus = 'safe';
+                domainAnalysisDetails = `已驗證公司官網映射：${verifiedCompany?.name || domain}；弱風險訊號已降為背景資訊，強威脅仍保留最高優先權。`;
             } else if (hasDisposableShoppingLandingRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到免洗亂碼購物落地頁：主網域「${rootLabel}」具有隨機生成特徵（${disposableRoot.reasons.slice(0, 3).join('、')}），且網址包含 ${matchedLandingParams.slice(0, 3).join('、')} 等廣告追蹤參數。`;
@@ -3560,12 +3604,12 @@ const { useState, useEffect, useRef } = React;
                 ? 'warning'
                 : (hasConfirmedSiteContentThreat
                     ? 'danger'
-                    : (isWhitelisted || siteStatusData.status === 'ok'
+                    : (isWhitelisted || hasConditionalCompanyTrustApplied || siteStatusData.status === 'ok'
                         ? 'safe'
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords || hasUaCloakingRisk || hasHighRiskRedirectTrace, riskFlags: { confirmedScamDomain: isConfirmedScam, manualHighRiskDomain: isManualHighRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, manualHighRiskDomain: isManualHighRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3700,6 +3744,20 @@ const { useState, useEffect, useRef } = React;
                         evidence: companyVerificationData?.evidence || [],
                         checkedAt: companyVerificationData?.checkedAt || null
                     },
+                    conditionalCompanyTrust: hasConditionalCompanyTrust ? {
+                        status: hasConditionalCompanyTrustApplied ? 'safe' : 'warning',
+                        label: '條件式可信名單',
+                        details: hasConditionalCompanyTrustApplied
+                            ? '官網映射有效；新網域、低流量、缺少 MX/安全標頭與命名特徵只保留為背景資訊。Google/官方警示、惡意下載、釣魚表單與異常轉址仍可翻轉為高風險。'
+                            : '官網映射有效，但偵測到強威脅，因此不套用弱訊號豁免。',
+                        conditional: true,
+                        applied: hasConditionalCompanyTrustApplied
+                    } : {
+                        hidden: true,
+                        status: 'unknown',
+                        label: '條件式可信名單',
+                        details: ''
+                    },
                     businessIdentity: {
                         status: isTrustedPaymentGatewayOrApiEndpoint ? 'safe' : (hasVerifiedBusinessEntity ? 'safe' : (businessIdentitySignals.matched ? 'info' : 'unknown')),
                         label: '商家實體一致性',
@@ -3721,38 +3779,42 @@ const { useState, useEffect, useRef } = React;
                             : lineOfficialSignals.reason
                     },
                     securityHeaders: {
-                        status: hasMissingAllSecurityHeaders ? 'danger' : (hasMissingAllSecurityHeadersRaw ? 'warning' : (securityHeadersData?.status === 'ok' ? 'safe' : 'unknown')),
+                        status: hasConditionalCompanyTrustApplied && hasMissingAllSecurityHeadersRaw ? 'info' : (hasMissingAllSecurityHeaders ? 'danger' : (hasMissingAllSecurityHeadersRaw ? 'warning' : (securityHeadersData?.status === 'ok' ? 'safe' : 'unknown'))),
                         label: 'HTTP 安全標頭',
                         details: securityHeadersData?.status === 'ok'
-                            ? (hasMissingAllSecurityHeaders
+                            ? (hasConditionalCompanyTrustApplied && hasMissingAllSecurityHeadersRaw
+                                ? '缺少部分或全部現代安全標頭；公司官網映射已驗證，本項只保留為技術背景資訊'
+                                : (hasMissingAllSecurityHeaders
                                 ? '缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭'
                                 : (hasMissingAllSecurityHeadersRaw
                                     ? '缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭；但尚未搭配其他詐騙佐證，不單獨判為高風險'
-                                    : `已檢查安全標頭${securityHeadersData.missing?.length ? `；缺少：${securityHeadersData.missing.join('、')}` : '，未發現三項皆缺失'}`))
+                                    : `已檢查安全標頭${securityHeadersData.missing?.length ? `；缺少：${securityHeadersData.missing.join('、')}` : '，未發現三項皆缺失'}`)))
                             : '無法自動檢查 HTTP 安全標頭'
                     },
                     mxRecords: {
-                        status: hasMissingMxRecords ? 'danger' : (hasMissingMxRecordsRaw ? 'warning' : (mxInfo.status === 'ok' ? 'safe' : 'unknown')),
+                        status: hasConditionalCompanyTrustApplied && hasMissingMxRecordsRaw ? 'info' : (hasMissingMxRecords ? 'danger' : (hasMissingMxRecordsRaw ? 'warning' : (mxInfo.status === 'ok' ? 'safe' : 'unknown'))),
                         label: 'MX 郵件紀錄',
-                        details: hasMissingMxRecords
+                        details: hasConditionalCompanyTrustApplied && hasMissingMxRecordsRaw
+                            ? '未偵測到可接收郵件的 MX 紀錄；公司官網映射已驗證，本項只保留為技術背景資訊'
+                            : (hasMissingMxRecords
                             ? (mxInfo.nullMx ? '網域設定 Null MX，明確表示不接收 Email' : '未偵測到 MX 郵件紀錄，可能是免洗或短期用途網域')
                             : (hasMissingMxRecordsRaw ? (mxInfo.nullMx ? '網域設定 Null MX，不接收 Email；但尚未搭配其他詐騙佐證，不單獨判為高風險' : '未偵測到 MX 郵件紀錄；但尚未搭配其他詐騙佐證，不單獨判為高風險')
                             : (mxInfo.status === 'ok' ? `已偵測到 MX 紀錄：${mxInfo.records.slice(0, 3).join('、')}` : '無法自動判定 MX 郵件紀錄')
-                            )
+                            ))
                     },
                     age: {
-                        status: isWhitelisted ? 'safe' : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
+                        status: (isWhitelisted || hasConditionalCompanyTrustApplied) ? (isWhitelisted ? 'safe' : 'info') : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
                             (hasNewOneYearRegistrationRisk ? 'warning' :
                             (domainAgeDays !== null ? (domainAgeDays < 365 ? 'warning' : 'safe') : 'unknown'))),
                         label: '註冊時間',
-                        details: isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替')),
+                        details: isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}公司官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替'))),
                         link: `https://who.is/whois/${rdapQueriedDomain}`
                     },
                     registrationPeriod: {
-                        status: hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown'),
+                        status: hasConditionalCompanyTrustApplied ? 'info' : (hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown')),
                         label: '註冊週期',
                         details: registrationPeriodDays !== null
-                            ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}`
+                            ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk && !hasConditionalCompanyTrustApplied ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項不作風險加權' : ''}`
                             : '無法自動判定註冊週期'
                     },
                     certificate: {
@@ -3762,9 +3824,9 @@ const { useState, useEffect, useRef } = React;
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : (isTrustedTaiwanRegistrar ? 'safe' : 'safe'), label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : (isTrustedTaiwanRegistrar ? `台灣常見註冊商: ${registrarName}` : `註冊商: ${registrarName}`)) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
-                    subdomain: { status: isDeepSubdomain ? (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning')) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷')) : '子網域層級正常' },
-                    subdomainPattern: { status: suspiciousSubdomain.matched ? ((isWhitelisted || isHighTraffic) ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}` : '未偵測到異常子網域命名模式' },
-                    disposableDomain: { status: hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe'), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}` : '未偵測到主網域亂碼免洗特徵' },
+                    subdomain: { status: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? 'info' : (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning'))) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? '公司官網映射已驗證，子網域深度只保留為背景資訊' : (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷'))) : '子網域層級正常' },
+                    subdomainPattern: { status: suspiciousSubdomain.matched ? ((isWhitelisted || isHighTraffic || hasConditionalCompanyTrustApplied) ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項不作風險加權' : ''}` : '未偵測到異常子網域命名模式' },
+                    disposableDomain: { status: hasConditionalCompanyTrustApplied && hasDisposableRootLabel ? 'info' : (hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe')), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項只保留為背景資訊' : ''}` : '未偵測到主網域亂碼免洗特徵' },
                     userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : 'Mobile 與 Desktop User-Agent 未發現不同最終導向' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: serverInfo?.isReal ? 'info' : (hasRootDomainTrustBaseline ? 'info' : 'unknown'), label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : (hasRootDomainTrustBaseline ? '無法識別網路來源；已由根網域信任基線補強，不作為風險加權' : '無法識別網路來源') },
@@ -3803,14 +3865,14 @@ const { useState, useEffect, useRef } = React;
                                 : '未偵測到新站模板商城與商家資訊不足的高風險組合')
                     },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
-                    shoppingLanding: { status: (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe'), label: '購物/廣告落地頁網址', details: hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數')) },
+                    shoppingLanding: { status: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? 'info' : ((hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe')), label: '購物/廣告落地頁網址', details: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? '偵測到廣告或落地頁網址特徵；公司官網映射已驗證，本項只保留為背景資訊' : (hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數'))) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
                     officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },
                     urgency: { status: hasUrgencyScamSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain) ? 'warning' : 'info') : 'safe', label: '限時/恐嚇話術', details: hasUrgencyScamSignal ? `偵測到限時、帳戶異常或立即驗證類話術：${urgencySignals.examples.slice(0, 3).join('、')}` : '未偵測到常見限時或恐嚇話術' },
                     homograph: { status: hasHomographSignal ? 'danger' : 'safe', label: '相似字元網域', details: hasHomographSignal ? '網域含 Punycode 或非 ASCII 字元，可能利用相似字元混淆官方網域' : '未偵測到 Punycode 或 Unicode 混淆網域' },
-                    params: { status: ((hasSuspiciousParams || hasNestedSuspiciousParams) && !isWhitelisted) ? 'danger' : ((hasSuspiciousParams || hasNestedSuspiciousParams) ? 'info' : 'safe'), label: '網址參數檢查', details: (hasSuspiciousParams || hasNestedSuspiciousParams) ? (isWhitelisted ? '官方白名單網域含交易/工作階段參數，視為正常站內流程' : '包含敏感參數 (token/auth/session/verify)，疑似釣魚或帳戶劫持連結') : '未發現敏感追蹤或認證參數' },
-                    entropy: { status: (isExtremeGibberish || hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk) ? 'danger' : (isHighEntropy || hasDisposableRootLabel ? 'warning' : 'safe'), label: '亂碼/隨機網址', details: hasDisposableRootLabel ? `主網域「${rootLabel}」疑似隨機生成：${disposableRoot.reasons.slice(0, 3).join('、')}` : (isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常') },
+                    params: { status: ((hasSuspiciousParams || hasNestedSuspiciousParams) && !isWhitelisted) ? (hasConditionalCompanyTrustApplied ? 'info' : 'danger') : ((hasSuspiciousParams || hasNestedSuspiciousParams) ? 'info' : 'safe'), label: '網址參數檢查', details: (hasSuspiciousParams || hasNestedSuspiciousParams) ? (isWhitelisted ? '官方白名單網域含交易/工作階段參數，視為正常站內流程' : (hasConditionalCompanyTrustApplied ? '官網映射已驗證；敏感流程參數只保留為背景資訊，仍持續檢查釣魚表單與異常轉址' : '包含敏感參數 (token/auth/session/verify)，疑似釣魚或帳戶劫持連結')) : '未發現敏感追蹤或認證參數' },
+                    entropy: { status: hasConditionalCompanyTrustApplied && (isExtremeGibberish || isHighEntropy || hasDisposableRootLabel) ? 'info' : ((isExtremeGibberish || hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk) ? 'danger' : (isHighEntropy || hasDisposableRootLabel ? 'warning' : 'safe')), label: '亂碼/隨機網址', details: hasConditionalCompanyTrustApplied && (isExtremeGibberish || isHighEntropy || hasDisposableRootLabel) ? '公司官網映射已驗證，命名與網址亂碼特徵只保留為背景資訊' : (hasDisposableRootLabel ? `主網域「${rootLabel}」疑似隨機生成：${disposableRoot.reasons.slice(0, 3).join('、')}` : (isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常')) },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
                     apkCheck: { status: isApkSite || isDownloadPhishingSignal ? 'danger' : (suspiciousDownloadPath ? 'warning' : 'safe'), label: '可疑檔案下載', details: isApkSite ? `偵測到 ${apkUrlCount} 個不明 APK 檔下載，極高風險！` : (isDownloadPhishingSignal ? `偵測到可疑下載誘導：安裝關鍵字 ${installKeywordCount} 個、動態下載特徵 ${dynamicDownloadCount} 個、可疑路徑 ${suspiciousDownloadPathCount} 個` : (suspiciousDownloadPath ? `網址路徑含可疑下載片段：${downloadSignals.suspiciousPathFragments.join('、')}` : '未偵測到可疑 Android 應用程式')) }
                 }
@@ -4145,10 +4207,38 @@ const { useState, useEffect, useRef } = React;
             return reasons.slice(0, 3);
         };
 
+        const revokeConditionalCompanyTrust = (scanData, reason = '後續掃描偵測到強威脅') => {
+            if (!scanData?.isConditionalCompanyTrust && !scanData?.conditionalCompanyTrust?.eligible) return scanData;
+
+            scanData.conditionalCompanyTrustApplied = false;
+            scanData.conditionalCompanyTrustBlocked = true;
+            scanData.risk_flag = true;
+            scanData.riskFlags = {
+                ...(scanData.riskFlags || {}),
+                conditionalCompanyTrustApplied: false,
+                conditionalCompanyTrustBlocked: true
+            };
+            scanData.conditionalCompanyTrust = {
+                ...(scanData.conditionalCompanyTrust || {}),
+                eligible: true,
+                applied: false,
+                blockedByStrongThreat: true
+            };
+            if (scanData.checks?.conditionalCompanyTrust) {
+                scanData.checks.conditionalCompanyTrust.status = 'warning';
+                scanData.checks.conditionalCompanyTrust.applied = false;
+                scanData.checks.conditionalCompanyTrust.details = `官網映射仍有效，但${reason}，已撤銷弱訊號豁免。`;
+            }
+            return scanData;
+        };
+
         const enforceFinalRiskConsistency = (scanData) => {
             if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed || scanData.isTrustedAllowlist) return scanData;
 
             const reasons = getHighRiskSummaryReasons(scanData);
+            if (scanData.conditionalCompanyTrustApplied && reasons.length > 0) {
+                revokeConditionalCompanyTrust(scanData, '後續掃描偵測到強威脅');
+            }
             if (reasons.length > 0 && scanData.riskScore < 70) {
                 scanData.riskScore = 70;
             }
@@ -4473,6 +4563,7 @@ const { useState, useEffect, useRef } = React;
 
                 if (!skipAiBrandAnalysis && brandDataRes && (brandDataRes.isGenericScam || brandDataRes.isFakeBrand)) {
                     scanData.riskScore = 100;
+                    revokeConditionalCompanyTrust(scanData, 'AI 內容分析偵測到詐騙或品牌冒用');
                 }
 
                 const reply = buildBotScanReply(scanData, brandDataRes, contextText);

@@ -742,6 +742,23 @@ function applyTrustedCommercialWeakSignalCap({
     return riskScore;
 }
 
+function applyConditionalCompanyTrust({
+    riskScore,
+    hasOfficialCompanyDomainMatch = false,
+    blockingThreats = {}
+}) {
+    const eligible = hasOfficialCompanyDomainMatch;
+    const blockedByStrongThreat = eligible && Object.values(blockingThreats).some(Boolean);
+    const applied = eligible && !blockedByStrongThreat;
+
+    return {
+        riskScore: applied ? Math.min(riskScore, 20) : riskScore,
+        eligible,
+        applied,
+        blockedByStrongThreat
+    };
+}
+
 function getParamsCheckStatus({ hasSuspiciousParams = false, hasNestedSuspiciousParams = false, isWhitelisted = false }) {
     if ((hasSuspiciousParams || hasNestedSuspiciousParams) && !isWhitelisted) return 'danger';
     if (hasSuspiciousParams || hasNestedSuspiciousParams) return 'info';
@@ -877,6 +894,8 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
     addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
     addReason(checks.unverifiedCommerce?.status === 'danger', '新註冊模板商城缺少可驗證商家資訊');
+    addReason(checks.lineContact?.status === 'danger', '要求加入 LINE 聯絡/下單');
+    addReason(checks.shoppingLanding?.status === 'danger', '可疑購物/廣告落地頁網址');
     addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
     addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
     addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
@@ -895,6 +914,20 @@ function enforceFinalRiskConsistency(scanData) {
     if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed || scanData.isTrustedAllowlist) return scanData;
 
     const reasons = getHighRiskSummaryReasons(scanData);
+    if (scanData.conditionalCompanyTrustApplied && reasons.length > 0) {
+        scanData.conditionalCompanyTrustApplied = false;
+        scanData.conditionalCompanyTrustBlocked = true;
+        scanData.conditionalCompanyTrust = {
+            ...(scanData.conditionalCompanyTrust || {}),
+            eligible: true,
+            applied: false,
+            blockedByStrongThreat: true
+        };
+        if (scanData.checks?.conditionalCompanyTrust) {
+            scanData.checks.conditionalCompanyTrust.status = 'warning';
+            scanData.checks.conditionalCompanyTrust.applied = false;
+        }
+    }
     if (reasons.length > 0 && scanData.riskScore < 70) {
         scanData.riskScore = 70;
     }
@@ -1724,7 +1757,7 @@ function isDownloadPhishingSignal(signals) {
     const hasInstallKeywordSignal = signals.installKeywordCount >= 2 ||
         (signals.installKeywordCount > 0 && signals.suspiciousPath);
     const hasDynamicDownloadSignal = signals.dynamicDownloadCount >= 2 &&
-        (signals.installKeywordCount > 0 || signals.suspiciousPath);
+        (signals.installKeywordCount >= 2 || signals.suspiciousPath);
     const hasSuspiciousDownloadLanding = signals.suspiciousPath &&
         (signals.installKeywordCount > 0 || signals.dynamicDownloadCount > 0 || signals.suspiciousPathFragments.length >= 2);
     return signals.apkUrlCount === 0 &&
@@ -3995,7 +4028,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260823-whatsub-trust-v2/);
+    assert.match(indexSource, /app\.js\?v=20260823-conditional-company-trust/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -4310,6 +4343,18 @@ test('APK 與下載誘導訊號會抓到明確與動態下載', () => {
     assert.equal(dynamicDownload.installKeywordCount >= 1, true);
     assert.equal(dynamicDownload.dynamicDownloadCount >= 2, true);
     assert.equal(isDownloadPhishingSignal(dynamicDownload), true);
+});
+
+test('正常影片匯出流程不應因單一安裝文字與前端下載 API 誤判', () => {
+    const browserExport = analyzeDownloadSignals({
+        url: 'https://whatsub.equal2.app/',
+        html: '<p>不用下載安裝軟體</p><script>const a = document.createElement("a"); a.download = fileName; a.click(); fetch("/api/export")</script>'
+    });
+
+    assert.equal(browserExport.suspiciousPath, false);
+    assert.equal(browserExport.installKeywordCount, 1);
+    assert.equal(browserExport.dynamicDownloadCount >= 2, true);
+    assert.equal(isDownloadPhishingSignal(browserExport), false);
 });
 
 test('一般 index.html 不應只因路徑被判成下載釣魚', () => {
@@ -5030,37 +5075,54 @@ test('新竹杰克行李箱維修工作室官方網站不應因在地維修服�
         text: '<title>杰克行李箱維修工作室 新竹限時維修優惠</title>'
     });
     const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
-    const override = applyTrustedAllowlistRiskOverride({
-        hostname: parsed.hostname,
-        whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
-        initialRiskScore: 95
+    const conditionalTrust = applyConditionalCompanyTrust({
+        riskScore: shoppingSignals.matched ? 75 : 25,
+        hasOfficialCompanyDomainMatch: true
+    });
+    const blockedConditionalTrust = applyConditionalCompanyTrust({
+        riskScore: 100,
+        hasOfficialCompanyDomainMatch: true,
+        blockingThreats: { googleUnsafe: true }
     });
     const scanData = enforceFinalRiskConsistency({
-        riskScore: isWhitelisted ? 0 : (shoppingSignals.matched ? 75 : 25),
-        isTrustedAllowlist: isWhitelisted,
+        riskScore: conditionalTrust.riskScore,
+        isConditionalCompanyTrust: true,
+        conditionalCompanyTrustApplied: conditionalTrust.applied,
+        conditionalCompanyTrust: conditionalTrust,
         checks: {
             shoppingScam: { status: shoppingSignals.matched ? 'danger' : 'info' },
             ecommerceValidation: { status: ecommerceSignals.matched ? 'safe' : 'unknown' },
             domainAnalysis: {
-                status: isWhitelisted ? 'safe' : 'warning',
-                details: isWhitelisted ? '受信賴新竹在地行李箱維修工作室官方網域：jack-hsinchu.com' : '網域命名結構無明顯異常'
+                status: 'safe',
+                details: '已驗證公司官網映射：杰克行李箱維修工作室'
             },
-            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' }
+            params: { status: sanitized.removedTrackingParams.length ? 'info' : 'safe' },
+            age: { status: 'info' },
+            conditionalCompanyTrust: { status: 'safe', applied: true }
+        }
+    });
+    const strongThreatScanData = enforceFinalRiskConsistency({
+        riskScore: 20,
+        isConditionalCompanyTrust: true,
+        conditionalCompanyTrustApplied: true,
+        conditionalCompanyTrust: { eligible: true, applied: true, blockedByStrongThreat: false },
+        checks: {
+            googleSafeBrowsing: { status: 'danger' },
+            conditionalCompanyTrust: { status: 'safe', applied: true }
         }
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const companyMappingSource = fs.readFileSync(path.join(repoRoot, 'functions/api/trusted-company-domain-mappings.js'), 'utf8');
 
     assert.equal(sanitized.href, 'https://www.jack-hsinchu.com/');
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
-    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('jack-hsinchu.com'));
-    assert.equal(matchesDomainList(parsed.hostname, whitelist), true);
-    assert.equal(matchesDomainList('jack-hsinchu.com', whitelist), true);
-    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
-    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
-    assert.equal(isVerifiedSafeRootDomain('jack-hsinchu.com', []), true);
-    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(riskConfig.trustedTaiwanServiceDomains.includes('jack-hsinchu.com'), false);
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), false);
+    assert.equal(matchesDomainList('jack-hsinchu.com', whitelist), false);
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), false);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), false);
+    assert.equal(isVerifiedSafeRootDomain('jack-hsinchu.com', []), false);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), false);
     assert.equal(shoppingSignals.matched, false);
     assert.equal(ecommerceSignals.matched, false);
     assert.equal(pageBrandSignals.matched, false);
@@ -5068,14 +5130,21 @@ test('新竹杰克行李箱維修工作室官方網站不應因在地維修服�
     assert.equal(fakeJack.matched, true);
     assert.equal(fakeJack.brandName, '杰克行李箱維修工作室');
     assert.equal(fakePageBrandSignals.matched, true);
-    assert.equal(override.hasTrustedAllowlistOverride, true);
-    assert.equal(override.blocklistListedForRisk, false);
-    assert.equal(override.googleFlaggedForRisk, false);
-    assert.equal(override.riskScore, 0);
-    assert.equal(scanData.riskScore, 0);
-    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(conditionalTrust.eligible, true);
+    assert.equal(conditionalTrust.applied, true);
+    assert.equal(scanData.riskScore, 20);
+    assert.deepEqual(scanData.summaryReasons, []);
+    assert.equal(blockedConditionalTrust.applied, false);
+    assert.equal(blockedConditionalTrust.blockedByStrongThreat, true);
+    assert.equal(blockedConditionalTrust.riskScore, 100);
+    assert.equal(strongThreatScanData.riskScore, 70);
+    assert.equal(strongThreatScanData.conditionalCompanyTrustApplied, false);
+    assert.equal(strongThreatScanData.conditionalCompanyTrustBlocked, true);
+    assert.equal(strongThreatScanData.checks.conditionalCompanyTrust.status, 'warning');
     assert.equal(isVerifiedSafeRootDomain('jack-hsinchu.com.evil.shop', []), false);
     assert.equal(isVerifiedSafeRootDomain('fake-jack-hsinchu.com', []), false);
+    assert.match(companyMappingSource, /domains: \['jack-hsinchu\.com'\]/);
+    assert.match(companyMappingSource, /taxIds: \['85422023'\]/);
     assert.match(brandApiSource, /"杰克行李箱維修工作室": \["jack-hsinchu\.com"\]/);
     assert.match(brandApiSource, /"jack-hsinchu": \["jack-hsinchu\.com"\]/);
 });
@@ -6719,38 +6788,90 @@ test("What'Sub 官方網站不應因新 .app 網域、數字品牌名或 Apple �
         </html>`;
     const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
     const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: html });
-    const override = applyTrustedAllowlistRiskOverride({
-        hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
-        initialRiskScore: 95
+    const conditionalTrust = applyConditionalCompanyTrust({
+        riskScore: 85,
+        hasOfficialCompanyDomainMatch: true
     });
     const scanData = enforceFinalRiskConsistency({
-        riskScore: override.riskScore,
-        isTrustedAllowlist: override.hasTrustedAllowlistOverride,
+        riskScore: conditionalTrust.riskScore,
+        isConditionalCompanyTrust: true,
+        conditionalCompanyTrustApplied: conditionalTrust.applied,
+        conditionalCompanyTrust: conditionalTrust,
         checks: {
-            domainAnalysis: { status: 'safe', details: '受信賴台灣民營服務官方網域' },
+            domainAnalysis: { status: 'safe', details: '已驗證公司官網映射：等於貳有限公司' },
             pageBrand: { status: pageBrandSignals.matched ? 'danger' : 'safe' },
-            age: { status: isWhitelisted ? 'safe' : 'warning' }
+            age: { status: 'info' },
+            securityHeaders: { status: 'info' },
+            mxRecords: { status: 'info' },
+            conditionalCompanyTrust: { status: 'safe', applied: true }
         }
     });
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const companyMappingSource = fs.readFileSync(path.join(repoRoot, 'functions/api/trusted-company-domain-mappings.js'), 'utf8');
 
-    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes('equal2.app'));
+    assert.equal(riskConfig.trustedTaiwanServiceDomains.includes('equal2.app'), false);
     assert.equal(riskConfig.companyVerificationVersion, '2026-08-23-1');
     assert.equal(sanitized.href, 'https://whatsub.equal2.app/');
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_source'].sort());
-    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), true);
-    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), true);
-    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), true);
+    assert.equal(isWhitelisted, false);
+    assert.equal(isTrustedTaiwanServiceDomain(parsed.hostname), false);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, []), false);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, []), false);
     assert.equal(pageBrandSignals.matched, false);
-    assert.equal(override.hasTrustedAllowlistOverride, true);
-    assert.equal(override.blocklistListedForRisk, false);
-    assert.equal(override.googleFlaggedForRisk, false);
-    assert.equal(scanData.riskScore, 0);
-    assert.equal(scanData.summaryReasons, undefined);
+    assert.equal(conditionalTrust.eligible, true);
+    assert.equal(conditionalTrust.applied, true);
+    assert.equal(scanData.riskScore, 20);
+    assert.deepEqual(scanData.summaryReasons, []);
     assert.equal(isVerifiedSafeRootDomain('equal2.app.evil.shop', []), false);
     assert.equal(isVerifiedSafeRootDomain('fake-equal2.app', []), false);
-    assert.match(fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8'), /params\.set\('trustedMapVersion', String\(RISK_CONFIG\.companyVerificationVersion/);
+    assert.match(companyMappingSource, /domains: \['whatsub\.equal2\.app'\]/);
+    assert.match(companyMappingSource, /taxIds: \['90888561'\]/);
+    assert.match(appSource, /params\.set\('trustedMapVersion', String\(RISK_CONFIG\.companyVerificationVersion/);
+    assert.match(appSource, /const hasConditionalCompanyTrustBlockingThreat =/);
+    assert.match(appSource, /riskScore = Math\.min\(riskScore, 20\)/);
+    assert.match(appSource, /revokeConditionalCompanyTrust\(scanData/);
+});
+
+test('公司官網映射只能抵銷弱訊號，所有強威脅都必須阻止條件式信任', () => {
+    const weakOnly = applyConditionalCompanyTrust({
+        riskScore: 95,
+        hasOfficialCompanyDomainMatch: true,
+        blockingThreats: {
+            newDomain: false,
+            lowTraffic: false,
+            missingMx: false,
+            missingSecurityHeaders: false,
+            suspiciousNaming: false
+        }
+    });
+    assert.deepEqual(weakOnly, {
+        riskScore: 20,
+        eligible: true,
+        applied: true,
+        blockedByStrongThreat: false
+    });
+
+    const strongThreatNames = [
+        'googleUnsafe',
+        'officialAlert',
+        'confirmedScam',
+        'maliciousDownload',
+        'externalFormAction',
+        'highRiskRedirect',
+        'uaCloaking',
+        'brandImpersonation',
+        'shoppingScam'
+    ];
+    strongThreatNames.forEach(threatName => {
+        const result = applyConditionalCompanyTrust({
+            riskScore: 95,
+            hasOfficialCompanyDomainMatch: true,
+            blockingThreats: { [threatName]: true }
+        });
+        assert.equal(result.applied, false, threatName);
+        assert.equal(result.blockedByStrongThreat, true, threatName);
+        assert.equal(result.riskScore, 95, threatName);
+    });
 });
 
 test('檢舉通報功能已從首頁、截圖與聊天小幫手完整移除', () => {
