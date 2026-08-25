@@ -62,6 +62,7 @@ window.RISK_CONFIG = {
         'wavesvote.netlify.app',
         'eukka.eu.cc',
         'ioppk.eu.cc',
+        'shopeetwxiapi.github.io',
         'jsizg.com',
         'kackofworc.com',
         'chesapeakeexpo.com',
@@ -74,6 +75,10 @@ window.RISK_CONFIG = {
         'ioppk.eu.cc': {
             category: '假投票／LINE 帳號釣魚',
             details: '此網域已確認以假投票頁誘導使用者提供或登入 LINE 帳號，屬帳號竊取型釣魚網站。'
+        },
+        'shopeetwxiapi.github.io': {
+            category: '蝦皮品牌冒用／帳號與交易釣魚',
+            details: '此 GitHub Pages 租戶已確認冒用蝦皮購物品牌從事釣魚；即使目前頁面已下架、回傳 404 或無法存取，仍保留歷史詐騙判定。'
         }
     },
     globalPaymentGatewayDomains: [
@@ -260,6 +265,7 @@ window.RISK_CONFIG = {
         { name: '統一超商', keywords: ['711', 'seven', 'myship'], domains: ['7-11.com.tw', 'myship.7-11.com.tw'] },
         { name: '全家便利商店', keywords: ['family', 'familymart', 'famiport'], domains: ['family.com.tw', 'famiport.com.tw', 'famistore.com.tw'] },
         { name: '家樂福', keywords: ['carrefour', 'uni-prosperity', 'uniprosperity'], domains: ['carrefour.com.tw', 'uni-prosperity.com.tw'] },
+        { name: '蝦皮購物', keywords: ['shopee', 'shopeetw'], domains: ['shopee.tw', 'shopee.com', 'shp.ee'] },
         { name: '財政部電子發票', keywords: ['einvoice', 'invoicenat', 'einvoicenat'], domains: ['einvoice.nat.gov.tw', 'invoice.etax.nat.gov.tw', 'etax.nat.gov.tw', 'mof.gov.tw'] },
         { name: '紅陽科技', keywords: ['sunpay', '紅陽科技', '紅陽支付'], domains: ['sunpay.com.tw'] },
         { name: '台灣電力公司', keywords: ['taipower', 'taiwanpower'], domains: ['taipower.com.tw'] },

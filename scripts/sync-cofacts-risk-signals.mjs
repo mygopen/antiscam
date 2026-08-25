@@ -10,7 +10,7 @@ const REQUEST_TIMEOUT_MS = 25000;
 const MAX_RETRIES = 2;
 const PAGE_SIZE = 100;
 const ATTRIBUTION = '本編輯資料取自「Cofacts 真的假的」訊息回報機器人與查證協作社群，採 CC BY-SA 4.0 授權提供。';
-const SECOND_LEVEL_SUFFIXES = new Set(['com.tw', 'net.tw', 'org.tw', 'edu.tw', 'gov.tw', 'idv.tw', 'eu.cc']);
+const SECOND_LEVEL_SUFFIXES = new Set(['com.tw', 'net.tw', 'org.tw', 'edu.tw', 'gov.tw', 'idv.tw', 'eu.cc', 'github.io']);
 const SHARED_OR_REDIRECT_ROOTS = new Set([
     'bit.ly', 'cutt.ly', 'goo.gl', 'is.gd', 'lihi.cc', 'reurl.cc', 'shorturl.at', 'tinyurl.com',
     'blogspot.com', 'canva.site', 'firebaseapp.com', 'github.io', 'netlify.app', 'notion.site',

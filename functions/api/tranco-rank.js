@@ -4,7 +4,7 @@ const SECOND_LEVEL_TLDS = [
   'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
   'com.hk', 'org.hk',
   'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
-  'eu.cc'
+  'eu.cc', 'github.io'
 ];
 
 function normalizeHostname(value) {

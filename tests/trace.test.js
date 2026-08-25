@@ -9,6 +9,9 @@ test('不同 eu.cc 租戶不得被當成同一主網域', async () => {
     assert.equal(getComparableRoot('login.ioppk.eu.cc'), 'ioppk.eu.cc');
     assert.equal(getComparableRoot('eukka.eu.cc'), 'eukka.eu.cc');
     assert.notEqual(getComparableRoot('ioppk.eu.cc'), getComparableRoot('eukka.eu.cc'));
+    assert.equal(getComparableRoot('shopeetwxiapi.github.io'), 'shopeetwxiapi.github.io');
+    assert.equal(getComparableRoot('login.shopeetwxiapi.github.io'), 'shopeetwxiapi.github.io');
+    assert.notEqual(getComparableRoot('shopeetwxiapi.github.io'), getComparableRoot('open-source-notes.github.io'));
 });
 
 async function runTrace(targetUrl, fetchImpl) {

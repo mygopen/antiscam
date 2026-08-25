@@ -4,7 +4,7 @@ const DGPA_ORG_LIST_DATASET_URL = 'https://data.gov.tw/dataset/7307';
 const SECOND_LEVEL_SUFFIXES = new Set([
   'com.tw', 'org.tw', 'net.tw', 'gov.tw', 'edu.tw', 'mil.tw', 'idv.tw', 'game.tw', 'ebiz.tw', 'club.tw',
   'co.uk', 'org.uk', 'gov.uk', 'co.jp', 'ne.jp', 'or.jp', 'com.hk', 'com.cn', 'net.cn', 'org.cn',
-  'com.au', 'net.au', 'org.au', 'co.nz', 'com.sg', 'com.my', 'co.kr', 'com.vn', 'eu.cc'
+  'com.au', 'net.au', 'org.au', 'co.nz', 'com.sg', 'com.my', 'co.kr', 'com.vn', 'eu.cc', 'github.io'
 ]);
 
 const TAIWAN_GOV_ROOT_AGENCY_NAMES = {

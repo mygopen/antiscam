@@ -93,6 +93,8 @@ test('matches exact hosts and same company roots without suffix tricks', async (
   assert.equal(compareWebsiteDomain('fake.kbro.com.tw', 'https://brand.kbro.com.tw/').matched, false);
   assert.equal(compareWebsiteDomain('ioppk.eu.cc', 'https://eukka.eu.cc/').matched, false);
   assert.equal(getRegistrableDomain('ioppk.eu.cc'), 'ioppk.eu.cc');
+  assert.equal(compareWebsiteDomain('shopeetwxiapi.github.io', 'https://open-source-notes.github.io/').matched, false);
+  assert.equal(getRegistrableDomain('shopeetwxiapi.github.io'), 'shopeetwxiapi.github.io');
   assert.equal(compareWebsiteDomain('hs.kcg.gov.tw', 'http://www.vac.gov.tw/~shinhu/www/weclome.html').matched, false);
   assert.equal(compareWebsiteDomain('dept.kcg.gov.tw', 'https://www.kcg.gov.tw/').matched, true);
   assert.equal(compareWebsiteDomain('portal.ntu.edu.tw', 'https://www.nthu.edu.tw/').matched, false);

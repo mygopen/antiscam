@@ -34,6 +34,11 @@ function isNetlifyAppHostname(hostname) {
     return cleanHostname !== 'netlify.app' && matchesDomainList(cleanHostname, ['netlify.app']);
 }
 
+function isGithubPagesHostname(hostname) {
+    const cleanHostname = normalizeInputHostname(hostname).replace(/^www\./, '');
+    return cleanHostname !== 'github.io' && matchesDomainList(cleanHostname, ['github.io']);
+}
+
 function hasGeneratedNetlifySubdomain(hostname) {
     if (!isNetlifyAppHostname(hostname)) return false;
     const projectLabel = normalizeInputHostname(hostname).split('.')[0] || '';
@@ -726,7 +731,8 @@ function applyTrustedCommercialWeakSignalCap({
     hasCloudflarePagesDevBaselineRisk = false,
     hasNetlifyAppBaselineRisk = false,
     hasWeeblyHostedBaselineRisk = false,
-    hasEuCcHostedBaselineRisk = false
+    hasEuCcHostedBaselineRisk = false,
+    hasGithubPagesBaselineRisk = false
 }) {
     if (
         !hasStrongRiskSignal &&
@@ -736,6 +742,7 @@ function applyTrustedCommercialWeakSignalCap({
         !hasNetlifyAppBaselineRisk &&
         !hasWeeblyHostedBaselineRisk &&
         !hasEuCcHostedBaselineRisk &&
+        !hasGithubPagesBaselineRisk &&
         riskScore >= 30 &&
         hasTrustedCommercialWeakSignalContext
     ) {
@@ -893,6 +900,7 @@ function getHighRiskSummaryReasons(scanData) {
     addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
     addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
     addReason(checks.votePhishing?.status === 'danger', '共享子網域假投票／帳號釣魚特徵');
+    addReason(checks.githubPagesBrand?.status === 'danger', 'GitHub Pages 租戶疑似冒用知名品牌');
     addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
     addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
     addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
@@ -1423,7 +1431,7 @@ function getDomainParts(hostname) {
         'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
         'com.hk', 'org.hk',
         'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
-        'eu.cc'
+        'eu.cc', 'github.io'
     ];
     const lastTwo = parts.slice(-2).join('.');
     const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
@@ -4032,7 +4040,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260823-eucc-tenant-fix/);
+    assert.match(indexSource, /app\.js\?v=20260825-github-pages-brand/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -6222,6 +6230,7 @@ test('公平會同步腳本可解析行政決定列表並產生可查詢網域�
         'promo.example-shop.com.tw',
     ]);
     assert.equal(syncModule.toRootDomain('promo.example-shop.com.tw'), 'example-shop.com.tw');
+    assert.equal(syncModule.toRootDomain('shopeetwxiapi.github.io'), 'shopeetwxiapi.github.io');
     assert.equal(records.length, 1);
     assert.equal(records[0].source, '中華民國公平交易委員會');
     assert.equal(records[0].rootDomain, 'example-shop.com.tw');
@@ -6266,6 +6275,7 @@ test('食藥署膨風廣告同步腳本可抽出涉嫌違規網址並產生官�
         'https://bad-health.example.tw/sale?a=1'
     ]);
     assert.equal(syncModule.toRootDomain('bad-health.example.tw'), 'example.tw');
+    assert.equal(syncModule.toRootDomain('shopeetwxiapi.github.io'), 'shopeetwxiapi.github.io');
     assert.equal(records.length, 1);
     assert.equal(records[0].source, '衛生福利部食品藥物管理署');
     assert.equal(records[0].category, '涉嫌違規廣告產品');
@@ -6478,13 +6488,88 @@ test('ioppk.eu.cc 假投票 LINE 帳號釣魚不得繼承 eu.cc 根網域信任'
     assert.match(appSource, /const hasEuCcHostedBaselineRisk =/);
     assert.match(appSource, /const hasFreeHostingVotePhishingRisk =/);
     assert.match(appSource, /const ignoreSharedTenantRegistration = isSharedEuCcTenant/);
-    assert.match(appSource, /const trancoRank = isEuCcHostedSite \? null/);
+    assert.match(appSource, /const trancoRank = blocksSharedProviderTrust \? null/);
     assert.match(appSource, /不採用 eu\.cc 母網域的註冊年齡/);
 
     const rdapSource = fs.readFileSync(path.join(repoRoot, 'functions/api/rdap.js'), 'utf8');
     assert.match(rdapSource, /source: 'shared-subdomain-tenant'/);
     assert.match(rdapSource, /registrationUnavailable: true/);
     assert.match(rdapSource, /reason: 'tenant_registration_not_available'/);
+});
+
+test('GitHub Pages 蝦皮冒用租戶應保留歷史詐騙判定並隔離母網域信任', async () => {
+    const domain = 'shopeetwxiapi.github.io';
+    const genericBrandDomain = 'shopee-login.github.io';
+    const benignDomain = 'open-source-notes.github.io';
+    const domainParts = getDomainParts(domain);
+    const brandSimilarity = checkBrandSimilarity(domain);
+    const genericBrandSimilarity = checkBrandSimilarity(genericBrandDomain);
+    const benignBrandSimilarity = checkBrandSimilarity(benignDomain);
+    const officialBrandSimilarity = checkBrandSimilarity('shopee.tw');
+    const isConfirmedScam = matchesDomainList(domain, riskConfig.confirmedScamDomains);
+    const isFreeHosting = matchesDomainList(domain, riskConfig.freeHostingProviders);
+    const hasGithubPagesBrandRisk = isGithubPagesHostname(domain) && brandSimilarity.matched;
+    const hasGenericGithubPagesBrandRisk = isGithubPagesHostname(genericBrandDomain) && genericBrandSimilarity.matched;
+    const baselineScoreAfterWeakCap = applyTrustedCommercialWeakSignalCap({
+        riskScore: 30,
+        hasTrustedCommercialWeakSignalContext: true,
+        hasGithubPagesBaselineRisk: isGithubPagesHostname(benignDomain)
+    });
+    const confirmedScanData = enforceFinalRiskConsistency({
+        riskScore: isConfirmedScam ? 100 : 0,
+        checks: {
+            confirmedScam: {
+                status: isConfirmedScam ? 'danger' : 'safe',
+                details: riskConfig.confirmedScamProfiles[domain].details
+            },
+            githubPagesBrand: {
+                status: hasGithubPagesBrandRisk ? 'danger' : 'safe'
+            },
+            brandSimilarity: {
+                status: brandSimilarity.matched ? 'danger' : 'safe'
+            },
+            domainAnalysis: {
+                status: 'danger',
+                details: 'GitHub Pages 租戶冒用蝦皮購物品牌'
+            }
+        },
+        details: { siteStatus: { status: 'error', httpCode: 404 } }
+    });
+    const genericBrandScore = hasGenericGithubPagesBrandRisk ? 95 : 0;
+    const { getRegistrableDomain } = await import(pathToFileURL(path.join(repoRoot, 'functions/api/tranco-rank.js')).href);
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const rdapSource = fs.readFileSync(path.join(repoRoot, 'functions/api/rdap.js'), 'utf8');
+
+    assert.deepEqual(domainParts, {
+        subdomainLabels: [],
+        rootLabel: 'shopeetwxiapi',
+        registrableDomain: domain
+    });
+    assert.equal(getRegistrableDomain(domain), domain);
+    assert.equal(getRegistrableDomain(`login.${domain}`), domain);
+    assert.equal(isGithubPagesHostname(domain), true);
+    assert.equal(isGithubPagesHostname('github.io'), false);
+    assert.equal(isFreeHosting, true);
+    assert.equal(brandSimilarity.matched, true);
+    assert.equal(brandSimilarity.brandName, '蝦皮購物');
+    assert.equal(genericBrandSimilarity.matched, true);
+    assert.equal(benignBrandSimilarity.matched, false);
+    assert.equal(officialBrandSimilarity.matched, false);
+    assert.equal(hasGithubPagesBrandRisk, true);
+    assert.equal(genericBrandScore, 95);
+    assert.equal(baselineScoreAfterWeakCap, 30);
+    assert.equal(isConfirmedScam, true);
+    assert.equal(matchesDomainList(benignDomain, riskConfig.confirmedScamDomains), false);
+    assert.equal(matchesDomainList(`${domain}.safe.example`, riskConfig.confirmedScamDomains), false);
+    assert.equal(confirmedScanData.riskScore, 100);
+    assert.ok(confirmedScanData.summaryReasons.includes('人工確認詐騙網域'));
+    assert.ok(confirmedScanData.summaryReasons.includes('GitHub Pages 租戶疑似冒用知名品牌'));
+    assert.match(riskConfig.confirmedScamProfiles[domain].details, /404/);
+    assert.match(appSource, /const hasGithubPagesBrandImpersonationRisk =/);
+    assert.match(appSource, /riskScore = 95/);
+    assert.match(appSource, /不採用母網域註冊年齡/);
+    assert.match(rdapSource, /'eu\.cc', 'github\.io'/);
+    assert.match(rdapSource, /registrationUnavailable: true/);
 });
 
 test('人工確認高風險的 fastgetmove H5 店鋪管理頁應直接升為高風險', () => {

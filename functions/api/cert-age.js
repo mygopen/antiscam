@@ -12,7 +12,7 @@ function getRegisteredDomain(hostname) {
     'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
     'com.hk', 'org.hk',
     'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
-    'eu.cc'
+    'eu.cc', 'github.io'
   ];
 
   const lastTwo = parts.slice(-2).join('.');

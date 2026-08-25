@@ -1,6 +1,6 @@
 import { connect } from 'cloudflare:sockets';
 
-const SHARED_SUBDOMAIN_SUFFIXES = ['eu.cc'];
+const SHARED_SUBDOMAIN_SUFFIXES = ['eu.cc', 'github.io'];
 
 function isSharedSubdomainTenant(hostname) {
   const domain = String(hostname || '').trim().toLowerCase().replace(/^www\./, '');
@@ -18,7 +18,7 @@ function getRegisteredDomain(hostname) {
     "co.jp", "ne.jp", "ac.jp", "go.jp",
     "com.hk", "org.hk",
     "com.cn", "org.cn", "gov.cn", "net.cn", "ac.cn",
-    "eu.cc"
+    "eu.cc", "github.io"
   ];
 
   const lastTwo = parts.slice(-2).join('.');
@@ -494,8 +494,8 @@ export async function onRequest(context) {
   const rootDomain = getRegisteredDomain(domain);
   const tld = rootDomain.split('.').pop();
 
-  // eu.cc tenants are delegated below the registry-visible eu.cc domain. RDAP/WHOIS
-  // lookups therefore return the provider's metadata, not the tenant's registration.
+  // Shared-host tenants are delegated below the registry-visible provider domain.
+  // RDAP/WHOIS therefore describes the provider, not the individual tenant.
   if (isSharedSubdomainTenant(rootDomain)) {
     return jsonResponse({
       events: [],

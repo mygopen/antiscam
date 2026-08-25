@@ -343,6 +343,11 @@ const { useState, useEffect, useRef } = React;
             return cleanHostname !== 'netlify.app' && isSameRootDomain(cleanHostname, 'netlify.app');
         };
 
+        const isGithubPagesHostname = (hostname) => {
+            const cleanHostname = normalizeHostname(hostname);
+            return cleanHostname !== 'github.io' && isSameRootDomain(cleanHostname, 'github.io');
+        };
+
         const hasGeneratedNetlifySubdomain = (hostname) => {
             if (!isNetlifyAppHostname(hostname)) return false;
             const projectLabel = normalizeHostname(hostname).split('.')[0] || '';
@@ -622,7 +627,7 @@ const { useState, useEffect, useRef } = React;
                 'co.jp', 'ne.jp', 'ac.jp', 'go.jp',
                 'com.hk', 'org.hk',
                 'com.cn', 'org.cn', 'gov.cn', 'net.cn', 'ac.cn',
-                'eu.cc'
+                'eu.cc', 'github.io'
             ];
             const lastTwo = parts.slice(-2).join('.');
             const registeredSize = secondLevelTLDs.includes(lastTwo) ? 3 : 2;
@@ -2367,7 +2372,8 @@ const { useState, useEffect, useRef } = React;
             // TLS 憑證會定期續發，核發日不能代表網域註冊日。
             // 註冊年齡只接受 RDAP/WHOIS 明確的 registration/creation 日期。
             const isSharedEuCcTenant = domain !== 'eu.cc' && domain.endsWith('.eu.cc');
-            const ignoreSharedTenantRegistration = isSharedEuCcTenant || !!rdapData.registrationUnavailable;
+            const isSharedGithubPagesTenant = isGithubPagesHostname(domain);
+            const ignoreSharedTenantRegistration = isSharedEuCcTenant || isSharedGithubPagesTenant || !!rdapData.registrationUnavailable;
             const rdapDate = ignoreSharedTenantRegistration ? null : (rdapData.date || null);
             const rdapExpirationDate = ignoreSharedTenantRegistration ? null : (rdapData.expirationDate || null);
             const privacyDetected = ignoreSharedTenantRegistration ? false : rdapData.privacyDetected;
@@ -2407,9 +2413,11 @@ const { useState, useEffect, useRef } = React;
             const isNetlifyApp = isNetlifyAppHostname(domain);
             const isWeeblyHostedSite = domain !== 'weebly.com' && isSameRootDomain(domain, 'weebly.com');
             const isEuCcHostedSite = isSharedEuCcTenant;
-            const trancoRank = isEuCcHostedSite ? null : (trancoData?.rank || null);
-            const trancoStatus = isEuCcHostedSite ? 'unranked' : (trancoData?.status || 'unavailable');
-            const trancoQueriedDomain = isEuCcHostedSite ? domain : (trancoData?.queriedDomain || domain);
+            const isGithubPagesSite = isSharedGithubPagesTenant;
+            const blocksSharedProviderTrust = isEuCcHostedSite || isGithubPagesSite;
+            const trancoRank = blocksSharedProviderTrust ? null : (trancoData?.rank || null);
+            const trancoStatus = blocksSharedProviderTrust ? 'unranked' : (trancoData?.status || 'unavailable');
+            const trancoQueriedDomain = blocksSharedProviderTrust ? domain : (trancoData?.queriedDomain || domain);
             const trancoDateText = trancoData?.date ? ` (${trancoData.date})` : '';
             const hasRankedRootDomainFallback = trancoRank !== null &&
                 normalizeHostname(trancoQueriedDomain) !== domain &&
@@ -2452,6 +2460,8 @@ const { useState, useEffect, useRef } = React;
                 trafficStatus = 'warning';
                 if (isEuCcHostedSite) {
                     trafficDetails = '「eu.cc」是共享子網域服務；目前網域屬個別使用者建立的租戶，不得繼承 eu.cc 根網域的流量、年齡或信任。';
+                } else if (isGithubPagesSite) {
+                    trafficDetails = '「github.io」是 GitHub Pages 共享架站服務；目前網址是個別使用者建立的租戶，不得繼承 GitHub 母網域的流量、年齡或信任。';
                 } else if (domain.endsWith('zeabur.app')) {
                     trafficDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
@@ -2597,7 +2607,8 @@ const { useState, useEffect, useRef } = React;
             const hasNetlifyAppBaselineRisk = !isWhitelisted && isNetlifyApp;
             const hasWeeblyHostedBaselineRisk = !isWhitelisted && isWeeblyHostedSite;
             const hasEuCcHostedBaselineRisk = !isWhitelisted && isEuCcHostedSite;
-            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasNetlifyAppBaselineRisk || hasWeeblyHostedBaselineRisk || hasEuCcHostedBaselineRisk;
+            const hasGithubPagesBaselineRisk = !isWhitelisted && isGithubPagesSite;
+            const hasFreeHostingPlatformBaselineRisk = hasCloudflarePagesDevBaselineRisk || hasNetlifyAppBaselineRisk || hasWeeblyHostedBaselineRisk || hasEuCcHostedBaselineRisk || hasGithubPagesBaselineRisk;
             const hasCloudflarePagesDevRandomSubdomain = isHighEntropy ||
                 suspiciousSubdomain.reasons.some(reason =>
                     reason.includes('短隨機') ||
@@ -2678,6 +2689,7 @@ const { useState, useEffect, useRef } = React;
             const nestedBrandSimilarity = nestedDomains.map(item => checkBrandSimilarity(item, currentWhitelist)).find(item => item.matched) || { matched: false };
             const matchedBrandSimilarity = brandSimilarity.matched ? brandSimilarity : (finalBrandSimilarity.matched ? finalBrandSimilarity : nestedBrandSimilarity);
             const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
+            const hasGithubPagesBrandImpersonationRisk = !isWhitelisted && isGithubPagesSite && hasBrandSimilarity;
             const domainAgeDays = getPastAgeDays(rdapDate);
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
             const isNewDomainUnderSixMonths = domainAgeDays !== null && domainAgeDays < 183;
@@ -2902,7 +2914,7 @@ const { useState, useEffect, useRef } = React;
             const certIssuerName = String(certData?.issuerName || '').toLowerCase();
             const hasRecognizedCertificateIssuer = certIssuerName &&
                 trustedCertificateIssuers.some(issuer => certIssuerName.includes(issuer));
-            const hasStableHttpsCertificate = hasRecognizedCertificateIssuer &&
+            const hasStableHttpsCertificate = !blocksSharedProviderTrust && hasRecognizedCertificateIssuer &&
                 certAgeDays !== null &&
                 certAgeDays >= 30 &&
                 certAgeDays < 730;
@@ -2967,6 +2979,7 @@ const { useState, useEffect, useRef } = React;
                 hasSuspiciousTldAdLandingRisk ||
                 hasFreeHostingSensitiveLinkRisk ||
                 hasFreeHostingVotePhishingRisk ||
+                hasGithubPagesBrandImpersonationRisk ||
                 hasCloudflarePagesDevRandomRisk ||
                 hasNetlifyAppRandomRisk ||
                 hasRegulatedTobaccoSalesSignal ||
@@ -3023,6 +3036,8 @@ const { useState, useEffect, useRef } = React;
                 riskScore = 100;
             } else if (isManualHighRisk) {
                 riskScore = 90;
+            } else if (hasGithubPagesBrandImpersonationRisk) {
+                riskScore = 95;
             } else if (hasFreeHostingVotePhishingRisk) {
                 riskScore = 90;
             } else if (hasOfficialAlertUrlMatch) {
@@ -3260,6 +3275,7 @@ const { useState, useEffect, useRef } = React;
                 hasMissingAllSecurityHeaders ||
                 hasMissingMxRecords ||
                 hasBrandSimilarity ||
+                hasGithubPagesBrandImpersonationRisk ||
                 hasSuspiciousTempDomain ||
                 hasFinalSuspiciousTemp ||
                 hasFreeHostingSensitiveLinkRisk ||
@@ -3296,6 +3312,7 @@ const { useState, useEffect, useRef } = React;
                 hasLogisticsBrandPhishing ||
                 hasPageBrandMismatch ||
                 hasBrandSimilarity ||
+                hasGithubPagesBrandImpersonationRisk ||
                 hasHomographSignal ||
                 hasSuspiciousExternalTrustedRedirect ||
                 externalFormActionCount > 0 ||
@@ -3323,6 +3340,7 @@ const { useState, useEffect, useRef } = React;
 
             if (!isWhitelisted && !isSocialMedia) {
                 const hasDangerDetail = hasBrandSimilarity ||
+                    hasGithubPagesBrandImpersonationRisk ||
                     isConfirmedScam ||
                     isManualHighRisk ||
                     hasOfficialAlert ||
@@ -3409,6 +3427,10 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 Cofacts 社群查核強風險訊號：${cofactsRiskData.label}。此為群眾協作查核資料，仍應搭配網站證據判斷。`;
                 siteContentMsg = '危險：Cofacts 查核回應明確指出詐騙且獲得支持';
+            } else if (hasGithubPagesBrandImpersonationRisk) {
+                domainAnalysisStatus = 'danger';
+                domainAnalysisDetails = `偵測到 GitHub Pages 租戶「${domain}」在非官方網域使用「${matchedBrandSimilarity.brandName}」品牌名稱；即使頁面目前為 404、空白或已下架，仍屬高度品牌冒用風險。`;
+                siteContentMsg = '危險：GitHub Pages 租戶疑似冒用知名品牌';
             } else if (isApkSite) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = '🚨 偵測到網頁誘導下載不明 APK (Android App)，極可能是夾帶木馬的惡意軟體！';
@@ -3569,6 +3591,8 @@ const { useState, useEffect, useRef } = React;
                 domainAnalysisStatus = 'warning';
                 if (isEuCcHostedSite) {
                     domainAnalysisDetails = '「eu.cc」是共享子網域服務，目前網址是獨立租戶站；不得以 eu.cc 根網域的歷史或排名作為安全背書。';
+                } else if (isGithubPagesSite) {
+                    domainAnalysisDetails = '「github.io」是 GitHub Pages 共享架站服務，目前網址是獨立使用者租戶；不得以 GitHub 母網域的歷史、排名或憑證作為安全背書。';
                 } else if (domain.endsWith('zeabur.app')) {
                     domainAnalysisDetails = '「zeabur.app」是 Zeabur 雲端部署平台提供的免費/預設子網域，任何人都可以在幾分鐘內匿名註冊並部署網頁，無法確認其正當性。';
                 } else if (isCloudflarePagesDev) {
@@ -3618,10 +3642,12 @@ const { useState, useEffect, useRef } = React;
                     : redirectDetails;
             }
 
-            const hasConfirmedSiteContentThreat = hasOfficialAlert ||
+            const hasConfirmedSiteContentThreat = isConfirmedScam ||
+                hasOfficialAlert ||
                 isManualHighRisk ||
                 isApkSite ||
                 isDownloadPhishingSignal ||
+                hasGithubPagesBrandImpersonationRisk ||
                 hasFreeHostingVotePhishingRisk ||
                 hasPageBrandMismatch ||
                 hasShoppingScamSignal ||
@@ -3646,7 +3672,7 @@ const { useState, useEffect, useRef } = React;
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasFreeHostingVotePhishingRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, confirmedScamCategory: confirmedScamProfile?.category || '', manualHighRiskDomain: isManualHighRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, freeHostingVotePhishing: hasFreeHostingVotePhishingRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasGithubPagesBrandImpersonationRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasFreeHostingVotePhishingRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, confirmedScamCategory: confirmedScamProfile?.category || '', manualHighRiskDomain: isManualHighRisk, githubPagesBrandImpersonation: hasGithubPagesBrandImpersonationRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, freeHostingVotePhishing: hasFreeHostingVotePhishingRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3840,18 +3866,18 @@ const { useState, useEffect, useRef } = React;
                             ))
                     },
                     age: {
-                        status: isEuCcHostedSite ? 'unknown' : ((isWhitelisted || hasConditionalCompanyTrustApplied) ? (isWhitelisted ? 'safe' : 'info') : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
+                        status: blocksSharedProviderTrust ? 'unknown' : ((isWhitelisted || hasConditionalCompanyTrustApplied) ? (isWhitelisted ? 'safe' : 'info') : ((domainAgeDays !== null && domainAgeDays < 90) ? 'warning' :
                             (hasNewOneYearRegistrationRisk ? 'warning' :
                             (domainAgeDays !== null ? (domainAgeDays < 365 ? 'warning' : 'safe') : 'unknown')))),
                         label: '註冊時間',
-                        details: isEuCcHostedSite ? 'eu.cc 為共享子網域服務，無法取得此租戶的獨立註冊日；不採用 eu.cc 母網域的註冊年齡' : (isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}公司官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替')))),
+                        details: isEuCcHostedSite ? 'eu.cc 為共享子網域服務，無法取得此租戶的獨立註冊日；不採用 eu.cc 母網域的註冊年齡' : (isGithubPagesSite ? 'github.io 為共享架站服務，無法以 GitHub 母網域的註冊日代表此租戶；不採用母網域註冊年齡' : (isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}公司官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替'))))),
                         link: `https://who.is/whois/${rdapQueriedDomain}`
                     },
                     registrationPeriod: {
-                        status: isEuCcHostedSite ? 'unknown' : (hasConditionalCompanyTrustApplied ? 'info' : (hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown'))),
+                        status: blocksSharedProviderTrust ? 'unknown' : (hasConditionalCompanyTrustApplied ? 'info' : (hasNewOneYearRegistrationRisk ? 'warning' : (registrationPeriodDays !== null ? 'info' : 'unknown'))),
                         label: '註冊週期',
-                        details: isEuCcHostedSite
-                            ? '共享子網域租戶沒有可獨立驗證的註冊週期；不採用 eu.cc 母網域的到期日'
+                        details: blocksSharedProviderTrust
+                            ? `共享架站租戶沒有可獨立驗證的註冊週期；不採用 ${isEuCcHostedSite ? 'eu.cc' : 'github.io'} 母網域的到期日`
                             : (registrationPeriodDays !== null
                             ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk && !hasConditionalCompanyTrustApplied ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項不作風險加權' : ''}`
                             : '無法自動判定註冊週期')
@@ -3885,6 +3911,13 @@ const { useState, useEffect, useRef } = React;
                         details: hasFreeHostingVotePhishingRisk
                             ? '共享／免費子網域的投票路徑拒絕爬蟲讀取，且沒有可驗證的獨立可信基線；不可因看不到表單就判為安全。'
                             : '未偵測到共享子網域投票頁搭配爬蟲封鎖的高風險組合'
+                    },
+                    githubPagesBrand: {
+                        status: hasGithubPagesBrandImpersonationRisk ? 'danger' : 'safe',
+                        label: 'GitHub Pages 品牌冒用',
+                        details: hasGithubPagesBrandImpersonationRisk
+                            ? `GitHub Pages 租戶名稱包含受保護品牌「${matchedBrandSimilarity.brandName}」，但不是官方網域；頁面即使已下架或回傳 404，仍保留高度品牌釣魚風險。`
+                            : '未偵測到 GitHub Pages 租戶名稱冒用受保護品牌'
                     },
                     regulatedProduct: {
                         status: hasRegulatedTobaccoSalesSignal ? 'danger' : 'safe',
@@ -4234,6 +4267,7 @@ const { useState, useEffect, useRef } = React;
             addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
             addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
             addReason(checks.votePhishing?.status === 'danger', '共享子網域假投票／帳號釣魚特徵');
+            addReason(checks.githubPagesBrand?.status === 'danger', 'GitHub Pages 租戶疑似冒用知名品牌');
             addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
             addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
             addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
