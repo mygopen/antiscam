@@ -4,14 +4,38 @@ export const fdaAdSyncMetadata = {
     "schemaVersion": 1,
     "source": "衛生福利部食品藥物管理署",
     "sourceUrl": "https://www.fda.gov.tw/TC/news.aspx?cid=5085",
-    "generatedAt": "2026-08-18T19:56:45.996Z",
+    "generatedAt": "2026-08-25T20:02:43.957Z",
     "maxPages": 20,
     "recordsFetched": 200,
     "detailsFetched": 200,
-    "recordsWithDomains": 164
+    "recordsWithDomains": 165
 };
 
 export const syncedFdaAdAlerts = [
+    {
+        "source": "衛生福利部食品藥物管理署",
+        "category": "涉嫌違規廣告產品",
+        "title": "國外網站涉嫌違規廣告產品：霈恩萃®機能補給錠",
+        "productName": "霈恩萃®機能補給錠",
+        "productCategory": "食品",
+        "siteName": "enpress.com.sg",
+        "rootDomain": "com.sg",
+        "rootDomains": [
+            "com.sg"
+        ],
+        "urls": [
+            "https://www.enpress.com.sg/product_proentry_tablet"
+        ],
+        "publishedDate": "2026-08-25",
+        "monitoredDate": "2026-04-27",
+        "issuingUnit": "臺中市政府衛生局",
+        "violationType": "違反食品安全衛生管理法第28條規定",
+        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
+        "claimSummary": "Product feature…Keep away from allergy…Immune-related disease treatment…Rich in antioxidants…",
+        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=115W5534&type=pmds",
+        "syncedFrom": "fda-puffery-ads",
+        "recordId": "115W5534"
+    },
     {
         "source": "衛生福利部食品藥物管理署",
         "category": "涉嫌違規廣告產品",
