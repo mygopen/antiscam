@@ -602,11 +602,15 @@ const { useState, useEffect, useRef } = React;
 
                     const containsBrand = domainText.includes(normalizedKeyword);
                     let closeTypo = false;
-                    for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
-                        const segment = domainText.slice(i, i + normalizedKeyword.length);
-                        if (damerauLevenshteinDistance(segment, normalizedKeyword) <= 1) {
-                            closeTypo = true;
-                            break;
+                    // Numeric brand codes such as 711 are too short for one-character typo matching:
+                    // unrelated labels like tibet311 would otherwise become a false brand impersonation.
+                    if (/[a-z]/.test(normalizedKeyword)) {
+                        for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
+                            const segment = domainText.slice(i, i + normalizedKeyword.length);
+                            if (damerauLevenshteinDistance(segment, normalizedKeyword) <= 1) {
+                                closeTypo = true;
+                                break;
+                            }
                         }
                     }
 
@@ -901,7 +905,9 @@ const { useState, useEffect, useRef } = React;
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
 
-            const rawBrandText = String(rawText || '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ');
+            const rawBrandText = String(rawText || '')
+                .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+                .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
             const textParts = [rawBrandText, doc?.title || ''];
             if (doc) {
                 doc.querySelectorAll('meta[name="description"], meta[property="og:title"], meta[property="og:site_name"], img[alt], [aria-label], link[rel*="icon"]').forEach(el => {
@@ -1349,8 +1355,16 @@ const { useState, useEffect, useRef } = React;
             }
 
             const haystack = decodeSignalText(textParts.join('\n')).replace(/\s+/g, ' ');
+            const matchesProductKeyword = (keyword) => {
+                const normalizedKeyword = String(keyword || '').toLowerCase();
+                if (!normalizedKeyword) return false;
+                if (/^[a-z0-9]+$/i.test(normalizedKeyword)) {
+                    return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}(?=$|[^a-z0-9])`, 'i').test(haystack);
+                }
+                return haystack.includes(normalizedKeyword);
+            };
             const productMatches = getRiskList('regulatedTobaccoProductKeywords')
-                .filter(keyword => haystack.includes(keyword.toLowerCase()));
+                .filter(matchesProductKeyword);
             const salesMatches = getRiskList('regulatedTobaccoSalesKeywords')
                 .filter(keyword => haystack.includes(keyword.toLowerCase()));
             const hasPriceSignal = /(?:nt\$|ntd)\s*\d{2,6}|(?:售價|價格|優惠價|特價|原價)[:：\s$]*\d{2,6}|已售[:：]?\s*\d+/i.test(haystack);

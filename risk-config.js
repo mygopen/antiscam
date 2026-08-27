@@ -1,5 +1,5 @@
 window.RISK_CONFIG = {
-    companyVerificationVersion: '2026-08-23-1',
+    companyVerificationVersion: '2026-08-27-1',
     socialMediaDomains: [
         'facebook.com', 'fb.com', 'fb.me', 'instagram.com', 'ig.me',
         'twitter.com', 'x.com', 'tiktok.com', 'youtube.com', 'youtu.be', 't.me',

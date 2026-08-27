@@ -1,4 +1,4 @@
-export const trustedCompanyDomainMappingVersion = '2026-08-23-1';
+export const trustedCompanyDomainMappingVersion = '2026-08-27-1';
 
 export const trustedCompanyDomainMappings = [
   {
@@ -39,6 +39,27 @@ export const trustedCompanyDomainMappings = [
         type: 'business-registration',
         source: '經濟部商工登記公示資料',
         sourceUrl: 'https://findbiz.nat.gov.tw/fts/query/QueryBar/queryInit.do?queryString=90888561',
+        matchedFields: ['統一編號', '公司名稱', '登記狀態']
+      }
+    ]
+  },
+  {
+    domains: ['tibet311.com'],
+    taxIds: ['89192419'],
+    names: ['熱桑嘉有限公司'],
+    officialUrl: 'https://www.tibet311.com/',
+    reviewedAt: '2026-08-27',
+    evidence: [
+      {
+        type: 'official-site',
+        source: '熱桑嘉有限公司官方網站（起璽）',
+        sourceUrl: 'https://www.tibet311.com/',
+        matchedFields: ['網域', '公司名稱', '統一編號']
+      },
+      {
+        type: 'business-registration',
+        source: '經濟部商工登記公示資料',
+        sourceUrl: 'https://findbiz.nat.gov.tw/fts/query/QueryBar/queryInit.do?queryString=89192419',
         matchedFields: ['統一編號', '公司名稱', '登記狀態']
       }
     ]

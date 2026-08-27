@@ -218,6 +218,55 @@ test("trusted company domain mapping verifies What'Sub against Equal2 registrati
   assert.ok(result.evidence.some(item => item.type === 'business-registration' && !item.directDomainMatch));
 });
 
+test('trusted company domain mapping verifies Tibet311 against Resangjia registration data', async () => {
+  const { verifyCompanyWebsite, getTrustedCompanyDomainMapping } = await endpointModulePromise;
+  const fetcher = async (input) => {
+    const url = String(input);
+    if (url.includes('t187ap03_L') || url.includes('t187ap03_P') || url.includes('mopsfin_t187ap03_O') || url.includes('mopsfin_t187ap03_R')) {
+      return jsonResponse([]);
+    }
+    if (url.includes('5F64D864') && url.includes('89192419')) {
+      return jsonResponse([{
+        Business_Accounting_NO: '89192419',
+        Company_Status_Desc: '核准設立',
+        Company_Name: '熱桑嘉有限公司',
+        Capital_Stock_Amount: 100000,
+        Responsible_Name: '蔡銘倫',
+        Company_Location: '臺北市大同區西寧北路78之16號8樓',
+        Register_Organization_Desc: '臺北市政府',
+        Company_Setup_Date: '1120207',
+        Change_Of_Approval_Data: '1140820'
+      }]);
+    }
+    return jsonResponse([]);
+  };
+
+  const mapping = getTrustedCompanyDomainMapping('www.tibet311.com');
+  assert.equal(mapping.taxIds[0], '89192419');
+  assert.equal(mapping.names[0], '熱桑嘉有限公司');
+  assert.equal(getTrustedCompanyDomainMapping('tibet311.com.evil.shop'), null);
+  assert.equal(getTrustedCompanyDomainMapping('fake-tibet311.com'), null);
+
+  const result = await verifyCompanyWebsite({
+    domain: 'www.tibet311.com',
+    fetcher
+  });
+
+  assert.equal(result.status, 'verified-domain');
+  assert.equal(result.verified, true);
+  assert.equal(result.domainMatched, true);
+  assert.equal(result.registrationMatched, true);
+  assert.equal(result.nameMatched, true);
+  assert.equal(result.trustedDomainMappingMatched, true);
+  assert.equal(result.companies[0].taxId, '89192419');
+  assert.equal(result.companies[0].name, '熱桑嘉有限公司');
+  assert.equal(result.companies[0].status, '核准設立');
+  assert.equal(result.companies[0].domainMatchType, 'trusted-company-domain-mapping');
+  assert.match(result.disclosure, /可信網域對應統編/);
+  assert.ok(result.evidence.some(item => item.type === 'trusted-company-domain-mapping' && item.directDomainMatch));
+  assert.ok(result.evidence.some(item => item.type === 'business-registration' && !item.directDomainMatch));
+});
+
 test('government second-level domains do not cross-match unrelated public company disclosures', async () => {
   const { verifyCompanyWebsite } = await endpointModulePromise;
   const fetcher = async (input) => {

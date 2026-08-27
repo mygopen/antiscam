@@ -1313,10 +1313,12 @@ function checkBrandSimilarity(hostname, whitelist = []) {
             if (!normalizedKeyword || normalizedKeyword.length < 3) continue;
             if (domainText.includes(normalizedKeyword)) return { matched: true, brandName: brand.name };
 
-            for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
-                const segment = domainText.slice(i, i + normalizedKeyword.length);
-                if (damerauLevenshteinDistance(segment, normalizedKeyword) <= 1) {
-                    return { matched: true, brandName: brand.name };
+            if (/[a-z]/.test(normalizedKeyword)) {
+                for (let i = 0; i <= domainText.length - normalizedKeyword.length; i++) {
+                    const segment = domainText.slice(i, i + normalizedKeyword.length);
+                    if (damerauLevenshteinDistance(segment, normalizedKeyword) <= 1) {
+                        return { matched: true, brandName: brand.name };
+                    }
                 }
             }
         }
@@ -1404,7 +1406,10 @@ function isBenignCommerceBrandReference(brandName, keyword, contexts) {
 }
 
 function analyzePageBrandSignals({ hostname, text }) {
-    const haystack = decodeSignalText(text || '');
+    const visibleBrandText = String(text || '')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
+    const haystack = decodeSignalText(visibleBrandText);
     for (const brand of riskConfig.protectedBrands) {
         if (matchesDomainList(hostname, brand.domains)) continue;
         const keywords = [brand.name, ...brand.keywords].filter(Boolean);
@@ -1935,8 +1940,16 @@ function analyzeJobTaskScamSignals({ html = '', url }) {
 
 function analyzeRegulatedTobaccoSalesSignals({ html = '', url }) {
     const haystack = decodeSignalText(`${html}\n${url}`).replace(/\s+/g, ' ');
+    const matchesProductKeyword = (keyword) => {
+        const normalizedKeyword = String(keyword || '').toLowerCase();
+        if (!normalizedKeyword) return false;
+        if (/^[a-z0-9]+$/i.test(normalizedKeyword)) {
+            return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}(?=$|[^a-z0-9])`, 'i').test(haystack);
+        }
+        return haystack.includes(normalizedKeyword);
+    };
     const productMatches = riskConfig.regulatedTobaccoProductKeywords
-        .filter(keyword => haystack.includes(keyword.toLowerCase()));
+        .filter(matchesProductKeyword);
     const salesMatches = riskConfig.regulatedTobaccoSalesKeywords
         .filter(keyword => haystack.includes(keyword.toLowerCase()));
     const hasPriceSignal = /(?:nt\$|ntd)\s*\d{2,6}|(?:售價|價格|優惠價|特價|原價)[:：\s$]*\d{2,6}|已售[:：]?\s*\d+/i.test(haystack);
@@ -4040,7 +4053,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260825-github-pages-brand/);
+    assert.match(indexSource, /app\.js\?v=20260827-tibet311-false-positive-v2/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -4144,6 +4157,21 @@ test('頁面品牌與官方網域不一致應視為強風險訊號', () => {
     assert.equal(fakePage.matched, true);
     assert.equal(fakePage.brandName, '中國信託');
     assert.equal(officialPage.matched, false);
+});
+
+test('第三方支付程式碼提及銀行不算品牌冒用，但可見驗證話術仍須攔截', () => {
+    const integrationOnly = analyzePageBrandSignals({
+        hostname: 'merchant.example.com',
+        text: '<title>商家商城</title><script>const paymentGateway = "sinopac";</script><button>購物車</button>'
+    });
+    const visibleImpersonation = analyzePageBrandSignals({
+        hostname: 'merchant.example.com',
+        text: '<title>永豐銀行帳戶驗證</title><p>請輸入信用卡卡號與 OTP 完成驗證。</p>'
+    });
+
+    assert.equal(integrationOnly.matched, false);
+    assert.equal(visibleImpersonation.matched, true);
+    assert.equal(visibleImpersonation.brandName, '永豐銀行');
 });
 
 test('電商頁的統一超商取貨資訊不應被視為頁面品牌仿冒', () => {
@@ -4737,6 +4765,34 @@ test('電子菸網路販售頁應升為高風險並不被正規電商佐證洗�
     assert.equal(riskScore >= 70, true);
     assert.equal(scanData.riskScore, 70);
     assert.deepEqual(scanData.summaryReasons, ['違法電子菸/加熱菸網路販售風險']);
+});
+
+test('英文電子菸品牌必須符合完整單字，避免商城程式碼子字串誤判', () => {
+    const embeddedKeywordPage = `
+        <main>
+            <script>const familiaTheme = { cart: true };</script>
+            <h1>宗教文物官方商城</h1>
+            <button>加入購物車</button><p>NT$ 1,280</p>
+        </main>`;
+    const explicitProductPage = `
+        <main>
+            <h1>ILIA 電子菸主機</h1>
+            <button>加入購物車</button><p>NT$ 680</p>
+        </main>`;
+
+    const embeddedSignals = analyzeRegulatedTobaccoSalesSignals({
+        html: embeddedKeywordPage,
+        url: 'https://shop.example.com/'
+    });
+    const explicitSignals = analyzeRegulatedTobaccoSalesSignals({
+        html: explicitProductPage,
+        url: 'https://vape.example.com/'
+    });
+
+    assert.equal(embeddedSignals.productMatches.includes('ilia'), false);
+    assert.equal(embeddedSignals.matched, false);
+    assert.equal(explicitSignals.productMatches.includes('ilia'), true);
+    assert.equal(explicitSignals.matched, true);
 });
 
 test('電子菸衛教或法規文章沒有交易脈絡時不應命中網路販售風險', () => {
@@ -6971,7 +7027,7 @@ test("What'Sub 官方網站不應因新 .app 網域、數字品牌名或 Apple �
     const companyMappingSource = fs.readFileSync(path.join(repoRoot, 'functions/api/trusted-company-domain-mappings.js'), 'utf8');
 
     assert.equal(riskConfig.trustedTaiwanServiceDomains.includes('equal2.app'), false);
-    assert.equal(riskConfig.companyVerificationVersion, '2026-08-23-1');
+    assert.equal(riskConfig.companyVerificationVersion, '2026-08-27-1');
     assert.equal(sanitized.href, 'https://whatsub.equal2.app/');
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_source'].sort());
     assert.equal(isWhitelisted, false);
@@ -6991,6 +7047,77 @@ test("What'Sub 官方網站不應因新 .app 網域、數字品牌名或 Apple �
     assert.match(appSource, /const hasConditionalCompanyTrustBlockingThreat =/);
     assert.match(appSource, /riskScore = Math\.min\(riskScore, 20\)/);
     assert.match(appSource, /revokeConditionalCompanyTrust\(scanData/);
+});
+
+test('Tibet311 官方商城應以公司官網映射抵銷低流量與技術弱訊號', () => {
+    const rawUrl = 'https://www.tibet311.com/?utm_source=facebook&utm_campaign=shop';
+    const sanitized = sanitizeUrlForRiskScoring(rawUrl);
+    const parsed = new URL(sanitized.href);
+    const html = `
+        <html lang="zh-hant">
+            <head>
+                <title>起璽官方商城</title>
+                <meta name="description" content="熱桑嘉有限公司官方商城">
+                <script type="application/ld+json">
+                    {"@type":"Organization","name":"熱桑嘉有限公司","url":"https://www.tibet311.com"}
+                </script>
+            </head>
+            <body>
+                <h1>起璽官方商城</h1>
+                <p>公司名稱：熱桑嘉有限公司</p>
+                <p>統一編號：89192419</p>
+                <a href="/products">全部商品</a>
+                <button>購物車</button><button>聯絡我們</button>
+                <script>const familiaTheme = { checkout: true, paymentGateway: 'sinopac' };</script>
+                <footer>SHOPLINE 安心開店平台</footer>
+            </body>
+        </html>`;
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: html });
+    const brandSimilarity = checkBrandSimilarity(parsed.hostname, whitelist);
+    const exactNumericBrand = checkBrandSimilarity('tibet711.com', whitelist);
+    const regulatedSignals = analyzeRegulatedTobaccoSalesSignals({ html, url: sanitized.href });
+    const conditionalTrust = applyConditionalCompanyTrust({
+        riskScore: 85,
+        hasOfficialCompanyDomainMatch: true
+    });
+    const scanData = enforceFinalRiskConsistency({
+        riskScore: conditionalTrust.riskScore,
+        isConditionalCompanyTrust: true,
+        conditionalCompanyTrustApplied: conditionalTrust.applied,
+        conditionalCompanyTrust: conditionalTrust,
+        checks: {
+            domainAnalysis: { status: 'safe', details: '已驗證公司官網映射：熱桑嘉有限公司' },
+            pageBrand: { status: pageBrandSignals.matched ? 'danger' : 'safe' },
+            age: { status: 'info' },
+            securityHeaders: { status: 'info' },
+            mxRecords: { status: 'info' },
+            conditionalCompanyTrust: { status: 'safe', applied: true }
+        }
+    });
+    const companyMappingSource = fs.readFileSync(path.join(repoRoot, 'functions/api/trusted-company-domain-mappings.js'), 'utf8');
+
+    assert.equal(riskConfig.companyVerificationVersion, '2026-08-27-1');
+    assert.equal(sanitized.href, 'https://www.tibet311.com/');
+    assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_campaign', 'utm_source'].sort());
+    assert.equal(matchesDomainList(parsed.hostname, whitelist), false);
+    assert.equal(isVerifiedSafeRootDomain(parsed.hostname, whitelist), false);
+    assert.equal(shouldSkipAiBrandAnalysis(parsed.hostname, whitelist), false);
+    assert.equal(pageBrandSignals.matched, false);
+    assert.equal(brandSimilarity.matched, false);
+    assert.equal(exactNumericBrand.matched, true);
+    assert.equal(exactNumericBrand.brandName, '統一超商');
+    assert.equal(regulatedSignals.productMatches.includes('ilia'), false);
+    assert.equal(regulatedSignals.matched, false);
+    assert.equal(conditionalTrust.eligible, true);
+    assert.equal(conditionalTrust.applied, true);
+    assert.equal(scanData.riskScore, 20);
+    assert.deepEqual(scanData.summaryReasons, []);
+    assert.equal(isVerifiedSafeRootDomain('tibet311.com.evil.shop', whitelist), false);
+    assert.equal(isVerifiedSafeRootDomain('fake-tibet311.com', whitelist), false);
+    assert.match(companyMappingSource, /domains: \['tibet311\.com'\]/);
+    assert.match(companyMappingSource, /taxIds: \['89192419'\]/);
+    assert.match(companyMappingSource, /names: \['熱桑嘉有限公司'\]/);
 });
 
 test('公司官網映射只能抵銷弱訊號，所有強威脅都必須阻止條件式信任', () => {
