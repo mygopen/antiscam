@@ -4,7 +4,7 @@ export const fdaAdSyncMetadata = {
     "schemaVersion": 1,
     "source": "衛生福利部食品藥物管理署",
     "sourceUrl": "https://www.fda.gov.tw/TC/news.aspx?cid=5085",
-    "generatedAt": "2026-08-25T20:02:43.957Z",
+    "generatedAt": "2026-09-01T22:03:11.122Z",
     "maxPages": 20,
     "recordsFetched": 200,
     "detailsFetched": 200,
