@@ -24,6 +24,16 @@ function matchesDomainList(domain, list) {
     });
 }
 
+function getOfficialShortenerDestinationDomains(hostname) {
+    const policies = riskConfig.officialShortenerDestinations || {};
+    const policyDomain = Object.keys(policies).find(domain => matchesDomainList(hostname, [domain]));
+    return policyDomain ? Array.from(policies[policyDomain]) : [];
+}
+
+function isVerifiedOfficialShortenerDestination(inputHostname, destinationHostname) {
+    return matchesDomainList(destinationHostname, getOfficialShortenerDestinationDomains(inputHostname));
+}
+
 function isCloudflarePagesDevHostname(hostname) {
     const cleanHostname = normalizeInputHostname(hostname).replace(/^www\./, '');
     return cleanHostname !== 'pages.dev' && matchesDomainList(cleanHostname, ['pages.dev']);
@@ -2939,6 +2949,32 @@ test('永豐銀行 MMA 官方短網址 mma.tw 應視為可信金融服務與安�
     assert.match(brandApiSource, /"MMA交易金融網": \["sinopac\.com", "mma\.tw"\]/);
 });
 
+test('台新銀行官方簡訊短網址 tsbk.tw 應解析至台新官方網域後視為可信', () => {
+    const rawUrl = 'http://tsbk.tw/7h4lss';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const hostname = new URL(rawUrl).hostname;
+    const officialDestination = 'smartrobot.taishinbank.com.tw';
+    const deceptiveDestination = 'taishinbank.com.tw.evil.shop';
+    const taishinBrand = riskConfig.protectedBrands.find(brand => brand.name === '台新銀行');
+
+    assert.ok(riskConfig.trustedFinancialServiceDomains.includes('tsbk.tw'));
+    assert.ok(riskConfig.urlShorteners.includes('tsbk.tw'));
+    assert.ok(riskConfig.safeShorteners.includes('tsbk.tw'));
+    assert.ok(taishinBrand.domains.includes('tsbk.tw'));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedFinancialServiceDomain(hostname), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname, []), true);
+    assert.deepEqual(getOfficialShortenerDestinationDomains(hostname), ['taishinbank.com.tw']);
+    assert.equal(isVerifiedOfficialShortenerDestination(hostname, officialDestination), true);
+    assert.equal(isVerifiedOfficialShortenerDestination(hostname, deceptiveDestination), false);
+    assert.equal(isVerifiedOfficialShortenerDestination(hostname, 'fake-taishinbank.com.tw'), false);
+    assert.match(brandApiSource, /"台新銀行": \["taishinbank\.com\.tw", "tsbk\.tw"\]/);
+    assert.match(appSource, /officialShortenerDestinationVerified/);
+    assert.match(appSource, /isVerifiedOfficialShortenerDestination\(inputDomain, destinationDomain\)/);
+});
+
 test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服務', () => {
     const rawUrl = 'https://www.cathay-cube.com.tw/cathaybk/personal/product/credit-card/cards/cube?utm_source=google&utm_medium=search';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
@@ -4053,7 +4089,8 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
-    assert.match(indexSource, /app\.js\?v=20260827-tibet311-false-positive-v2/);
+    assert.match(appSource, /getOfficialShortenerDestinationDomains/);
+    assert.match(indexSource, /app\.js\?v=20260902-tsbk-shortener/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {

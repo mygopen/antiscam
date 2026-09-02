@@ -268,6 +268,25 @@ const { useState, useEffect, useRef } = React;
             });
         };
 
+        const getOfficialShortenerDestinationDomains = (hostname) => {
+            const cleanHostname = normalizeHostname(hostname);
+            const policies = RISK_CONFIG.officialShortenerDestinations || {};
+            const policyDomain = Object.keys(policies).find(domain => {
+                const cleanDomain = normalizeHostname(domain);
+                return cleanHostname === cleanDomain || cleanHostname.endsWith('.' + cleanDomain);
+            });
+            return policyDomain ? policies[policyDomain] : [];
+        };
+
+        const isVerifiedOfficialShortenerDestination = (inputHostname, destinationHostname) => {
+            const allowedDestinations = getOfficialShortenerDestinationDomains(inputHostname);
+            const cleanDestination = normalizeHostname(destinationHostname);
+            return allowedDestinations.length > 0 && allowedDestinations.some(domain => {
+                const cleanDomain = normalizeHostname(domain);
+                return cleanDestination === cleanDomain || cleanDestination.endsWith('.' + cleanDomain);
+            });
+        };
+
         const isTrustedGlobalDomain = (hostname) => {
             return getRiskList('trustedGlobalDomains').some(domain => isSameRootDomain(hostname, domain));
         };
@@ -1909,7 +1928,9 @@ const { useState, useEffect, useRef } = React;
                     inputDomain,
                     inputScanUrl: fullUrl,
                     resolvedFromShortener: false,
-                    unresolvedShortener: false
+                    unresolvedShortener: false,
+                    officialShortenerPolicyApplied: getOfficialShortenerDestinationDomains(inputDomain).length > 0,
+                    officialShortenerDestinationVerified: false
                 },
                 traceData: null,
                 resolvedFromShortener: false,
@@ -1946,6 +1967,9 @@ const { useState, useEffect, useRef } = React;
 
                 const destinationSanitized = sanitizeUrlForRiskScoring(finalUrl.href);
                 const destinationDomain = normalizeHostname(finalUrl.hostname);
+                const officialShortenerPolicyApplied = getOfficialShortenerDestinationDomains(inputDomain).length > 0;
+                const officialShortenerDestinationVerified = officialShortenerPolicyApplied &&
+                    isVerifiedOfficialShortenerDestination(inputDomain, destinationDomain);
                 return {
                     targetDomain: destinationDomain,
                     fullUrl: destinationSanitized.href,
@@ -1967,6 +1991,8 @@ const { useState, useEffect, useRef } = React;
                         resolvedFromShortener: true,
                         unresolvedShortener: false,
                         resolvedFinalUrl: finalUrl.href,
+                        officialShortenerPolicyApplied,
+                        officialShortenerDestinationVerified,
                         primarySanitizedUrl: destinationSanitized.href,
                         destinationRemovedTrackingParams: destinationSanitized.removedTrackingParams,
                         destinationRemovedVolatileParams: destinationSanitized.removedVolatileParams
@@ -2269,7 +2295,10 @@ const { useState, useEffect, useRef } = React;
             const shorteners = getRiskList('urlShorteners');
             // 修正：改用嚴格的網域比對，避免 t.co 誤殺包含 t.co 的正常網域
             const isInputShortener = shorteners.some(s => inputDomain === s || inputDomain.endsWith('.' + s));
-            const isOfficialInputShortener = isInputShortener && isVerifiedSafeRootDomain(inputDomain, currentWhitelist);
+            const hasOfficialShortenerPolicy = getOfficialShortenerDestinationDomains(inputDomain).length > 0;
+            const isOfficialInputShortener = isInputShortener &&
+                isVerifiedSafeRootDomain(inputDomain, currentWhitelist) &&
+                (!hasOfficialShortenerPolicy || scanOptions.officialShortenerDestinationVerified === true);
             const hasUnresolvedPublicShortener = unresolvedShortener && isInputShortener && !isOfficialInputShortener;
             const nestedUrls = extractNestedUrls(fullUrl);
             const nestedDomains = nestedUrls.map(item => {

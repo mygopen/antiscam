@@ -42,7 +42,7 @@ window.RISK_CONFIG = {
         'zk-school.com', 'gowedding.tw'
     ],
     trustedFinancialServiceDomains: [
-        'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw',
+        'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw', 'tsbk.tw',
         'cathay-cube.com.tw', 'cube-app.tw', 'globalmyb2b.com',
         'cathayrobo.com', 'cathaylife.com.tw'
     ],
@@ -92,14 +92,17 @@ window.RISK_CONFIG = {
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
-        'aka.ms', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw', 'cube-app.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
+        'aka.ms', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw', 'tsbk.tw', 'cube-app.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
-        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw', 'cube-app.tw',
+        'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw', 'tsbk.tw', 'cube-app.tw',
         'ecloud.life', 'link.utaggo.com.tw'
     ],
+    officialShortenerDestinations: {
+        'tsbk.tw': ['taishinbank.com.tw']
+    },
     emailTrackingRedirectors: [
         'awstrack.me', 'sendgrid.net', 'ct.sendgrid.net', 'u.ct.sendgrid.net',
         'mailchimp.com', 'list-manage.com', 'mandrillapp.com', 'mailgun.org',
@@ -248,7 +251,7 @@ window.RISK_CONFIG = {
         { name: '國泰世華', keywords: ['cathay', 'cathaybk', 'globalmyb2b', 'cathayrobo'], domains: ['cathaybk.com.tw', 'cathay-cube.com.tw', 'cube-app.tw', 'globalmyb2b.com', 'cathayrobo.com'] },
         { name: '玉山銀行', keywords: ['esun', 'esunbank'], domains: ['esunbank.com.tw', 'esunbank.com', 'esun.co'] },
         { name: '永豐銀行', keywords: ['sinopac'], domains: ['sinopac.com', 'mma.tw'] },
-        { name: '台新銀行', keywords: ['taishin', 'taishinbank'], domains: ['taishinbank.com.tw'] },
+        { name: '台新銀行', keywords: ['taishin', 'taishinbank'], domains: ['taishinbank.com.tw', 'tsbk.tw'] },
         { name: '富邦銀行', keywords: ['fubon', 'taipeifubon'], domains: ['fubon.com', 'taipeifubon.com.tw', 'fuboncharity.org.tw'] },
         { name: '中華郵政', keywords: ['postgov'], domains: ['post.gov.tw'] },
         { name: '統一7-ELEVEN獅', keywords: ['unilions', 'uni-lions', 'lioncrew', '統一獅', '萊恩酷'], domains: ['uni-lions.com.tw'] },

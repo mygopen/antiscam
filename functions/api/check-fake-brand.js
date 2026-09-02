@@ -214,7 +214,7 @@ const localBrandMap = {
         "MMA 金融交易網": ["sinopac.com", "mma.tw"],
         "MMA交易金融網": ["sinopac.com", "mma.tw"],
         "SinoPac": ["sinopac.com", "mma.tw"],
-        "台新銀行": ["taishinbank.com.tw"], "富邦銀行": ["fubon.com", "taipeifubon.com.tw", "fuboncharity.org.tw"],
+        "台新銀行": ["taishinbank.com.tw", "tsbk.tw"], "富邦銀行": ["fubon.com", "taipeifubon.com.tw", "fuboncharity.org.tw"],
         "台北富邦銀行": ["taipeifubon.com.tw"], "財政部": ["mof.gov.tw"],
         "富邦慈善基金會": ["fuboncharity.org.tw"],
         "富邦公益大使": ["fuboncharity.org.tw"],
