@@ -326,14 +326,15 @@ test('an old disclosed website is not trusted when the company registration is i
   assert.match(result.disclosure, /進一步複核/);
 });
 
-test('app exposes company public data and evidence in the result indicators', () => {
+test('app exposes organization public data and evidence in the result indicators', () => {
   const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
-  assert.match(source, /\/api\/company-verification/);
-  assert.match(source, /公司網址公開資料驗證/);
+  assert.match(source, /\/api\/organization-verification/);
+  assert.match(source, /組織／法人登記資料驗證/);
   assert.match(source, /isOfficialTaiwanGovDomain\(domain\)/);
-  assert.match(source, /政府機關網域不適用公司網址公開資料驗證/);
-  assert.match(source, /官網資料相符/);
+  assert.match(source, /政府機關網域不適用組織／法人登記資料驗證/);
+  assert.match(source, /官網與登記資料相符/);
   assert.match(source, /統一編號/);
+  assert.match(source, /司法院法人登記/);
   assert.match(source, /驗證來源/);
   assert.doesNotMatch(source, /addTrustSignal\(hasRegisteredBusinessIdentity/);
 });

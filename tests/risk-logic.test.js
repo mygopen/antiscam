@@ -7106,7 +7106,8 @@ test("What'Sub 官方網站不應因新 .app 網域、數字品牌名或 Apple �
     assert.equal(isVerifiedSafeRootDomain('fake-equal2.app', []), false);
     assert.match(companyMappingSource, /domains: \['whatsub\.equal2\.app'\]/);
     assert.match(companyMappingSource, /taxIds: \['90888561'\]/);
-    assert.match(appSource, /params\.set\('trustedMapVersion', String\(RISK_CONFIG\.companyVerificationVersion/);
+    assert.equal(riskConfig.organizationVerificationVersion, '2026-09-03-1');
+    assert.match(appSource, /params\.set\('trustedMapVersion', String\(RISK_CONFIG\.organizationVerificationVersion/);
     assert.match(appSource, /const hasConditionalCompanyTrustBlockingThreat =/);
     assert.match(appSource, /riskScore = Math\.min\(riskScore, 20\)/);
     assert.match(appSource, /revokeConditionalCompanyTrust\(scanData/);

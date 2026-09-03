@@ -2066,7 +2066,7 @@ const { useState, useEffect, useRef } = React;
             }
         };
 
-        const checkCompanyVerification = async (domain, businessSignals = {}) => {
+        const checkOrganizationVerification = async (domain, businessSignals = {}) => {
             const fallback = {
                 checked: false,
                 status: 'unavailable',
@@ -2074,25 +2074,26 @@ const { useState, useEffect, useRef } = React;
                 domainMatched: false,
                 registrationMatched: false,
                 confidenceScore: 0,
+                entities: [],
                 companies: [],
                 evidence: [],
-                disclosure: '公司公開資料服務暫時無法查詢，本項不納入風險計分。'
+                disclosure: '組織與法人公開資料服務暫時無法查詢，本項不納入風險計分。'
             };
             if (isOfficialTaiwanGovDomain(domain)) {
                 return {
                     ...fallback,
                     status: 'not-applicable',
-                    disclosure: '政府機關網域不適用公司網址公開資料驗證，本項不納入風險計分。'
+                    disclosure: '政府機關網域不適用組織／法人登記資料驗證，本項不納入風險計分。'
                 };
             }
             try {
                 const params = new URLSearchParams({ domain });
-                params.set('trustedMapVersion', String(RISK_CONFIG.companyVerificationVersion || 'current'));
+                params.set('trustedMapVersion', String(RISK_CONFIG.organizationVerificationVersion || RISK_CONFIG.companyVerificationVersion || 'current'));
                 const taxIds = [...new Set(businessSignals.taxIds || [])].slice(0, 3);
                 const names = [...new Set(businessSignals.names || [])].slice(0, 4);
                 if (taxIds.length > 0) params.set('taxIds', taxIds.join(','));
                 if (names.length > 0) params.set('names', names.join('|'));
-                return await fetchJsonSafely('/api/company-verification?' + params.toString(), fallback);
+                return await fetchJsonSafely('/api/organization-verification?' + params.toString(), fallback);
             } catch (e) {
                 return fallback;
             }
@@ -2374,9 +2375,10 @@ const { useState, useEffect, useRef } = React;
                 domainMatched: false,
                 registrationMatched: false,
                 confidenceScore: 0,
+                entities: [],
                 companies: [],
                 evidence: [],
-                disclosure: '公司公開資料服務暫時無法查詢，本項不納入風險計分。'
+                disclosure: '組織與法人公開資料服務暫時無法查詢，本項不納入風險計分。'
             };
             const govAgencyFallback = {
                 checked: false,
@@ -2388,7 +2390,7 @@ const { useState, useEffect, useRef } = React;
                 evidence: [],
                 disclosure: '政府機關公開資料暫時無法查詢，本項先不顯示；.gov.tw 官方網域仍會保留安全判定。'
             };
-            const [analyticsClusterData, companyVerificationData, govAgencyVerificationData] = await Promise.all([
+            const [analyticsClusterData, organizationVerificationData, govAgencyVerificationData] = await Promise.all([
                 withTimeout(checkAnalyticsClusterSignals(domain, siteStatusData.analyticsIdentifiers), 2500, {
                     checked: false,
                     matched: false,
@@ -2401,7 +2403,7 @@ const { useState, useEffect, useRef } = React;
                     details: '詐騙站群關聯索引暫時無法查詢。'
                 }),
                 withTimeout(
-                    checkCompanyVerification(domain, siteStatusData.pageSignals?.businessIdentitySignals || {}),
+                    checkOrganizationVerification(domain, siteStatusData.pageSignals?.businessIdentitySignals || {}),
                     6500,
                     companyFallback
                 ),
@@ -2700,10 +2702,10 @@ const { useState, useEffect, useRef } = React;
             const seoSignals = pageSignals.seoSignals || createEmptyPageSignals().seoSignals;
             const languageSignals = pageSignals.languageSignals || createEmptyPageSignals().languageSignals;
             const businessIdentitySignals = pageSignals.businessIdentitySignals || createEmptyPageSignals().businessIdentitySignals;
-            const hasOfficialCompanyDomainMatch = !!companyVerificationData?.verified;
-            const hasRegisteredBusinessIdentity = !!companyVerificationData?.registrationMatched;
+            const hasOfficialCompanyDomainMatch = !!organizationVerificationData?.verified;
+            const hasRegisteredBusinessIdentity = !!organizationVerificationData?.registrationMatched;
             const hasConditionalCompanyTrust = hasOfficialCompanyDomainMatch && !isWhitelisted && !isSocialMedia;
-            const verifiedCompany = (companyVerificationData?.companies || [])[0] || null;
+            const verifiedCompany = (organizationVerificationData?.entities || organizationVerificationData?.companies || [])[0] || null;
             const hasVerifiedGovernmentAgency = !!govAgencyVerificationData?.verified;
             const verifiedGovernmentAgency = (govAgencyVerificationData?.agencies || [])[0] || null;
             const lineOfficialSignals = pageSignals.lineOfficialSignals || createEmptyPageSignals().lineOfficialSignals;
@@ -2989,7 +2991,7 @@ const { useState, useEffect, useRef } = React;
             addTrustSignal(pageTrustSignals.matched, pageTrustSignals.score || 20, pageTrustSignals.reasons?.slice(0, 2).join('、') || '頁面語意與網域相符');
             addTrustSignal(hasStrongEcommerceValidation, 35, `正規電商佐證：${ecommerceTrustSignals.reasons?.slice(0, 2).join('、') || '購物車、聯絡資訊或平台足跡完整'}`);
             addTrustSignal(hasWhoisVerifiedBusinessEntity, 40, matchedBusinessEntityName ? `頁面商家名稱與 WHOIS/RDAP 註冊者相符：${matchedBusinessEntityName}` : '頁面商家資訊與 WHOIS/RDAP 註冊資料具一致性');
-            addTrustSignal(hasOfficialCompanyDomainMatch, 35, '主管機關公開資料申報的公司網址與本網域相符');
+            addTrustSignal(hasOfficialCompanyDomainMatch, 35, '多來源官方登記資料可連結組織與本網域');
             addTrustSignal(isTrustedTaiwanRegistrar, 15, `台灣常見註冊商：${registrarName}`);
             addTrustSignal(lineOfficialSignals.matched && (hasStrongEcommerceValidation || hasVerifiedBusinessEntity), 10, 'LINE 官方帳號/客服連結與商家脈絡一致');
             addTrustSignal(hasRegistrantDomainMatch || hasTaiwanOfficialRegistrant, 35, 'WHOIS/RDAP 註冊資料與網域或官方語意相符');
@@ -3338,7 +3340,7 @@ const { useState, useEffect, useRef } = React;
                 hasShoppingLineContactRisk ||
                 (traceData && traceData.isHighRisk && !isFinalSafePlatform && !isTraceHighRiskSameRoot);
 
-            // 公司官網映射只抵銷弱訊號；任何明確威脅都會阻止條件式信任生效。
+            // 組織官網映射只抵銷弱訊號；任何明確威脅都會阻止條件式信任生效。
             const hasConditionalCompanyTrustBlockingThreat = blocklistListedForRisk ||
                 isConfirmedScam ||
                 isManualHighRisk ||
@@ -3446,7 +3448,7 @@ const { useState, useEffect, useRef } = React;
                                         ? `受信賴公益/宗教資訊網域：${registrableDomain}`
                                         : '受信賴的白名單網域')))));
             }
-            else if (hasConditionalCompanyTrustApplied) siteContentMsg = '公司官網映射已驗證；新網域、低流量與技術設定等弱訊號不提高風險，強威脅仍會優先攔截';
+            else if (hasConditionalCompanyTrustApplied) siteContentMsg = '組織官網映射已驗證；新網域、低流量與技術設定等弱訊號不提高風險，強威脅仍會優先攔截';
             else if (hasCrawlerBlockedTrustedContext) siteContentMsg = `頁面可能啟用 WAF/Anti-bot，已改以可信根網域 ${registrableDomain} 的排名/信任基線判斷，不因爬蟲阻擋扣為高風險`;
 
             // 決定網域特徵卡片的 UI 文字
@@ -3548,7 +3550,7 @@ const { useState, useEffect, useRef } = React;
                 siteContentMsg = '危險：表單資料送往外部網域';
             } else if (hasConditionalCompanyTrustApplied) {
                 domainAnalysisStatus = 'safe';
-                domainAnalysisDetails = `已驗證公司官網映射：${verifiedCompany?.name || domain}；弱風險訊號已降為背景資訊，強威脅仍保留最高優先權。`;
+                domainAnalysisDetails = `已驗證組織官網映射：${verifiedCompany?.name || domain}；弱風險訊號已降為背景資訊，強威脅仍保留最高優先權。`;
             } else if (hasDisposableShoppingLandingRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 偵測到免洗亂碼購物落地頁：主網域「${rootLabel}」具有隨機生成特徵（${disposableRoot.reasons.slice(0, 3).join('、')}），且網址包含 ${matchedLandingParams.slice(0, 3).join('、')} 等廣告追蹤參數。`;
@@ -3836,19 +3838,20 @@ const { useState, useEffect, useRef } = React;
                         details: languageSignals.details
                     },
                     companyWebsite: {
-                        status: hasOfficialCompanyDomainMatch ? 'safe' : (companyVerificationData?.domainMatched ? 'warning' : (hasRegisteredBusinessIdentity ? 'info' : 'unknown')),
-                        label: '公司網址公開資料驗證',
-                        details: companyVerificationData?.disclosure || '未取得可將公司與此網域直接連結的公開資料',
+                        status: hasOfficialCompanyDomainMatch ? 'safe' : (organizationVerificationData?.domainMatched ? 'warning' : (hasRegisteredBusinessIdentity ? 'info' : 'unknown')),
+                        label: '組織／法人登記資料驗證',
+                        details: organizationVerificationData?.disclosure || '未取得可將登記組織與此網域直接連結的公開資料',
                         verified: hasOfficialCompanyDomainMatch,
-                        domainMatched: !!companyVerificationData?.domainMatched,
-                        activeRegistration: companyVerificationData?.activeRegistration !== false,
+                        domainMatched: !!organizationVerificationData?.domainMatched,
+                        activeRegistration: organizationVerificationData?.activeRegistration !== false,
                         registrationMatched: hasRegisteredBusinessIdentity,
-                        trustedDomainMappingMatched: !!companyVerificationData?.trustedDomainMappingMatched,
-                        confidenceScore: Number(companyVerificationData?.confidenceScore || 0),
+                        trustedDomainMappingMatched: !!organizationVerificationData?.trustedDomainMappingMatched,
+                        confidenceScore: Number(organizationVerificationData?.confidenceScore || 0),
                         company: verifiedCompany,
-                        companies: companyVerificationData?.companies || [],
-                        evidence: companyVerificationData?.evidence || [],
-                        checkedAt: companyVerificationData?.checkedAt || null
+                        entities: organizationVerificationData?.entities || organizationVerificationData?.companies || [],
+                        companies: organizationVerificationData?.entities || organizationVerificationData?.companies || [],
+                        evidence: organizationVerificationData?.evidence || [],
+                        checkedAt: organizationVerificationData?.checkedAt || null
                     },
                     conditionalCompanyTrust: hasConditionalCompanyTrust ? {
                         status: hasConditionalCompanyTrustApplied ? 'safe' : 'warning',
@@ -3870,7 +3873,7 @@ const { useState, useEffect, useRef } = React;
                         details: isTrustedPaymentGatewayOrApiEndpoint
                             ? '可信支付閘道/API/checkout 端點，不要求台灣在地商家實體或統編與 WHOIS/RDAP 註冊者比對'
                             : (hasOfficialCompanyDomainMatch
-                            ? '公司公開申報網址與目前網域相符：' + (verifiedCompany?.name || domain)
+                            ? '組織公開登記與網域資料相符：' + (verifiedCompany?.name || domain)
                             : (hasVerifiedBusinessEntity
                             ? (matchedBusinessEntityName ? `頁面商家名稱「${matchedBusinessEntityName}」與 WHOIS/RDAP 註冊者相符` : '頁面揭露商家資訊，且 WHOIS/RDAP 註冊資料具一致性')
                             : (hasRegisteredBusinessIdentity
@@ -3889,7 +3892,7 @@ const { useState, useEffect, useRef } = React;
                         label: 'HTTP 安全標頭',
                         details: securityHeadersData?.status === 'ok'
                             ? (hasConditionalCompanyTrustApplied && hasMissingAllSecurityHeadersRaw
-                                ? '缺少部分或全部現代安全標頭；公司官網映射已驗證，本項只保留為技術背景資訊'
+                                ? '缺少部分或全部現代安全標頭；組織官網映射已驗證，本項只保留為技術背景資訊'
                                 : (hasMissingAllSecurityHeaders
                                 ? '缺少 CSP、X-Frame-Options、X-Content-Type-Options 三項安全標頭'
                                 : (hasMissingAllSecurityHeadersRaw
@@ -3901,7 +3904,7 @@ const { useState, useEffect, useRef } = React;
                         status: hasConditionalCompanyTrustApplied && hasMissingMxRecordsRaw ? 'info' : (hasMissingMxRecords ? 'danger' : (hasMissingMxRecordsRaw ? 'warning' : (mxInfo.status === 'ok' ? 'safe' : 'unknown'))),
                         label: 'MX 郵件紀錄',
                         details: hasConditionalCompanyTrustApplied && hasMissingMxRecordsRaw
-                            ? '未偵測到可接收郵件的 MX 紀錄；公司官網映射已驗證，本項只保留為技術背景資訊'
+                            ? '未偵測到可接收郵件的 MX 紀錄；組織官網映射已驗證，本項只保留為技術背景資訊'
                             : (hasMissingMxRecords
                             ? (mxInfo.nullMx ? '網域設定 Null MX，明確表示不接收 Email' : '未偵測到 MX 郵件紀錄，可能是免洗或短期用途網域')
                             : (hasMissingMxRecordsRaw ? (mxInfo.nullMx ? '網域設定 Null MX，不接收 Email；但尚未搭配其他詐騙佐證，不單獨判為高風險' : '未偵測到 MX 郵件紀錄；但尚未搭配其他詐騙佐證，不單獨判為高風險')
@@ -3913,7 +3916,7 @@ const { useState, useEffect, useRef } = React;
                             (hasNewOneYearRegistrationRisk ? 'warning' :
                             (domainAgeDays !== null ? (domainAgeDays < 365 ? 'warning' : 'safe') : 'unknown')))),
                         label: '註冊時間',
-                        details: isEuCcHostedSite ? 'eu.cc 為共享子網域服務，無法取得此租戶的獨立註冊日；不採用 eu.cc 母網域的註冊年齡' : (isGithubPagesSite ? 'github.io 為共享架站服務，無法以 GitHub 母網域的註冊日代表此租戶；不採用母網域註冊年齡' : (isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}公司官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替'))))),
+                        details: isEuCcHostedSite ? 'eu.cc 為共享子網域服務，無法取得此租戶的獨立註冊日；不採用 eu.cc 母網域的註冊年齡' : (isGithubPagesSite ? 'github.io 為共享架站服務，無法以 GitHub 母網域的註冊日代表此租戶；不採用母網域註冊年齡' : (isOfficialTaiwanGov ? '台灣政府官方網域，註冊年齡不作風險加權' : (isWhitelisted ? '受信賴白名單網域，註冊年齡不作風險加權' : (hasConditionalCompanyTrustApplied ? `${domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}；` : ''}組織官網映射已驗證，註冊年齡只保留為背景資訊` : (domainAgeDays !== null ? `註冊日期: ${new Date(rdapDate).toISOString().split('T')[0]}${domainAgeDays < 90 ? ' - 3 個月內新註冊網域！' : ''}${hasNewOneYearRegistrationRisk ? ' - 未滿 6 個月且註冊週期約 1 年' : ''}` : 'RDAP/WHOIS 未提供明確註冊日；維持未知，不以 HTTPS 憑證日期代替'))))),
                         link: `https://who.is/whois/${rdapQueriedDomain}`
                     },
                     registrationPeriod: {
@@ -3922,7 +3925,7 @@ const { useState, useEffect, useRef } = React;
                         details: blocksSharedProviderTrust
                             ? `共享架站租戶沒有可獨立驗證的註冊週期；不採用 ${isEuCcHostedSite ? 'eu.cc' : 'github.io'} 母網域的到期日`
                             : (registrationPeriodDays !== null
-                            ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk && !hasConditionalCompanyTrustApplied ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項不作風險加權' : ''}`
+                            ? `註冊期間約 ${registrationPeriodDays} 天${rdapExpirationDate ? `；到期日: ${new Date(rdapExpirationDate).toISOString().split('T')[0]}` : ''}${hasNewOneYearRegistrationRisk && !hasConditionalCompanyTrustApplied ? ' - 新網域搭配 1 年短期註冊，需提高警覺' : ''}${hasConditionalCompanyTrustApplied ? '；組織官網映射已驗證，本項不作風險加權' : ''}`
                             : '無法自動判定註冊週期')
                     },
                     certificate: {
@@ -3932,9 +3935,9 @@ const { useState, useEffect, useRef } = React;
                     },
                     registrar: { status: isHighRiskRegistrar ? 'warning' : (isTrustedTaiwanRegistrar ? 'safe' : 'safe'), label: '註冊商信譽', details: registrarName ? (isHighRiskRegistrar ? `註冊商 ${registrarName} 常被用於垃圾網站` : (isTrustedTaiwanRegistrar ? `台灣常見註冊商: ${registrarName}` : `註冊商: ${registrarName}`)) : '無法辨識註冊商' },
                     whoisPrivacy: { status: privacyDetected ? (isHighTraffic ? 'safe' : 'warning') : 'safe', label: 'WHOIS 身份隱藏', details: privacyDetected ? (isHighTraffic ? '已開啟隱私保護 (知名網站常見設定)' : '已開啟隱私保護 (所有者身份被隱藏，無法追查)') : '未偵測到隱私保護服務' },
-                    subdomain: { status: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? 'info' : (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning'))) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? '公司官網映射已驗證，子網域深度只保留為背景資訊' : (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷'))) : '子網域層級正常' },
-                    subdomainPattern: { status: suspiciousSubdomain.matched ? ((isWhitelisted || isHighTraffic || hasConditionalCompanyTrustApplied) ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項不作風險加權' : ''}` : '未偵測到異常子網域命名模式' },
-                    disposableDomain: { status: hasConditionalCompanyTrustApplied && hasDisposableRootLabel ? 'info' : (hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe')), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}${hasConditionalCompanyTrustApplied ? '；公司官網映射已驗證，本項只保留為背景資訊' : ''}` : '未偵測到主網域亂碼免洗特徵' },
+                    subdomain: { status: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? 'info' : (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning'))) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? '組織官網映射已驗證，子網域深度只保留為背景資訊' : (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷'))) : '子網域層級正常' },
+                    subdomainPattern: { status: suspiciousSubdomain.matched ? ((isWhitelisted || isHighTraffic || hasConditionalCompanyTrustApplied) ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}${hasConditionalCompanyTrustApplied ? '；組織官網映射已驗證，本項不作風險加權' : ''}` : '未偵測到異常子網域命名模式' },
+                    disposableDomain: { status: hasConditionalCompanyTrustApplied && hasDisposableRootLabel ? 'info' : (hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe')), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}${hasConditionalCompanyTrustApplied ? '；組織官網映射已驗證，本項只保留為背景資訊' : ''}` : '未偵測到主網域亂碼免洗特徵' },
                     userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : 'Mobile 與 Desktop User-Agent 未發現不同最終導向' },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: serverInfo?.isReal ? 'info' : (hasRootDomainTrustBaseline ? 'info' : 'unknown'), label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : (hasRootDomainTrustBaseline ? '無法識別網路來源；已由根網域信任基線補強，不作為風險加權' : '無法識別網路來源') },
@@ -3987,14 +3990,14 @@ const { useState, useEffect, useRef } = React;
                                 : '未偵測到新站模板商城與商家資訊不足的高風險組合')
                     },
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
-                    shoppingLanding: { status: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? 'info' : ((hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe')), label: '購物/廣告落地頁網址', details: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? '偵測到廣告或落地頁網址特徵；公司官網映射已驗證，本項只保留為背景資訊' : (hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數'))) },
+                    shoppingLanding: { status: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? 'info' : ((hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe')), label: '購物/廣告落地頁網址', details: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? '偵測到廣告或落地頁網址特徵；組織官網映射已驗證，本項只保留為背景資訊' : (hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數'))) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
                     pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
                     officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },
                     urgency: { status: hasUrgencyScamSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain) ? 'warning' : 'info') : 'safe', label: '限時/恐嚇話術', details: hasUrgencyScamSignal ? `偵測到限時、帳戶異常或立即驗證類話術：${urgencySignals.examples.slice(0, 3).join('、')}` : '未偵測到常見限時或恐嚇話術' },
                     homograph: { status: hasHomographSignal ? 'danger' : 'safe', label: '相似字元網域', details: hasHomographSignal ? '網域含 Punycode 或非 ASCII 字元，可能利用相似字元混淆官方網域' : '未偵測到 Punycode 或 Unicode 混淆網域' },
                     params: { status: ((hasSuspiciousParams || hasNestedSuspiciousParams) && !isWhitelisted) ? (hasConditionalCompanyTrustApplied ? 'info' : 'danger') : ((hasSuspiciousParams || hasNestedSuspiciousParams) ? 'info' : 'safe'), label: '網址參數檢查', details: (hasSuspiciousParams || hasNestedSuspiciousParams) ? (isWhitelisted ? '官方白名單網域含交易/工作階段參數，視為正常站內流程' : (hasConditionalCompanyTrustApplied ? '官網映射已驗證；敏感流程參數只保留為背景資訊，仍持續檢查釣魚表單與異常轉址' : '包含敏感參數 (token/auth/session/verify)，疑似釣魚或帳戶劫持連結')) : '未發現敏感追蹤或認證參數' },
-                    entropy: { status: hasConditionalCompanyTrustApplied && (isExtremeGibberish || isHighEntropy || hasDisposableRootLabel) ? 'info' : ((isExtremeGibberish || hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk) ? 'danger' : (isHighEntropy || hasDisposableRootLabel ? 'warning' : 'safe')), label: '亂碼/隨機網址', details: hasConditionalCompanyTrustApplied && (isExtremeGibberish || isHighEntropy || hasDisposableRootLabel) ? '公司官網映射已驗證，命名與網址亂碼特徵只保留為背景資訊' : (hasDisposableRootLabel ? `主網域「${rootLabel}」疑似隨機生成：${disposableRoot.reasons.slice(0, 3).join('、')}` : (isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常')) },
+                    entropy: { status: hasConditionalCompanyTrustApplied && (isExtremeGibberish || isHighEntropy || hasDisposableRootLabel) ? 'info' : ((isExtremeGibberish || hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk) ? 'danger' : (isHighEntropy || hasDisposableRootLabel ? 'warning' : 'safe')), label: '亂碼/隨機網址', details: hasConditionalCompanyTrustApplied && (isExtremeGibberish || isHighEntropy || hasDisposableRootLabel) ? '組織官網映射已驗證，命名與網址亂碼特徵只保留為背景資訊' : (hasDisposableRootLabel ? `主網域「${rootLabel}」疑似隨機生成：${disposableRoot.reasons.slice(0, 3).join('、')}` : (isHighEntropy ? (isExtremeGibberish ? '🚨 網域包含極長亂碼，常為詐騙釣魚專屬追蹤連結' : '網域名稱隨機度過高，疑似機器生成') : '網域名稱結構正常')) },
                     iframe: { status: siteStatusData.hasIframe ? 'warning' : 'safe', label: 'Iframe 偽裝', details: siteStatusData.hasIframe ? '偵測到隱藏框架 (可能隱藏真實內容)' : '未偵測到異常框架' },
                     apkCheck: { status: isApkSite || isDownloadPhishingSignal ? 'danger' : (suspiciousDownloadPath ? 'warning' : 'safe'), label: '可疑檔案下載', details: isApkSite ? `偵測到 ${apkUrlCount} 個不明 APK 檔下載，極高風險！` : (isDownloadPhishingSignal ? `偵測到可疑下載誘導：安裝關鍵字 ${installKeywordCount} 個、動態下載特徵 ${dynamicDownloadCount} 個、可疑路徑 ${suspiciousDownloadPathCount} 個` : (suspiciousDownloadPath ? `網址路徑含可疑下載片段：${downloadSignals.suspiciousPathFragments.join('、')}` : '未偵測到可疑 Android 應用程式')) }
                 }
@@ -4126,10 +4129,11 @@ const { useState, useEffect, useRef } = React;
                     ecommerceValidation: createScanCheck('unknown', '正規電商佐證', '檢測流程未完整完成，無法確認正規電商佐證'),
                     seoMaturity: createScanCheck('unknown', 'SEO 成熟度', '檢測流程未完整完成，無法確認 SEO 佐證'),
                     languageConsistency: createScanCheck('unknown', '語言一致性', '檢測流程未完整完成，無法判定頁面語言一致性'),
-                    companyWebsite: createScanCheck('unknown', '公司網址公開資料驗證', '檢測流程未完整完成，無法查詢公司公開資料', {
+                    companyWebsite: createScanCheck('unknown', '組織／法人登記資料驗證', '檢測流程未完整完成，無法查詢組織與法人公開資料', {
                         verified: false,
                         registrationMatched: false,
                         confidenceScore: 0,
+                        entities: [],
                         companies: [],
                         evidence: []
                     }),
@@ -5688,9 +5692,9 @@ const { useState, useEffect, useRef } = React;
                                             <Building size={28} className={'flex-shrink-0 mt-0.5 ' + (result.checks.companyWebsite.verified ? 'text-green-700' : (result.checks.companyWebsite.domainMatched ? 'text-yellow-700' : 'text-blue-700'))} />
                                             <div className="min-w-0 w-full">
                                                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                    <h4 className={'font-extrabold text-lg md:text-xl ' + (result.checks.companyWebsite.verified ? 'text-green-900' : (result.checks.companyWebsite.domainMatched ? 'text-yellow-900' : 'text-blue-900'))}>公司網址公開資料驗證</h4>
+                                                    <h4 className={'font-extrabold text-lg md:text-xl ' + (result.checks.companyWebsite.verified ? 'text-green-900' : (result.checks.companyWebsite.domainMatched ? 'text-yellow-900' : 'text-blue-900'))}>組織／法人登記資料驗證</h4>
                                                     <span className={'text-xs font-extrabold px-2.5 py-1 rounded-full ' + (result.checks.companyWebsite.verified ? 'bg-green-200 text-green-900' : (result.checks.companyWebsite.domainMatched ? 'bg-yellow-200 text-yellow-900' : 'bg-blue-200 text-blue-900'))}>
-                                                        {result.checks.companyWebsite.verified ? '官網資料相符' : (result.checks.companyWebsite.domainMatched ? '網址紀錄需複核' : '公司登記相符')}
+                                                        {result.checks.companyWebsite.verified ? '官網與登記資料相符' : (result.checks.companyWebsite.domainMatched ? '網址紀錄需複核' : '登記資料相符')}
                                                     </span>
                                                 </div>
                                                 <p className="text-sm md:text-base text-gray-800 leading-relaxed font-semibold">
@@ -5701,20 +5705,23 @@ const { useState, useEffect, useRef } = React;
                                                     {(result.checks.companyWebsite.companies || []).slice(0, 2).map((company, companyIndex) => (
                                                         <div key={(company.taxId || company.name || 'company') + companyIndex} className="bg-white/90 border border-gray-200 rounded-xl p-4">
                                                             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                                                                <div className="font-extrabold text-gray-900">{company.name || '公司名稱未提供'}</div>
+                                                                <div className="font-extrabold text-gray-900">{company.name || '組織名稱未提供'}</div>
                                                                 <div className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
-                                                                    {[company.market, company.organizationType].filter(Boolean).join('・') || '商工登記'}
+                                                                    {[company.market, company.organizationType].filter(Boolean).join('・') || '組織登記'}
                                                                 </div>
                                                             </div>
                                                             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 text-sm">
                                                                 {company.taxId && <div><dt className="inline font-bold text-gray-500">統一編號：</dt><dd className="inline font-semibold text-gray-800">{company.taxId}</dd></div>}
                                                                 {company.status && <div><dt className="inline font-bold text-gray-500">登記狀態：</dt><dd className="inline font-semibold text-gray-800">{company.status}</dd></div>}
-                                                                {company.responsibleName && <div><dt className="inline font-bold text-gray-500">負責人：</dt><dd className="inline font-semibold text-gray-800">{company.responsibleName}</dd></div>}
+                                                                {company.responsibleName && <div><dt className="inline font-bold text-gray-500">{company.entityType === 'foundation' ? '法人代表' : '負責人'}：</dt><dd className="inline font-semibold text-gray-800">{company.responsibleName}</dd></div>}
                                                                 {company.setupDate && <div><dt className="inline font-bold text-gray-500">設立日期：</dt><dd className="inline font-semibold text-gray-800">{company.setupDate}</dd></div>}
-                                                                {company.capital && <div><dt className="inline font-bold text-gray-500">資本總額：</dt><dd className="inline font-semibold text-gray-800">NT$ {Number(company.capital).toLocaleString('zh-TW')}</dd></div>}
+                                                                {company.capital && <div><dt className="inline font-bold text-gray-500">{company.entityType === 'foundation' ? '登記財產額' : '資本總額'}：</dt><dd className="inline font-semibold text-gray-800">NT$ {Number(company.capital).toLocaleString('zh-TW')}</dd></div>}
                                                                 {company.stockCode && <div><dt className="inline font-bold text-gray-500">公司代號：</dt><dd className="inline font-semibold text-gray-800">{company.stockCode}</dd></div>}
+                                                                {company.registrationCourt && <div><dt className="inline font-bold text-gray-500">登記法院：</dt><dd className="inline font-semibold text-gray-800">{company.registrationCourt}</dd></div>}
+                                                                {company.registrationNumber && <div><dt className="inline font-bold text-gray-500">登記號數：</dt><dd className="inline font-semibold text-gray-800">{company.registrationNumber}</dd></div>}
+                                                                {company.registrationAuthority && <div className="sm:col-span-2"><dt className="inline font-bold text-gray-500">主管機關：</dt><dd className="inline font-semibold text-gray-800">{company.registrationAuthority}</dd></div>}
                                                                 {company.address && <div className="sm:col-span-2"><dt className="inline font-bold text-gray-500">登記地址：</dt><dd className="inline font-semibold text-gray-800">{company.address}</dd></div>}
-                                                                {company.website && <div className="sm:col-span-2"><dt className="inline font-bold text-gray-500">申報網址：</dt><dd className="inline font-semibold text-gray-800 break-all">{company.website}</dd></div>}
+                                                                {company.website && <div className="sm:col-span-2"><dt className="inline font-bold text-gray-500">公開資料網址：</dt><dd className="inline font-semibold text-gray-800 break-all">{company.website}</dd></div>}
                                                             </dl>
                                                         </div>
                                                     ))}
@@ -5729,7 +5736,7 @@ const { useState, useEffect, useRef } = React;
                                                                 <a href={evidence.sourceUrl} target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">
                                                                     {evidence.source}
                                                                 </a>
-                                                                {evidence.directDomainMatch ? '（網址相符）' : '（公司資料相符）'}
+                                                                {evidence.directDomainMatch ? '（網址相符）' : '（登記資料相符）'}
                                                             </React.Fragment>
                                                         ))}
                                                     </div>
@@ -5738,10 +5745,12 @@ const { useState, useEffect, useRef } = React;
                                                     <span className="font-bold">可再人工查核：</span>
                                                     <a href="https://www.etax.nat.gov.tw/etwmain/online-service/publicity-inquiry/taxation-registration" target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">財政部稅籍登記</a>
                                                     <span>、</span>
+                                                    <a href="https://aomp109.judicial.gov.tw/judbp/whd6k/WHD6K01.htm" target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">司法院法人登記</a>
+                                                    <span>、</span>
                                                     <a href="https://whois.twnic.tw/" target="_blank" rel="noopener noreferrer" className="font-bold text-blue-700 hover:underline">TWNIC 網域資料</a>
                                                 </div>
                                                 <p className="mt-3 text-[11px] md:text-xs text-gray-600 leading-relaxed">
-                                                    公司依法登記不等於網站交易絕對安全；若僅有統編相符，可能仍存在冒用公司資料的情形。官方警示、釣魚黑名單與明確詐騙證據仍具有較高優先級。
+                                                    組織依法登記不等於網站交易絕對安全；若只有名稱或統編相符，仍可能存在冒用資料的情形。官方警示、釣魚黑名單與明確詐騙證據仍具有較高優先級。
                                                 </p>
                                             </div>
                                         </div>
