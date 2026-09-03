@@ -37,7 +37,7 @@ window.RISK_CONFIG = {
         '39buy.co', '39buy.com.tw', 'icdf.org.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
-        'cna.com.tw', 'oiltrace.tw', 'austinenglish.com.tw',
+        'cna.com.tw', 'twnic.tw', 'oiltrace.tw', 'austinenglish.com.tw',
         'noncodingai.com', 'fuboncharity.org.tw', 'utaggo.com.tw',
         'zk-school.com', 'gowedding.tw'
     ],

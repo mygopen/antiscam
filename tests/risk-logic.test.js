@@ -3236,6 +3236,32 @@ test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', () => 
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
 });
 
+test('TWNIC 官方 twnic.tw 網域與子網域應視為可信台灣網路服務', () => {
+    const hostname = 'twnic.tw';
+    const officialSubdomain = 'ccrdap.twnic.tw';
+    const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
+    const allowlistOverride = applyTrustedAllowlistRiskOverride({
+        hostname,
+        blocklistListed: true,
+        googleUnsafe: true,
+        initialRiskScore: 95
+    });
+
+    assert.ok(riskConfig.trustedTaiwanServiceDomains.includes(hostname));
+    assert.equal(matchesDomainList(hostname, whitelist), true);
+    assert.equal(isTrustedTaiwanServiceDomain(hostname), true);
+    assert.equal(isTrustedTaiwanServiceDomain('www.twnic.tw'), true);
+    assert.equal(isTrustedTaiwanServiceDomain(officialSubdomain), true);
+    assert.equal(isVerifiedSafeRootDomain(hostname), true);
+    assert.equal(shouldSkipAiBrandAnalysis(hostname), true);
+    assert.equal(allowlistOverride.hasTrustedAllowlistOverride, true);
+    assert.equal(allowlistOverride.blocklistListedForRisk, false);
+    assert.equal(allowlistOverride.googleFlaggedForRisk, false);
+    assert.equal(allowlistOverride.riskScore, 0);
+    assert.equal(isTrustedTaiwanServiceDomain('fake-twnic.tw'), false);
+    assert.equal(isVerifiedSafeRootDomain('twnic.tw.evil.example', whitelist), false);
+});
+
 test('uTagGo 官方短網址 link.utaggo.com.tw 應視為可信安全縮網址', () => {
     const rawUrl = 'https://link.utaggo.com.tw/0sTPt?utm_source=instagram&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
