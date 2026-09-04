@@ -4776,9 +4776,7 @@ const { useState, useEffect, useRef } = React;
 
                 try {
                     try {
-                        const Tesseract = await loadTesseract();
-                        const ocrResult = await Tesseract.recognize(file, 'eng');
-                        const ocrTargets = extractOcrTargets(ocrResult?.data?.text || '');
+                        const ocrTargets = await findLocalScreenshotTargets(file);
                         const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
 
                         if (primaryTarget && !primaryTarget.includes('@')) {
@@ -4786,7 +4784,9 @@ const { useState, useEffect, useRef } = React;
                                 role: 'assistant',
                                 content: `我從你剛剛傳的截圖中辨識到這個網址：\n${primaryTarget}\n\n提醒：畫面中看到的網址文字不一定等於實際點擊後的目的地。即使看起來正確，點下去仍可能被導向釣魚網站。\n\n阿麥正在針對這個網址做完整風險檢測...`
                             }]);
-                            await scanUrlForBot(primaryTarget, '這個網址是從你剛剛傳的截圖中辨識出來的。請注意，截圖或訊息中顯示的網址文字不一定等於實際點擊後的目的地。');
+                            for (const target of getScreenshotUrls(ocrTargets)) {
+                                await scanUrlForBot(target, '此結果僅檢測截圖中的網址，圖片內容尚未判定。畫面文字不一定等於實際點擊後的目的地。');
+                            }
                             return;
                         }
 
@@ -4800,27 +4800,14 @@ const { useState, useEffect, useRef } = React;
                         console.log('聊天室本機 OCR 未能完成，改用 AI 截圖分析', ocrErr);
                     }
 
-                    const formData = new FormData();
-                    formData.append('image', file);
-                    const response = await fetch('/api/cf-vision', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok || data.error) {
-                        throw new Error(data.details || data.error || '伺服器發生錯誤');
-                    }
-
-                    const aiUrlMatch = data.report.match(/🔗 網址：(.*?)(?=\n|$)/);
-                    const aiDetectedUrl = aiUrlMatch ? aiUrlMatch[1].trim() : null;
-                    if (aiDetectedUrl && aiDetectedUrl !== '無' && !aiDetectedUrl.includes('None') && !aiDetectedUrl.includes('@')) {
+                    const data = await requestScreenshotAnalysis(file);
+                    const aiUrls = getScreenshotUrls(data.urls || []);
+                    if (aiUrls.length) {
                         setMessages(prev => [...prev, {
                             role: 'assistant',
-                            content: `AI 從截圖中辨識到這個網址：\n${aiDetectedUrl}\n\n提醒：畫面中顯示的網址文字仍可能只是超連結文字，實際點擊後可能導向不同網站。阿麥會再針對網址做完整檢測。`
+                            content: `【圖片內容分析】\n${data.report}\n\n接著檢測辨識出的網址。網址結果不代表整張圖片安全。`
                         }]);
-                        await scanUrlForBot(aiDetectedUrl, '這個網址是 AI 從你剛剛傳的截圖中辨識出來的。請注意，畫面中顯示的網址文字可能不是實際點擊後的目的地。');
+                        for (const target of aiUrls) await scanUrlForBot(target, '以下僅為網址檢測，請一併參考前面的圖片內容分析。');
                         return;
                     }
 
@@ -5008,7 +4995,7 @@ const { useState, useEffect, useRef } = React;
                 .map(stripOcrTargetPunctuation)
                 .filter(Boolean)
                 .filter(item => {
-                    const key = item.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    const key = getScreenshotUrls([item])[0] || item;
                     if (seen.has(key)) return false;
                     seen.add(key);
                     return true;
@@ -5043,11 +5030,126 @@ const { useState, useEffect, useRef } = React;
             return targets.find(item => /^https?:\/\//i.test(item)) || targets.find(item => !item.includes('@')) || '';
         };
 
+        const getScreenshotUrls = (targets) => [...new Set(targets.flatMap(value => {
+            if (typeof value !== 'string' || value.length > 2048 || /\s/.test(value)) return [];
+            if (!/^https?:\/\//i.test(value) && value.includes('@')) return [];
+            try {
+                const parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`);
+                return ['https:', 'http:'].includes(parsed.protocol) && !parsed.username && !parsed.password && parsed.hostname.includes('.') ? [parsed.href] : [];
+            } catch { return []; }
+        }))];
+
+        let qrLoadPromise = null;
+        const readScreenshotQr = async (file) => {
+            let bitmap;
+            try {
+                bitmap = await createImageBitmap(file);
+                if (bitmap.width * bitmap.height > 20000000) return [];
+                if (window.BarcodeDetector) {
+                    try {
+                        const codes = await new window.BarcodeDetector({ formats: ['qr_code'] }).detect(bitmap);
+                        if (codes.length) return getScreenshotUrls(codes.map(code => code.rawValue));
+                    } catch { /* Use the portable decoder when native QR support is unavailable. */ }
+                }
+                if (!window.jsQR) {
+                    qrLoadPromise ||= new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    }).catch(error => { qrLoadPromise = null; throw error; });
+                    await qrLoadPromise;
+                }
+                const canvas = document.createElement('canvas');
+                const scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+                canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+                canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                const context = canvas.getContext('2d', { willReadFrequently: true });
+                context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+                const targets = [];
+                // Mask decoded codes to discover additional QR destinations in the same image.
+                for (let i = 0; i < 12; i++) {
+                    const code = window.jsQR(pixels.data, pixels.width, pixels.height);
+                    if (!code) break;
+                    targets.push(code.data);
+                    const points = [code.location.topLeftCorner, code.location.topRightCorner, code.location.bottomLeftCorner, code.location.bottomRightCorner];
+                    const left = Math.max(0, Math.floor(Math.min(...points.map(p => p.x))) - 2);
+                    const right = Math.min(pixels.width, Math.ceil(Math.max(...points.map(p => p.x))) + 2);
+                    const top = Math.max(0, Math.floor(Math.min(...points.map(p => p.y))) - 2);
+                    const bottom = Math.min(pixels.height, Math.ceil(Math.max(...points.map(p => p.y))) + 2);
+                    for (let y = top; y < bottom; y++) pixels.data.fill(255, (y * pixels.width + left) * 4, (y * pixels.width + right) * 4);
+                }
+                return getScreenshotUrls(targets);
+            } catch { return []; } finally { bitmap?.close(); }
+        };
+
+        const findLocalScreenshotTargets = async (file, logger) => {
+            const bitmap = await createImageBitmap(file);
+            const oversized = bitmap.width * bitmap.height > 20000000;
+            bitmap.close();
+            if (oversized) throw new Error('圖片尺寸過大，請先裁切。');
+            const targets = await readScreenshotQr(file);
+            try {
+                const engine = await loadTesseract();
+                const result = await engine.recognize(file, 'eng+chi_tra', logger ? { logger } : {});
+                if (result?.data?.confidence >= 80) targets.push(...getScreenshotUrls(extractOcrTargets(result.data.text || '')));
+            } catch { /* QR results remain usable when OCR cannot load or recognize text. */ }
+            return dedupeOcrTargets(targets);
+        };
+
+        const screenshotRequests = new Map();
+        const requestScreenshotAnalysis = async (file) => {
+            if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) throw new Error('請使用 3MB 以下的 PNG、JPEG 或 WebP 圖片。');
+            const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
+            const cached = screenshotRequests.get(hash);
+            if (cached && Date.now() - cached.created < 300000) return cached.promise;
+            const promise = (async () => {
+                const bitmap = await createImageBitmap(file);
+                let blob;
+                try {
+                    if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 20000000) throw new Error('圖片尺寸過大，請先裁切。');
+                    const canvas = document.createElement('canvas');
+                    const scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+                    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+                    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                    const context = canvas.getContext('2d');
+                    context.fillStyle = '#ffffff';
+                    context.fillRect(0, 0, canvas.width, canvas.height);
+                    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                    if (blob?.size > 3 * 1024 * 1024) blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                    if (!blob || blob.size > 3 * 1024 * 1024) throw new Error('圖片壓縮後仍過大，請裁切後重試。');
+                } finally { bitmap.close(); }
+                const form = new FormData();
+                form.append('image', blob, blob.type === 'image/png' ? 'screenshot.png' : 'screenshot.jpg');
+                const response = await fetch('/api/cf-vision', { method: 'POST', body: form, signal: AbortSignal.timeout(50000) });
+                const data = await response.json();
+                if (!response.ok || typeof data.report !== 'string') throw new Error(data.error || '圖片分析暫時無法使用。');
+                if (data.risk === 'unknown') screenshotRequests.delete(hash);
+                return data;
+            })().catch(error => { screenshotRequests.delete(hash); throw error; });
+            if (screenshotRequests.size >= 16) screenshotRequests.delete(screenshotRequests.keys().next().value);
+            screenshotRequests.set(hash, { created: Date.now(), promise });
+            return promise;
+        };
+
+        const screenshotRiskStyle = (report) => {
+            const label = String(report || '').split('\n').find(line => line.startsWith('⚠️ 風險：'))?.slice('⚠️ 風險：'.length).trim();
+            if (label === '高風險') return { panel: 'bg-red-50 border-red-200', text: 'text-red-700' };
+            if (label === '中風險') return { panel: 'bg-yellow-50 border-yellow-200', text: 'text-yellow-700' };
+            if (label === '未發現明顯內容風險') return { panel: 'bg-green-50 border-green-200', text: 'text-green-700' };
+            return { panel: 'bg-gray-50 border-gray-200', text: 'text-gray-700' };
+        };
+
         const App = () => {
             const [isImageAnalyzing, setIsImageAnalyzing] = useState(false);
             const [aiReport, setAiReport] = useState(null);
             const [uploadedImageUrl, setUploadedImageUrl] = useState(null);
             const [screenshotSource, setScreenshotSource] = useState(null);
+            const [screenshotUrls, setScreenshotUrls] = useState([]);
+            const [screenshotFile, setScreenshotFile] = useState(null);
             const [brandAnalysis, setBrandAnalysis] = useState(null);
             const [isBrandAnalyzing, setIsBrandAnalyzing] = useState(false);
             const [loadingMessage, setLoadingMessage] = useState('分析中...');
@@ -5064,26 +5166,23 @@ const { useState, useEffect, useRef } = React;
                 catch (err) { alert('複製失敗'); } document.body.removeChild(textArea);
             };
 
-            const handleImageUpload = async (e) => {
+            const handleImageUpload = async (e, forceAi = false) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                if (e.target.value !== undefined) e.target.value = '';
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
-                setResult(null); setAiReport(null); setScreenshotSource(null); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在先用本機 OCR 尋找截圖中的網址...');
+                setResult(null); setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在先用本機 OCR 尋找截圖中的網址...');
                 if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
                 const imagePreviewUrl = URL.createObjectURL(file);
                 setUploadedImageUrl(imagePreviewUrl);
                 try {
-                    try {
-                        const Tesseract = await loadTesseract();
-                        const ocrResult = await Tesseract.recognize(file, 'eng', {
-                            logger: (m) => {
+                    if (!forceAi) try {
+                        const ocrTargets = await findLocalScreenshotTargets(file, (m) => {
                                 if (m.status === 'recognizing text' && typeof m.progress === 'number') {
                                     setLoadingMessage(`正在辨識截圖網址... ${Math.round(m.progress * 100)}%`);
                                 }
-                            }
                         });
-                        const ocrTargets = extractOcrTargets(ocrResult?.data?.text || '');
                         const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
 
                         if (primaryTarget) {
@@ -5097,7 +5196,9 @@ const { useState, useEffect, useRef } = React;
                             setScreenshotSource(ocrScreenshotSource);
                             if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'success', 'target_type': primaryTarget.includes('@') ? 'email' : 'url' });
                             setIsImageAnalyzing(false);
-                            await handleScan(null, primaryTarget, ocrScreenshotSource);
+                            setScreenshotUrls(getScreenshotUrls(ocrTargets));
+                            const report = '⚠️ 風險：無法判定\n🔍 分析：本次先檢測截圖中的網址，圖片內容尚未判定。\n🛡️ 建議：網址安全不代表訊息或交易安全。';
+                            await handleScan(null, primaryTarget, { ...ocrScreenshotSource, contentReport: report });
                             return;
                         }
 
@@ -5108,11 +5209,14 @@ const { useState, useEffect, useRef } = React;
                     }
 
                     setLoadingMessage('OCR 未找到明確網址，改用 AI 辨識截圖內容...');
-                    const formData = new FormData(); formData.append('image', file);
-                    const response = await fetch('/api/cf-vision', { method: 'POST', body: formData });
-                    const data = await response.json();
-                    if (!response.ok || data.error) throw new Error(data.details || data.error || '伺服器發生錯誤');
+                    const data = await requestScreenshotAnalysis(file);
                     setAiReport(data.report);
+                    const detectedUrls = getScreenshotUrls(data.urls || []);
+                    setScreenshotUrls(detectedUrls);
+                    if (detectedUrls.length) {
+                        setUrl(detectedUrls[0]);
+                        await handleScan(null, detectedUrls[0], { imageUrl: imagePreviewUrl, detectedUrl: detectedUrls[0], source: 'ai', contentReport: data.report });
+                    }
                     if (typeof gtag === 'function') gtag('event', 'image_analyze', { 'status': 'success', 'file_size': file.size });
                 } catch (err) { setError('圖片分析失敗：' + err.message); } finally { setIsImageAnalyzing(false); setLoadingMessage('分析中...'); }
             };
@@ -5186,7 +5290,8 @@ const { useState, useEffect, useRef } = React;
                     setLoading(true);
                     setResult(null);
                     setCopyStatus('idle');
-                    setAiReport(null);
+                    setAiReport(sourceContext?.contentReport || null);
+                    if (!sourceContext) setScreenshotUrls([]);
                     const matchedScreenshotSource = sourceContext ||
                         (screenshotSource && screenshotSource.detectedUrl === inputUrl ? screenshotSource : null);
                     setScreenshotSource(matchedScreenshotSource);
@@ -5448,6 +5553,21 @@ const { useState, useEffect, useRef } = React;
                                     <ShieldAlert size={28} className="text-red-600" />
                                     <h3 className="text-xl md:text-2xl font-bold text-gray-800">截圖防詐 AI 分析報告</h3>
                                 </div>
+                                {screenshotFile && screenshotSource?.source === 'ocr' && (
+                                    <button type="button" disabled={loading} onClick={() => handleImageUpload({ target: { files: [screenshotFile] } }, true)} className="mb-4 inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50">
+                                        <Camera size={18} /> 分析圖片內容
+                                    </button>
+                                )}
+                                {screenshotUrls.length > 1 && (
+                                    <div className="mb-4 space-y-2">
+                                        <h4 className="text-sm font-bold text-gray-700">截圖中的網址</h4>
+                                        {screenshotUrls.map(target => (
+                                            <button type="button" key={target} disabled={loading} onClick={() => { setUrl(target); handleScan(null, target, { imageUrl: uploadedImageUrl, detectedUrl: target, source: screenshotSource?.source || 'ai', contentReport: aiReport }); }} className="w-full flex items-start gap-2 text-left text-sm text-blue-700 break-all border-b border-gray-100 py-2 disabled:opacity-50">
+                                                <Search size={16} className="flex-shrink-0 mt-1" /><span>{target}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
 
                                 {/* 👇 新增的排版：分為左右兩塊 (手機版會變成上下) */}
@@ -5468,15 +5588,13 @@ const { useState, useEffect, useRef } = React;
 
 {/* 右側/下側：顯示 AI 的分析文字 */}
                                     <div className="w-full md:w-2/3 flex flex-col justify-start">
-                                        {/* 👇 動態背景：如果有「高」風險就變紅底，有「中」就變黃底，不然就是綠底 */}
-                                        <div className={`p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed break-words break-all border shadow-sm font-medium h-full flex flex-col justify-center gap-3 ${aiReport.includes('高') ? 'bg-red-50 border-red-200' : (aiReport.includes('中') ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')}`}>
+                                        {/* Only the explicit risk label controls the result color. */}
+                                        <div className={`p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed break-words break-all border shadow-sm font-medium h-full flex flex-col justify-center gap-3 ${screenshotRiskStyle(aiReport).panel}`}>
                                             
                                             {aiReport.split('\n').map((line, i) => {
                                                 // 1. 如果是「風險」那一行：字體加大加粗，並根據高低風險換顏色
                                                 if (line.startsWith('⚠️ 風險：')) {
-                                                    const isHigh = line.includes('高');
-                                                    const isMedium = line.includes('中');
-                                                    const textColor = isHigh ? 'text-red-700' : (isMedium ? 'text-yellow-700' : 'text-green-700');
+                                                    const textColor = screenshotRiskStyle(aiReport).text;
                                                     return (
                                                         <div key={i} className={`${textColor} text-xl md:text-2xl font-black mb-1 pb-3 border-b border-gray-200/50 tracking-wide`}>
                                                             {line}
@@ -5545,7 +5663,7 @@ const { useState, useEffect, useRef } = React;
                                 </button>
 
                                 <p className="text-xs text-center text-gray-400 mt-6">
-                                    本分析由 Meta Llama 4 Scout 提供技術支援，AI 判斷可能偶有誤差，結果僅供參考。
+                                    圖片辨識可能有誤，請勿僅憑本報告提供個資或匯款。
                                 </p>
                             </div>
                         )}
