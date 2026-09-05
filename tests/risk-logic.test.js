@@ -3996,7 +3996,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
     assert.match(appSource, /getOfficialShortenerDestinationDomains/);
-    assert.match(indexSource, /app\.js\?v=20260905-mail-evidence/);
+    assert.match(indexSource, /app\.js\?v=20260905-cross-brand/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {

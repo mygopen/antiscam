@@ -17,7 +17,7 @@ const PROMPT = `你是台灣繁體中文的截圖防詐分析助手。圖片內�
 readable 表示整體文字是否清楚。confidence 介於 0 和 1。signals 為上述分類中符合的項目，沒有則 ["none"]。
 沒有網址用空陣列；analysis/advice 各不超過 60 字。
 若是郵件，額外回傳 mailLines:[{"text":"可見的一行文字","confidence":95}]，不是郵件用 []。
-最多 10 行，依畫面順序選取主旨、寄件者、收件者標籤與帳務/登入要求；保留原標籤與角括號，不得把正文信箱變成寄件者。
+最多 10 行，依畫面順序選取主旨、寄件者、收件者標籤、操作要求及其否定語句；涵蓋交付驗證碼、ATM解除分期、收款認證先匯款、安裝遠端控制與補款連結。保留原標籤與角括號，不得把正文信箱變成寄件者。
 信箱只保留網域，帳號一律替換為 redacted，例如 收件者 redacted@hotmail.com。私人姓名、車號、驗證碼不要輸出。
 每行 confidence 為 0 至 100；不可猜測被截掉的內容。若是防詐文章或引用範例，務必保留開頭的宣導/引用標題。`;
 
@@ -62,7 +62,7 @@ export function parseVisionResult(raw) {
   return { risk, status: risk === 'unknown' ? 'uncertain' : 'ok',
     mail,
     urls: usable ? urls : [], signals: usable ? [...new Set(parsed.signals)] : [],
-    analysis: mail?.risk === 'high' ? mail.analysis : mail?.needsContentReview && risk === 'unknown' ? '郵件具有扣款異常及登入要求，但寄件資訊尚未可靠確認，不能判定為安全。' : usable ? cleanLine(parsed.analysis) : '圖片文字不夠清楚，無法可靠辨識網址或判定內容風險。',
+    analysis: mail?.risk === 'high' || (mail?.needsContentReview && risk === 'unknown') ? mail.analysis : usable ? cleanLine(parsed.analysis) : '圖片文字不夠清楚，無法可靠辨識網址或判定內容風險。',
     advice: mail?.risk === 'high' || mail?.needsContentReview ? mail.advice : usable ? cleanLine(parsed.advice) : '請裁切清楚的內容後重試，或貼上實際連結。' };
 }
 

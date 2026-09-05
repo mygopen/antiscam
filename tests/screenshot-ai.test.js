@@ -97,7 +97,7 @@ function browserHelpers(extra = {}) {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const source = app.slice(app.indexOf('const TESSERACT_CDN_URL'), app.indexOf('const App ='));
     const context = { URL, Set, Map, console, ...extra };
-    vm.runInNewContext(`${source}\nthis.helpers = { getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, requestScreenshotAnalysis };`, context);
+    vm.runInNewContext(`${source}\nthis.helpers = { getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, requestScreenshotAnalysis, localScreenshotReport, preserveLocalScreenshotReport };`, context);
     return context.helpers;
 }
 
@@ -111,6 +111,8 @@ test('actual frontend helpers preserve URL case and do not color unknown reports
     assert.equal(helpers.extractOcrTargets('https://sf-\nexpress.example.com/t/NAt0rR')[0], 'https://sf-express.example.com/t/NAt0rR');
     assert.deepEqual(Array.from(helpers.getScreenshotUrls(helpers.extractOcrTargets('service.example@gmail.com'))), []);
     assert.deepEqual(Array.from(helpers.getScreenshotUrls(helpers.extractOcrTargets('redacted.name@upcmaiLnl'))), []);
+    assert.deepEqual(Array.from(helpers.getScreenshotUrls(helpers.extractOcrTargets('https://first.example/\nhttps://second.example/Next'))), ['https://first.example/', 'https://second.example/Next']);
+    assert.deepEqual(Array.from(helpers.getScreenshotUrls(helpers.extractOcrTargets('https://first.example/\nwww.second.example/Next'))), ['https://first.example/', 'https://www.second.example/Next']);
 });
 
 test('native QR targets survive an OCR failure without a cloud AI request', async () => {
@@ -130,4 +132,53 @@ test('local screenshot extracts mail evidence even with no URLs and no cloud cal
     const result = await helpers.analyzeLocalScreenshot({});
     assert.equal(result.mail.risk, 'high');
     assert.equal(result.targets.length, 0);
+});
+
+test('local unknown and failed OCR produce neutral reports without needing an AI call', async () => {
+    const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
+        BarcodeDetector: class { async detect() { return []; } }, jsQR: () => null,
+        Tesseract: { recognize: async () => ({ data: { confidence: 95, text: '中華電信\n請登入官方 App 查詢帳單' } }) } },
+        createImageBitmap: async () => ({ width: 100, height: 100, close() {} }) });
+    const local = await helpers.analyzeLocalScreenshot({});
+    assert.equal(local.mail.risk, 'unknown');
+    for (const value of [local.mail, null]) {
+        const report = helpers.localScreenshotReport(value);
+        assert.match(report, /風險：無法判定/);
+        assert.equal(helpers.screenshotRiskStyle(report).text, 'text-gray-700');
+    }
+});
+
+test('manual AI review cannot erase high or unresolved local evidence', () => {
+    const helpers = browserHelpers();
+    const high = '⚠️ 風險：高風險\n請勿回傳OTP';
+    const unresolved = '⚠️ 風險：無法判定\n寄件資訊不明，不能判定為安全';
+    const low = '⚠️ 風險：未發現明顯內容風險';
+    assert.equal(helpers.preserveLocalScreenshotReport(high, low), high);
+    assert.equal(helpers.preserveLocalScreenshotReport(unresolved, low), unresolved);
+    assert.equal(helpers.preserveLocalScreenshotReport(unresolved, high), high);
+});
+
+test('actual chat upload handler keeps high and unknown reports local while scanning URLs', async () => {
+    const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
+    const start = app.indexOf('const handleBotImageUpload =');
+    const source = app.slice(start, app.indexOf('\n            return (', start));
+    const emailRisk = require('../email-risk.js');
+    const helpers = browserHelpers({ window: { EmailRisk: emailRisk } });
+    for (const text of ['未知平台開通收款\n請先匯款', '中華電信電子帳單已寄出']) {
+        const mail = emailRisk.assess(text.split('\n').map(text => ({ text, confidence: 95 })));
+        let messages = [];
+        const scans = [];
+        const context = {
+            URL: { createObjectURL: () => 'blob:local-test' },
+            setMessages: update => { messages = update(messages); }, setIsTyping() {},
+            analyzeLocalScreenshot: async () => ({ mail, targets: ['https://example.com/Visible'] }),
+            localScreenshotReport: helpers.localScreenshotReport, getScreenshotUrls: helpers.getScreenshotUrls,
+            scanUrlForBot: async target => { scans.push(target); },
+            requestScreenshotAnalysis() { assert.fail('chat must not automatically call vision AI'); }
+        };
+        vm.runInNewContext(source + '\nthis.upload = handleBotImageUpload;', context);
+        await context.upload({ target: { files: [{ size: 100 }], value: '' } });
+        assert.ok(messages.some(message => message.content === emailRisk.report(mail)));
+        assert.deepEqual(scans, ['https://example.com/Visible']);
+    }
 });

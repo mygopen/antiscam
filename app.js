@@ -4754,7 +4754,6 @@ const { useState, useEffect, useRef } = React;
 
             const handleBotImageUpload = async (e) => {
                 const file = e.target.files[0];
-                let pendingScreenshotUrls = [];
                 if (!file) return;
                 e.target.value = '';
 
@@ -4770,67 +4769,17 @@ const { useState, useEffect, useRef } = React;
                 // 👇 新增：截圖上傳時，也會顯示連線檢查中的貼圖
                 setMessages(prev => [...prev, { 
                     role: 'assistant', 
-                    content: '收到圖片！阿麥會先用本機 OCR 找截圖裡的網址，找不到才交給 AI 分析 🔍...',
+                    content: '收到圖片，正在檢查可讀取的內容與網址。',
                     sticker: 'https://ik.imagekit.io/mygopen/sticks/33.png'
                 }]);
                 setIsTyping(true);
 
                 try {
-                    try {
-                        const local = await analyzeLocalScreenshot(file);
-                        const ocrTargets = local.targets;
-                        pendingScreenshotUrls = ocrTargets;
-                        if (local.mail?.risk === 'high') {
-                            setMessages(prev => [...prev, { role: 'assistant', content: window.EmailRisk.report(local.mail) }]);
-                            for (const target of ocrTargets) await scanUrlForBot(target, '此為網址檢測；郵件內容另有高風險警訊。');
-                            return;
-                        }
-                        const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
-
-                        if (primaryTarget && !primaryTarget.includes('@') && !local.mail?.needsContentReview) {
-                            setMessages(prev => [...prev, {
-                                role: 'assistant',
-                                content: `我從你剛剛傳的截圖中辨識到這個網址：\n${primaryTarget}\n\n提醒：畫面中看到的網址文字不一定等於實際點擊後的目的地。即使看起來正確，點下去仍可能被導向釣魚網站。\n\n阿麥正在針對這個網址做完整風險檢測...`
-                            }]);
-                            for (const target of getScreenshotUrls(ocrTargets)) {
-                                await scanUrlForBot(target, '此結果僅檢測截圖中的網址，圖片內容尚未判定。畫面文字不一定等於實際點擊後的目的地。');
-                            }
-                            return;
-                        }
-
-                        if (primaryTarget && primaryTarget.includes('@')) {
-                            setMessages(prev => [...prev, {
-                                role: 'assistant',
-                                content: `我在截圖中只辨識到疑似 Email：${primaryTarget}\n\nEmail 不是網址，阿麥會改用 AI 檢查畫面內容。`
-                            }]);
-                        }
-                    } catch (ocrErr) {
-                        console.log('聊天室本機 OCR 未能完成，改用 AI 截圖分析', ocrErr);
+                    const local = await analyzeLocalScreenshot(file);
+                    setMessages(prev => [...prev, { role: 'assistant', content: localScreenshotReport(local.mail) }]);
+                    for (const target of getScreenshotUrls(local.targets)) {
+                        await scanUrlForBot(target, '此為可見網址檢測，不能取代前面的內容警示，也不代表真正點擊目的地已確認。');
                     }
-
-                    const data = await requestScreenshotAnalysis(file);
-                    const aiUrls = getScreenshotUrls([...(data.urls || []), ...pendingScreenshotUrls]);
-                    if (aiUrls.length) {
-                        setMessages(prev => [...prev, {
-                            role: 'assistant',
-                            content: `【圖片內容分析】\n${data.report}\n\n接著檢測辨識出的網址。網址結果不代表整張圖片安全。`
-                        }]);
-                        for (const target of aiUrls) await scanUrlForBot(target, '以下僅為網址檢測，請一併參考前面的圖片內容分析。');
-                        return;
-                    }
-
-                    let stickerObj = null; // 👇 新增截圖專用貼圖變數
-
-                    if (data.report.includes('高風險')) {
-                        stickerObj = 'https://ik.imagekit.io/mygopen/sticks/17.png'; // 👈 高風險時顯示驚嚇貼圖
-                    }
-
-                    setMessages(prev => [...prev, { 
-                        role: 'assistant', 
-                        content: `【阿麥的截圖分析報告】\n\n${data.report}`,
-                        ...(stickerObj && { sticker: stickerObj })
-                    }]);
-
                 } catch (err) {
                     setMessages(prev => [...prev, { role: 'assistant', content: `❌ 阿麥看不太清楚這張圖，分析失敗了：${err.message}` }]);
                 } finally {
@@ -4889,8 +4838,8 @@ const { useState, useEffect, useRef } = React;
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className={`max-w-[75%] flex flex-col gap-2`}>
-                                                <div className={`rounded-2xl px-4 py-2 whitespace-pre-wrap break-words text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
+                                            <div className={`min-w-0 max-w-[75%] flex flex-col gap-2`}>
+                                                <div className={`rounded-2xl px-4 py-2 whitespace-pre-wrap break-words break-all text-sm shadow-sm bg-white text-gray-700 border border-gray-200 rounded-bl-none`}>
                                                     {msg.content}
                                                 </div>
                                                 
@@ -4931,7 +4880,7 @@ const { useState, useEffect, useRef } = React;
                                     <button type="submit" disabled={!input.trim() || isTyping} className="bg-brand-red text-white p-2 rounded-full hover:bg-brand-darkRed disabled:opacity-50 transition flex-shrink-0 shadow-sm"><ArrowRight size={18} /></button>
                                 </form>
                                 <div className="pb-3 px-4 text-center text-[10px] text-gray-400 select-none">
-                                    免責聲明：阿麥的回答由 AI 生成，僅供防詐參考，務必自行查證且勿隨意提供個資。
+                                    免責聲明：分析僅供防詐參考，務必自行查證且勿隨意提供個資。
                                 </div>
                             </div>
                         </div>
@@ -4990,7 +4939,7 @@ const { useState, useEffect, useRef } = React;
             .replace(/[–—−]/g, '-')
             .replace(/https?:\s*\/\s*\//gi, match => match.toLowerCase().startsWith('https') ? 'https://' : 'http://')
             .replace(/([A-Za-z0-9])-\s*\n\s*([A-Za-z0-9])/g, '$1-$2')
-            .replace(/([A-Za-z0-9./?&_=:%#-])\s*\n\s*([A-Za-z0-9])/g, '$1$2');
+            .replace(/([A-Za-z0-9./?&_=:%#-])\s*\n\s*(?!(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/\s]|$)))([A-Za-z0-9])/gi, '$1$2');
 
         const stripOcrTargetPunctuation = (value) => String(value || '')
             .trim()
@@ -5149,6 +5098,15 @@ const { useState, useEffect, useRef } = React;
         };
         const findLocalScreenshotTargets = async (file, logger) => (await analyzeLocalScreenshot(file, logger)).targets;
 
+        const localScreenshotReport = (mail) => mail && window.EmailRisk ? window.EmailRisk.report(mail) :
+            '⚠️ 風險：無法判定\n🔍 分析：目前未能取得足夠清楚的內容，不能判定為安全。\n🛡️ 建議：請裁切清楚的寄件資訊與正文，或貼上實際連結；請勿提供密碼或驗證碼。';
+
+        const preserveLocalScreenshotReport = (localReport, aiReport) => {
+            if (String(localReport || '').split('\n').some(line => line.trim() === '⚠️ 風險：高風險')) return localReport;
+            if (String(localReport || '').includes('不能判定為安全') && !String(aiReport || '').split('\n').some(line => /^⚠️ 風險：(高風險|中風險)$/.test(line.trim()))) return localReport;
+            return aiReport;
+        };
+
         const screenshotRequests = new Map();
         const requestScreenshotAnalysis = async (file) => {
             if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) throw new Error('請使用 3MB 以下的 PNG、JPEG 或 WebP 圖片。');
@@ -5208,7 +5166,7 @@ const { useState, useEffect, useRef } = React;
 
             const handleCopyAiReport = () => {
                 if (!aiReport) return;
-                const report = `【截圖防詐 AI 分析報告】\n----------------------\n${aiReport}\n----------------------\n※ 分析結果由 AI 提供，請保持警覺，切勿隨意提供個資或匯款。`;
+                const report = `【截圖防詐分析報告】\n----------------------\n${aiReport}\n----------------------\n※ 截圖無法驗證真正寄件來源，請保持警覺，切勿隨意提供個資或匯款。`;
                 const textArea = document.createElement("textarea");
                 textArea.value = report; textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
                 document.body.appendChild(textArea); textArea.focus(); textArea.select();
@@ -5218,12 +5176,13 @@ const { useState, useEffect, useRef } = React;
 
             const handleImageUpload = async (e, forceAi = false) => {
                 const file = e.target.files?.[0];
-                let pendingScreenshotUrls = [];
+                const pendingScreenshotUrls = forceAi ? [...screenshotUrls] : [];
+                const pendingContentReport = forceAi ? aiReport : null;
                 if (!file) return;
                 if (e.target.value !== undefined) e.target.value = '';
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
-                setResult(null); setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在先用本機 OCR 尋找截圖中的網址...');
+                setResult(null); setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在檢查截圖內容與網址...');
                 if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
                 const imagePreviewUrl = URL.createObjectURL(file);
                 setUploadedImageUrl(imagePreviewUrl);
@@ -5235,15 +5194,16 @@ const { useState, useEffect, useRef } = React;
                                 }
                         });
                         const ocrTargets = local.targets;
-                        pendingScreenshotUrls = ocrTargets;
                         const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
-                        const mailReport = local.mail?.risk === 'high' ? window.EmailRisk.report(local.mail) : null;
-                        if (mailReport && !primaryTarget) {
+                        const mailReport = localScreenshotReport(local.mail);
+                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: primaryTarget, source: 'ocr' });
+                        if (!primaryTarget) {
                             setAiReport(mailReport);
+                            if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'not_found' });
                             return;
                         }
 
-                        if (primaryTarget && (mailReport || !local.mail?.needsContentReview)) {
+                        if (primaryTarget) {
                             setLoadingMessage('已從截圖找到網址，正在進行網址風險檢測...');
                             setUrl(primaryTarget);
                             const ocrScreenshotSource = {
@@ -5255,28 +5215,37 @@ const { useState, useEffect, useRef } = React;
                             if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'success', 'target_type': primaryTarget.includes('@') ? 'email' : 'url' });
                             setIsImageAnalyzing(false);
                             setScreenshotUrls(getScreenshotUrls(ocrTargets));
-                            const report = mailReport || '⚠️ 風險：無法判定\n🔍 分析：本次先檢測截圖中的網址，圖片內容尚未判定。\n🛡️ 建議：網址安全不代表訊息或交易安全。';
+                            const report = mailReport;
                             await handleScan(null, primaryTarget, { ...ocrScreenshotSource, contentReport: report });
                             return;
                         }
-
-                        if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'not_found' });
                     } catch (ocrErr) {
-                        console.log('本機 OCR 未能完成，改用 AI 截圖分析', ocrErr);
+                        setAiReport(localScreenshotReport(null));
+                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: '', source: 'ocr' });
                         if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'fallback' });
+                        return;
                     }
 
-                    setLoadingMessage('OCR 未找到明確網址，改用 AI 辨識截圖內容...');
+                    setLoadingMessage('正在進行圖片內容複核...');
                     const data = await requestScreenshotAnalysis(file);
-                    setAiReport(data.report);
+                    const contentReport = preserveLocalScreenshotReport(pendingContentReport, data.report);
+                    setAiReport(contentReport);
+                    setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: data.urls?.[0] || '', source: 'ai' });
                     const detectedUrls = getScreenshotUrls([...(data.urls || []), ...pendingScreenshotUrls]);
                     setScreenshotUrls(detectedUrls);
                     if (detectedUrls.length) {
                         setUrl(detectedUrls[0]);
-                        await handleScan(null, detectedUrls[0], { imageUrl: imagePreviewUrl, detectedUrl: detectedUrls[0], source: 'ai', contentReport: data.report });
+                        await handleScan(null, detectedUrls[0], { imageUrl: imagePreviewUrl, detectedUrl: detectedUrls[0], source: 'ai', contentReport });
                     }
                     if (typeof gtag === 'function') gtag('event', 'image_analyze', { 'status': 'success', 'file_size': file.size });
-                } catch (err) { setError('圖片分析失敗：' + err.message); } finally { setIsImageAnalyzing(false); setLoadingMessage('分析中...'); }
+                } catch (err) {
+                    if (pendingContentReport) {
+                        setAiReport(pendingContentReport);
+                        setScreenshotUrls(pendingScreenshotUrls);
+                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: pendingScreenshotUrls[0] || '', source: 'ocr' });
+                    }
+                    setError('圖片分析失敗：' + err.message);
+                } finally { setIsImageAnalyzing(false); setLoadingMessage('分析中...'); }
             };
 
             const [url, setUrl] = useState('');
@@ -5609,11 +5578,11 @@ const { useState, useEffect, useRef } = React;
                             <div className="mt-8 animate-slide-up bg-white rounded-3xl shadow-soft p-6 md:p-8 border border-red-200 w-full">
                                 <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
                                     <ShieldAlert size={28} className="text-red-600" />
-                                    <h3 className="text-xl md:text-2xl font-bold text-gray-800">截圖防詐 AI 分析報告</h3>
+                                    <h3 className="text-xl md:text-2xl font-bold text-gray-800">截圖防詐分析報告</h3>
                                 </div>
                                 {screenshotFile && screenshotSource?.source === 'ocr' && (
                                     <button type="button" disabled={loading} onClick={() => handleImageUpload({ target: { files: [screenshotFile] } }, true)} className="mb-4 inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50">
-                                        <Camera size={18} /> 分析圖片內容
+                                        <Camera size={18} /> AI 圖片複核
                                     </button>
                                 )}
                                 {screenshotUrls.length > 1 && (
@@ -5650,6 +5619,8 @@ const { useState, useEffect, useRef } = React;
                                         <div className={`p-5 md:p-6 rounded-2xl text-gray-800 text-base md:text-lg leading-relaxed break-words break-all border shadow-sm font-medium h-full flex flex-col justify-center gap-3 ${screenshotRiskStyle(aiReport).panel}`}>
                                             
                                             {aiReport.split('\n').map((line, i) => {
+                                                const reference = window.EmailRisk?.references?.find(item => item.url === line);
+                                                if (reference) return <a key={i} href={reference.url} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline break-words">{reference.title}</a>;
                                                 // 1. 如果是「風險」那一行：字體加大加粗，並根據高低風險換顏色
                                                 if (line.startsWith('⚠️ 風險：')) {
                                                     const textColor = screenshotRiskStyle(aiReport).text;
