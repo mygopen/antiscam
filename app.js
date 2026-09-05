@@ -4754,6 +4754,7 @@ const { useState, useEffect, useRef } = React;
 
             const handleBotImageUpload = async (e) => {
                 const file = e.target.files[0];
+                let pendingScreenshotUrls = [];
                 if (!file) return;
                 e.target.value = '';
 
@@ -4776,10 +4777,17 @@ const { useState, useEffect, useRef } = React;
 
                 try {
                     try {
-                        const ocrTargets = await findLocalScreenshotTargets(file);
+                        const local = await analyzeLocalScreenshot(file);
+                        const ocrTargets = local.targets;
+                        pendingScreenshotUrls = ocrTargets;
+                        if (local.mail?.risk === 'high') {
+                            setMessages(prev => [...prev, { role: 'assistant', content: window.EmailRisk.report(local.mail) }]);
+                            for (const target of ocrTargets) await scanUrlForBot(target, '此為網址檢測；郵件內容另有高風險警訊。');
+                            return;
+                        }
                         const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
 
-                        if (primaryTarget && !primaryTarget.includes('@')) {
+                        if (primaryTarget && !primaryTarget.includes('@') && !local.mail?.needsContentReview) {
                             setMessages(prev => [...prev, {
                                 role: 'assistant',
                                 content: `我從你剛剛傳的截圖中辨識到這個網址：\n${primaryTarget}\n\n提醒：畫面中看到的網址文字不一定等於實際點擊後的目的地。即使看起來正確，點下去仍可能被導向釣魚網站。\n\n阿麥正在針對這個網址做完整風險檢測...`
@@ -4801,7 +4809,7 @@ const { useState, useEffect, useRef } = React;
                     }
 
                     const data = await requestScreenshotAnalysis(file);
-                    const aiUrls = getScreenshotUrls(data.urls || []);
+                    const aiUrls = getScreenshotUrls([...(data.urls || []), ...pendingScreenshotUrls]);
                     if (aiUrls.length) {
                         setMessages(prev => [...prev, {
                             role: 'assistant',
@@ -5019,6 +5027,9 @@ const { useState, useEffect, useRef } = React;
                 const start = match.index || 0;
                 const end = start + value.length;
                 if (normalized[start - 1] === '@' || normalized[end] === '@') continue;
+                const tokenStart = normalized.slice(0, start).search(/\S*$/);
+                const tokenEnd = normalized.slice(end).search(/\s/);
+                if (normalized.slice(tokenStart, tokenEnd < 0 ? normalized.length : end + tokenEnd).includes('@')) continue;
                 add(value);
             }
 
@@ -5085,19 +5096,58 @@ const { useState, useEffect, useRef } = React;
             } catch { return []; } finally { bitmap?.close(); }
         };
 
-        const findLocalScreenshotTargets = async (file, logger) => {
+        const analyzeLocalScreenshot = async (file, logger) => {
             const bitmap = await createImageBitmap(file);
             const oversized = bitmap.width * bitmap.height > 20000000;
             bitmap.close();
             if (oversized) throw new Error('圖片尺寸過大，請先裁切。');
             const targets = await readScreenshotQr(file);
+            let mail = null;
             try {
                 const engine = await loadTesseract();
                 const result = await engine.recognize(file, 'eng+chi_tra', logger ? { logger } : {});
-                if (result?.data?.confidence >= 80) targets.push(...getScreenshotUrls(extractOcrTargets(result.data.text || '')));
+                const lines = (result?.data?.lines || String(result?.data?.text || '').split('\n').map(text => ({ text, confidence: result?.data?.confidence }))).map(line => ({ ...line }));
+                let retries = 0;
+                for (const line of lines) {
+                    if (retries >= 2 || !line.text.includes('@') || line.confidence < 80 || !line.bbox || !window.EmailRisk) continue;
+                    if (window.EmailRisk.assess([line]).addresses.length) continue;
+                    retries++;
+                    let region;
+                    try {
+                        region = await createImageBitmap(file);
+                        const left = Math.max(0, line.bbox.x0 - 4), top = Math.max(0, line.bbox.y0 - 4);
+                        const width = Math.min(region.width - left, line.bbox.x1 - left + 4), height = Math.min(region.height - top, line.bbox.y1 - top + 4);
+                        if (width <= 0 || height <= 0 || width * height > 1000000) continue;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.round(width * 2); canvas.height = Math.round(height * 2);
+                        const context = canvas.getContext('2d');
+                        context.drawImage(region, left, top, width, height, 0, 0, canvas.width, canvas.height);
+                        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+                        const darkBackground = (pixels.data[0] + pixels.data[1] + pixels.data[2]) / 3 < 128;
+                        for (let i = 0; i < pixels.data.length; i += 4) {
+                            const brightness = (pixels.data[i] + pixels.data[i + 1] + pixels.data[i + 2]) / 3;
+                            const value = darkBackground ? (brightness > 75 ? 0 : 255) : (brightness < 180 ? 0 : 255);
+                            pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value;
+                        }
+                        context.putImageData(pixels, 0, 0);
+                        const retry = await engine.recognize(canvas, 'eng');
+                        const retryLines = retry?.data?.words?.length ? retry.data.words : retry?.data?.lines || [];
+                        const candidates = window.EmailRisk.domainEvidence(retryLines);
+                        const domains = [...new Set(candidates.map(item => item.domain))];
+                        if (domains.length === 1) {
+                            line.text = line.text.replace(/@[^\s<>]+/, '@' + domains[0]);
+                            line.confidence = Math.min(line.confidence, ...candidates.map(item => item.confidence));
+                        }
+                    } catch { /* An unreadable address remains unverified, never guessed. */ }
+                    finally { region?.close(); }
+                }
+                const ocrText = lines.map(line => window.EmailRisk?.normalizeOcrText(line.text) || line.text).join('\n');
+                if (result?.data?.confidence >= 80) targets.push(...getScreenshotUrls(extractOcrTargets(ocrText)));
+                mail = window.EmailRisk?.assess(lines) || null;
             } catch { /* QR results remain usable when OCR cannot load or recognize text. */ }
-            return dedupeOcrTargets(targets);
+            return { targets: dedupeOcrTargets(targets), mail };
         };
+        const findLocalScreenshotTargets = async (file, logger) => (await analyzeLocalScreenshot(file, logger)).targets;
 
         const screenshotRequests = new Map();
         const requestScreenshotAnalysis = async (file) => {
@@ -5168,6 +5218,7 @@ const { useState, useEffect, useRef } = React;
 
             const handleImageUpload = async (e, forceAi = false) => {
                 const file = e.target.files?.[0];
+                let pendingScreenshotUrls = [];
                 if (!file) return;
                 if (e.target.value !== undefined) e.target.value = '';
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
@@ -5178,14 +5229,21 @@ const { useState, useEffect, useRef } = React;
                 setUploadedImageUrl(imagePreviewUrl);
                 try {
                     if (!forceAi) try {
-                        const ocrTargets = await findLocalScreenshotTargets(file, (m) => {
+                        const local = await analyzeLocalScreenshot(file, (m) => {
                                 if (m.status === 'recognizing text' && typeof m.progress === 'number') {
                                     setLoadingMessage(`正在辨識截圖網址... ${Math.round(m.progress * 100)}%`);
                                 }
                         });
+                        const ocrTargets = local.targets;
+                        pendingScreenshotUrls = ocrTargets;
                         const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
+                        const mailReport = local.mail?.risk === 'high' ? window.EmailRisk.report(local.mail) : null;
+                        if (mailReport && !primaryTarget) {
+                            setAiReport(mailReport);
+                            return;
+                        }
 
-                        if (primaryTarget) {
+                        if (primaryTarget && (mailReport || !local.mail?.needsContentReview)) {
                             setLoadingMessage('已從截圖找到網址，正在進行網址風險檢測...');
                             setUrl(primaryTarget);
                             const ocrScreenshotSource = {
@@ -5197,7 +5255,7 @@ const { useState, useEffect, useRef } = React;
                             if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'success', 'target_type': primaryTarget.includes('@') ? 'email' : 'url' });
                             setIsImageAnalyzing(false);
                             setScreenshotUrls(getScreenshotUrls(ocrTargets));
-                            const report = '⚠️ 風險：無法判定\n🔍 分析：本次先檢測截圖中的網址，圖片內容尚未判定。\n🛡️ 建議：網址安全不代表訊息或交易安全。';
+                            const report = mailReport || '⚠️ 風險：無法判定\n🔍 分析：本次先檢測截圖中的網址，圖片內容尚未判定。\n🛡️ 建議：網址安全不代表訊息或交易安全。';
                             await handleScan(null, primaryTarget, { ...ocrScreenshotSource, contentReport: report });
                             return;
                         }
@@ -5211,7 +5269,7 @@ const { useState, useEffect, useRef } = React;
                     setLoadingMessage('OCR 未找到明確網址，改用 AI 辨識截圖內容...');
                     const data = await requestScreenshotAnalysis(file);
                     setAiReport(data.report);
-                    const detectedUrls = getScreenshotUrls(data.urls || []);
+                    const detectedUrls = getScreenshotUrls([...(data.urls || []), ...pendingScreenshotUrls]);
                     setScreenshotUrls(detectedUrls);
                     if (detectedUrls.length) {
                         setUrl(detectedUrls[0]);

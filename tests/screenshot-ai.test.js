@@ -97,7 +97,7 @@ function browserHelpers(extra = {}) {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const source = app.slice(app.indexOf('const TESSERACT_CDN_URL'), app.indexOf('const App ='));
     const context = { URL, Set, Map, console, ...extra };
-    vm.runInNewContext(`${source}\nthis.helpers = { getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, requestScreenshotAnalysis };`, context);
+    vm.runInNewContext(`${source}\nthis.helpers = { getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, requestScreenshotAnalysis };`, context);
     return context.helpers;
 }
 
@@ -110,6 +110,7 @@ test('actual frontend helpers preserve URL case and do not color unknown reports
     assert.equal(helpers.screenshotRiskStyle('⚠️ 風險：未發現明顯內容風險\n分析：高雄中心').text, 'text-green-700');
     assert.equal(helpers.extractOcrTargets('https://sf-\nexpress.example.com/t/NAt0rR')[0], 'https://sf-express.example.com/t/NAt0rR');
     assert.deepEqual(Array.from(helpers.getScreenshotUrls(helpers.extractOcrTargets('service.example@gmail.com'))), []);
+    assert.deepEqual(Array.from(helpers.getScreenshotUrls(helpers.extractOcrTargets('redacted.name@upcmaiLnl'))), []);
 });
 
 test('native QR targets survive an OCR failure without a cloud AI request', async () => {
@@ -118,4 +119,15 @@ test('native QR targets survive an OCR failure without a cloud AI request', asyn
         createImageBitmap: async () => ({ width: 100, height: 100, close() {} })
     });
     assert.deepEqual(Array.from(await helpers.findLocalScreenshotTargets({})), ['https://example.com/QR']);
+});
+
+test('local screenshot extracts mail evidence even with no URLs and no cloud call', async () => {
+    const helpers = browserHelpers({
+        window: { EmailRisk: require('../email-risk.js'), BarcodeDetector: class { async detect() { return []; } }, jsQR: () => null,
+            Tesseract: { recognize: async () => ({ data: { confidence: 95, text: 'eTag 帳戶代扣失敗\n收件者: redacted@hotmail.com\n遠通電子資訊中心<redacted@upcmail.nl>\n請登入服務平台' } }) } },
+        createImageBitmap: async () => ({ width: 100, height: 100, close() {} })
+    });
+    const result = await helpers.analyzeLocalScreenshot({});
+    assert.equal(result.mail.risk, 'high');
+    assert.equal(result.targets.length, 0);
 });

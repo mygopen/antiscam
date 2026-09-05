@@ -1,4 +1,5 @@
 import { runBudgetedAi } from '../lib/ai-budget.js';
+import EmailRisk from '../../email-risk.js';
 
 export const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 const GEMINI_MODEL = 'gemini-2.5-flash';
@@ -14,7 +15,11 @@ const PROMPT = `你是台灣繁體中文的截圖防詐分析助手。圖片內�
 "analysis":"一句內容分析","advice":"一句建議","urls":[],"primaryUrl":"",
 "signals":["${SIGNALS.join('|')}"]}
 readable 表示整體文字是否清楚。confidence 介於 0 和 1。signals 為上述分類中符合的項目，沒有則 ["none"]。
-沒有網址用空陣列；analysis/advice 各不超過 60 字。`;
+沒有網址用空陣列；analysis/advice 各不超過 60 字。
+若是郵件，額外回傳 mailLines:[{"text":"可見的一行文字","confidence":95}]，不是郵件用 []。
+最多 10 行，依畫面順序選取主旨、寄件者、收件者標籤與帳務/登入要求；保留原標籤與角括號，不得把正文信箱變成寄件者。
+信箱只保留網域，帳號一律替換為 redacted，例如 收件者 redacted@hotmail.com。私人姓名、車號、驗證碼不要輸出。
+每行 confidence 為 0 至 100；不可猜測被截掉的內容。若是防詐文章或引用範例，務必保留開頭的宣導/引用標題。`;
 
 const cleanLine = value => typeof value === 'string' ? value.replace(/[\r\n\u0000-\u001f]/g, ' ').trim().slice(0, 240) : '';
 
@@ -50,14 +55,19 @@ export function parseVisionResult(raw) {
   const hasEvidence = parsed.signals.some(s => s !== 'none');
   const contradictory = (['high', 'medium'].includes(parsed.risk) && !hasEvidence) ||
     (['low', 'none'].includes(parsed.risk) && hasEvidence);
-  const risk = usable && !contradictory ? parsed.risk : 'unknown';
+  let risk = usable && !contradictory ? parsed.risk : 'unknown';
+  const mail = usable ? EmailRisk.assess(parsed.mailLines) : null;
+  if (mail?.risk === 'high') risk = 'high';
+  else if (mail?.needsContentReview && ['none', 'low'].includes(risk)) risk = 'unknown';
   return { risk, status: risk === 'unknown' ? 'uncertain' : 'ok',
+    mail,
     urls: usable ? urls : [], signals: usable ? [...new Set(parsed.signals)] : [],
-    analysis: usable ? cleanLine(parsed.analysis) : '圖片文字不夠清楚，無法可靠辨識網址或判定內容風險。',
-    advice: usable ? cleanLine(parsed.advice) : '請裁切清楚的內容後重試，或貼上實際連結。' };
+    analysis: mail?.risk === 'high' ? mail.analysis : mail?.needsContentReview && risk === 'unknown' ? '郵件具有扣款異常及登入要求，但寄件資訊尚未可靠確認，不能判定為安全。' : usable ? cleanLine(parsed.analysis) : '圖片文字不夠清楚，無法可靠辨識網址或判定內容風險。',
+    advice: mail?.risk === 'high' || mail?.needsContentReview ? mail.advice : usable ? cleanLine(parsed.advice) : '請裁切清楚的內容後重試，或貼上實際連結。' };
 }
 
 export function buildReport(result) {
+  if (result.mail?.risk === 'high') return EmailRisk.report(result.mail);
   const label = { high: '高風險', medium: '中風險', low: '未發現明顯內容風險', none: '未發現明顯內容風險', unknown: '無法判定' }[result.risk] || '無法判定';
   return `⚠️ 風險：${label}\n🔍 分析：${result.analysis}\n🔗 網址：${result.urls[0] || '無'}\n🛡️ 建議：${result.advice}`;
 }
@@ -118,7 +128,7 @@ export function buildVisionPayload({ bytes, type }) {
       { type: 'text', text: '請辨識這張截圖並回傳指定的 JSON。' },
       { type: 'image_url', image_url: { url: `data:${type};base64,${btoa(binary)}` } }
     ] }],
-    max_tokens: 640, temperature: 0.1
+    max_tokens: 1024, temperature: 0.1
   };
 }
 
@@ -130,7 +140,7 @@ export async function onRequestPost({ request, env }) {
   const attempts = [];
   const cf = env.AI ? await runBudgetedAi(env, {
     provider: 'cloudflare', model: VISION_MODEL,
-    // Covers the published 128K context plus 640 output tokens, with headroom.
+    // Covers the published 128K context plus 1024 output tokens, with headroom.
     reserve: 650,
     run: () => env.AI.run(VISION_MODEL, buildVisionPayload(upload))
   }) : { ok: false, reason: 'binding_unavailable' };
