@@ -115,7 +115,7 @@ const { useState, useEffect, useRef } = React;
             let color = 'bg-green-500', text = '低度風險', width = '10%';
             if (score >= 70) { color = 'bg-red-600'; text = '高度風險'; width = '90%'; }
             else if (score >= 30) { color = 'bg-yellow-500'; text = '中度風險'; width = '50%'; }
-            if (assessment === 'unknown') { color = 'bg-gray-400'; text = '資料不足／尚未確認'; width = '10%'; }
+            if (assessment === 'unknown') { color = 'bg-gray-400'; text = '資訊不足／尚未確認'; width = '10%'; }
             return (
                 <div className="mt-4 mb-6">
                     <div className="flex justify-between gap-2 mb-1 text-sm font-bold"><span>安全</span><span className={assessment === 'unknown' ? 'text-gray-600 text-center' : score >= 70 ? 'text-red-600' : (score >= 30 ? 'text-yellow-600' : 'text-green-600')}>{text}</span><span>危險</span></div>
@@ -1466,16 +1466,6 @@ const { useState, useEffect, useRef } = React;
                                             {result.resolvedFromShortener ? '最終目的地網域' : '目標網域'}
                                         </div>
                                         <h3 className="text-2xl md:text-3xl font-bold text-gray-800 break-all">{result.domain}</h3>
-                                        {result.resolvedFromShortener && result.inputDomain && (
-                                            <div className="mt-2 text-sm text-gray-500 break-all">
-                                                原始縮網址：{result.inputUrl || result.inputScanUrl || result.inputDomain}
-                                            </div>
-                                        )}
-                                        {result.unresolvedPublicShortener && result.inputDomain && (
-                                            <div className="mt-2 text-sm font-medium text-amber-700 break-all">
-                                                原始縮網址：{result.inputUrl || result.inputScanUrl || result.inputDomain}（目的地尚未確認）
-                                            </div>
-                                        )}
                                     </div>
                                 <div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600">
                                         <Globe size={16} className="text-brand-red" />

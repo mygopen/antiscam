@@ -30,7 +30,7 @@ test('production flow: unresolved official shortener stays unknown across report
     const result = await scan({}, 'https://cht.tw/x/b0rts');
     assert.equal(result.unresolvedShortener, true);
     assert.equal(result.assessment, 'unknown');
-    assert.equal(policy.presentation(result).label, '資料不足／尚未確認');
+    assert.equal(policy.presentation(result).label, '資訊不足／尚未確認');
 });
 test('production flow: resolved shortener scores the destination, not the trusted entry point', async () => {
     const destination = 'https://ioppk.eu.cc/vote';

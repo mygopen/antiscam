@@ -34,8 +34,8 @@
         const level = scan?.assessment || 'unknown';
         return {
             level,
-            label: { high: '高度風險', medium: '中度風險', low: '低度風險', unknown: '資料不足／尚未確認' }[level],
-            title: { high: '危險！請勿點擊或提供個資', medium: '警告！此網站存在風險', low: '未發現明顯風險，仍請保持警覺', unknown: '資料不足，無法確認安全' }[level],
+            label: { high: '高度風險', medium: '中度風險', low: '低度風險', unknown: '資訊不足／尚未確認' }[level],
+            title: { high: '危險！請勿點擊或提供個資', medium: '警告！此網站存在風險', low: '未發現明顯風險，仍請保持警覺', unknown: '資訊不足，無法確認安全' }[level],
             reasons: scan?.incompleteReasons || []
         };
     }

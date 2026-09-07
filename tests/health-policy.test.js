@@ -8,7 +8,7 @@ test('unresolved trusted shortener never becomes safe in any report', () => {
     const scan = { ...base(), unresolvedShortener: true };
     assert.equal(finalize(scan).assessment, 'unknown');
     assert.match(presentation(scan).label, /尚未確認/);
-    assert.match(presentation(scan).title, /無法確認安全/);
+    assert.match(presentation(scan).title, /資訊不足，無法確認安全/);
 });
 
 for (const key of ['googleSafeBrowsing', 'officialAlerts', 'userAgentCloaking', 'redirect']) {

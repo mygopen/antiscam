@@ -3786,11 +3786,11 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /const runRiskAndBrandScan = async/);
     assert.match(appSource, /fetchBrandAnalysis\(primaryUrl\)/);
     assert.match(appSource, /const hasUnresolvedPublicShortener =/);
-    assert.match(appSource, /result\.unresolvedPublicShortener && result\.inputDomain/);
     assert.match(appSource, /hasUnresolvedPublicShortener\s*\? Promise\.resolve\(unresolvedShortenerSiteStatus\)/);
     assert.match(appSource, /riskScore = Math\.max\(riskScore, 40\)/);
     assert.match(appSource, /風險評分以最終目的地為主/);
     assert.match(appSource, /最終目的地網域/);
+    assert.doesNotMatch(appSource, /原始縮網址：/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
     assert.match(appSource, /getOfficialShortenerDestinationDomains/);
     assert.match(indexSource, /assets\/app\.js/);
