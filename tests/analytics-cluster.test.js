@@ -102,7 +102,7 @@ test('sync builder only counts domains already present in the confirmed high-ris
 });
 
 test('app wires the analytics cluster endpoint and renders the requested card fields', () => {
-  const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+  const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
   assert.match(source, /\/api\/check-analytics-cluster/);
   assert.match(source, /詐騙站群關聯/);
   assert.match(source, /共享識別碼類型/);

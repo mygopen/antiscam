@@ -174,4 +174,39 @@ test('Cofacts API 回應包含原始案件、授權及顯名資訊', async () =>
     assert.equal(payload.matches[0].articleUrl, 'https://cofacts.tw/article/1j8omfqn1ewsm');
     assert.equal(payload.attribution.license, 'CC BY-SA 4.0');
     assert.match(payload.attribution.text, /Cofacts 真的假的/);
+    assert.equal(payload.matches[0].collection, 'manual');
+    assert.equal(payload.status, 'ok');
+    assert.equal(payload.sources.synced.state, 'disabled');
+});
+
+test('Cofacts sources distinguish disabled, fresh, stale and invalid timestamps', async () => {
+    const { describeCofactsSources } = await endpointModulePromise;
+    const now = Date.parse('2026-09-07T00:00:00Z');
+    const describe = metadata => describeCofactsSources({ now, metadata, manual: [], synced: [] });
+    assert.equal(describe({ status: 'awaiting-authorized-api-sync' }).synced.state, 'disabled');
+    assert.equal(describe({ status: 'error' }).synced.state, 'unavailable');
+    assert.equal(describe({ status: 'ok', generatedAt: '2026-09-06T00:00:00Z' }).synced.state, 'ready');
+    assert.equal(describe({ status: 'ok', generatedAt: '2026-08-01T00:00:00Z' }).synced.state, 'stale');
+    assert.equal(describe({ status: 'ok', generatedAt: 'bad' }).synced.state, 'unavailable');
+    assert.equal(describe({ status: 'ok', generatedAt: '2027-01-01T00:00:00Z' }).synced.state, 'unavailable');
+});
+
+test('Cofacts coverage counts only active records, with manual review and sync dates separate', async () => {
+    const { describeCofactsSources } = await endpointModulePromise;
+    const sources = describeCofactsSources({ now: Date.parse('2026-09-07T00:00:00Z'), metadata: { status: 'ok', generatedAt: '2026-09-06T00:00:00Z', queriedSince: '2026-09-01T00:00:00Z' }, manual: [{ checkedAt: '2026-08-01T00:00:00Z' }, { expiresAt: '2026-09-01T00:00:00Z' }], synced: [{ status: 'deleted' }] });
+    assert.equal(sources.manual.records, 1);
+    assert.equal(sources.manual.lastReviewedAt, '2026-08-01T00:00:00Z');
+    assert.equal(sources.synced.records, 0);
+    assert.equal(sources.synced.queriedSince, '2026-09-01T00:00:00Z');
+});
+
+test('Cofacts no-match and failed checks must never receive a safe badge', () => {
+    const { cofactsPresentation } = require('../scan-policy.js');
+    for (const state of ['disabled', 'stale', 'unavailable']) {
+        assert.equal(cofactsPresentation({ status: 'ok', sources: { synced: { state } } }).status, 'unknown');
+    }
+    assert.equal(cofactsPresentation({ status: 'unavailable' }).status, 'unknown');
+    const ready = cofactsPresentation({ status: 'ok', sources: { synced: { state: 'ready' } } });
+    assert.equal(ready.status, 'info');
+    assert.match(ready.details, /不是 Cofacts 全站即時搜尋/);
 });

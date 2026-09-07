@@ -327,7 +327,7 @@ test('an old disclosed website is not trusted when the company registration is i
 });
 
 test('app exposes organization public data and evidence in the result indicators', () => {
-  const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+  const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
   assert.match(source, /\/api\/organization-verification/);
   assert.match(source, /組織／法人登記資料驗證/);
   assert.match(source, /isOfficialTaiwanGovDomain\(domain\)/);

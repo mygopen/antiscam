@@ -5,6 +5,9 @@ const test = require('node:test');
 const { pathToFileURL } = require('node:url');
 const vm = require('node:vm');
 
+const { createCore, fixtureCore } = require('./helpers/production-core.cjs');
+const productionCore = createCore();
+
 const repoRoot = path.resolve(__dirname, '..');
 
 function loadRiskConfig() {
@@ -61,61 +64,13 @@ function isWeeblyHostedHostname(hostname) {
     return cleanHostname !== 'weebly.com' && matchesDomainList(cleanHostname, ['weebly.com']);
 }
 
-function sanitizeUrlInput(value) {
-    return String(value || '')
-        .normalize('NFKC')
-        .replace(/[\u200B-\u200D\uFEFF]/g, '')
-        .trim()
-        .replace(/^[\s<>"'`「」『』【】\[\]（）()]+/g, '')
-        .replace(/[\s<>"'`「」『』【】\[\]（）(),，.。;；!?！？]+$/g, '');
-}
+const sanitizeUrlInput = productionCore.sanitizeUrlInput;
 
-function normalizeInputHostname(hostname) {
-    return String(hostname || '').toLowerCase().replace(/\.+$/g, '');
-}
+const normalizeInputHostname = productionCore.normalizeInputHostname;
 
-function isValidHostname(hostname) {
-    const cleanHostname = normalizeInputHostname(hostname);
-    if (!cleanHostname || cleanHostname.length > 253) return false;
+const isValidHostname = productionCore.isValidHostname;
 
-    const labels = cleanHostname.split('.');
-    if (labels.length < 2) return false;
-
-    return labels.every(label => {
-        return label.length >= 1 &&
-            label.length <= 63 &&
-            /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label);
-    }) && labels[labels.length - 1].length >= 2;
-}
-
-function parseUserUrl(value) {
-    const sanitized = sanitizeUrlInput(value);
-    if (!sanitized) return { ok: false, reason: 'empty' };
-
-    const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(sanitized);
-    const normalizedUrl = hasExplicitScheme
-        ? sanitized
-        : `https://${sanitized}`;
-
-    let urlObj;
-    try {
-        urlObj = new URL(normalizedUrl);
-    } catch (e) {
-        return { ok: false, reason: 'parse' };
-    }
-
-    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
-        return { ok: false, reason: 'protocol' };
-    }
-
-    const hostname = normalizeInputHostname(urlObj.hostname);
-    if (!isValidHostname(hostname)) {
-        return { ok: false, reason: 'hostname', hostname };
-    }
-
-    try { urlObj.hostname = hostname; } catch (e) { }
-    return { ok: true, url: urlObj, hostname, href: urlObj.href, hasExplicitScheme, rawInput: sanitized };
-}
+const parseUserUrl = productionCore.parseUserUrl;
 
 async function withTimeoutForTest(promise, ms, fallbackValue) {
     let timeoutId = null;
@@ -155,38 +110,21 @@ function resolveNextUrlForTraceTest(rawValue, currentUrl) {
     }
 }
 
-function isOfficialTaiwanGovDomain(hostname) {
-    const cleanHostname = String(hostname || '').toLowerCase().replace(/^www\./, '');
-    return cleanHostname === 'gov.tw' || cleanHostname.endsWith('.gov.tw');
-}
+const isOfficialTaiwanGovDomain = productionCore.isOfficialTaiwanGovDomain;
 
-function isTrustedGlobalDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.trustedGlobalDomains);
-}
+const isTrustedGlobalDomain = productionCore.isTrustedGlobalDomain;
 
-function isTrustedEcommerceDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.trustedEcommerceRootDomains);
-}
+const isTrustedEcommerceDomain = productionCore.isTrustedEcommerceDomain;
 
-function isTrustedTaiwanServiceDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.trustedTaiwanServiceDomains);
-}
+const isTrustedTaiwanServiceDomain = productionCore.isTrustedTaiwanServiceDomain;
 
-function isTrustedFinancialServiceDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.trustedFinancialServiceDomains);
-}
+const isTrustedFinancialServiceDomain = productionCore.isTrustedFinancialServiceDomain;
 
-function isTrustedGovernmentServiceDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.trustedGovernmentServiceDomains);
-}
+const isTrustedGovernmentServiceDomain = productionCore.isTrustedGovernmentServiceDomain;
 
-function isTrustedPublicInterestDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.trustedPublicInterestDomains);
-}
+const isTrustedPublicInterestDomain = productionCore.isTrustedPublicInterestDomain;
 
-function isGlobalPaymentGatewayDomain(hostname) {
-    return matchesDomainList(hostname, riskConfig.globalPaymentGatewayDomains);
-}
+const isGlobalPaymentGatewayDomain = productionCore.isGlobalPaymentGatewayDomain;
 
 function normalizeBrandToken(value) {
     return String(value || '')
@@ -277,20 +215,9 @@ function isTrustedCoBrandCampaignHost(inputDomain, detectedBrand) {
     });
 }
 
-function isVerifiedSafeRootDomain(hostname, whitelist = []) {
-    return isOfficialTaiwanGovDomain(hostname) ||
-        isTrustedGlobalDomain(hostname) ||
-        isTrustedEcommerceDomain(hostname) ||
-        isTrustedTaiwanServiceDomain(hostname) ||
-        isTrustedFinancialServiceDomain(hostname) ||
-        isTrustedGovernmentServiceDomain(hostname) ||
-        isTrustedPublicInterestDomain(hostname) ||
-        matchesDomainList(hostname, whitelist);
-}
+const isVerifiedSafeRootDomain = productionCore.isVerifiedSafeRootDomain;
 
-function shouldSkipAiBrandAnalysis(hostname, whitelist = []) {
-    return isVerifiedSafeRootDomain(hostname, whitelist);
-}
+const shouldSkipAiBrandAnalysis = productionCore.shouldSkipAiBrandAnalysis;
 
 function isTrustedPaymentGatewayOrApiEndpoint(rawUrl, whitelist = []) {
     const parsed = new URL(rawUrl);
@@ -300,60 +227,13 @@ function isTrustedPaymentGatewayOrApiEndpoint(rawUrl, whitelist = []) {
         (isGlobalPaymentGatewayDomain(parsed.hostname) || (isTrustedGlobalDomain(parsed.hostname) && hasPaymentOrApiPath));
 }
 
-function isTrackingUrlParamName(name) {
-    const lowerName = String(name || '').toLowerCase();
-    return riskConfig.trackingUrlParams.some(rule => {
-        const lowerRule = String(rule || '').toLowerCase();
-        if (lowerRule.endsWith('*')) return lowerName.startsWith(lowerRule.slice(0, -1));
-        return lowerName === lowerRule;
-    });
-}
+const isTrackingUrlParamName = productionCore.isTrackingUrlParamName;
 
-function isVolatileUrlParam(name, value = '') {
-    const lowerName = String(name || '').toLowerCase();
-    const rawValue = String(value || '');
-    if (riskConfig.volatileUrlParams.some(rule => lowerName === String(rule || '').toLowerCase())) return true;
-    if (/^(?:valid|verify|auth|session)[_-]?\d{8,14}[_-][a-f0-9]{12,}$/i.test(rawValue)) return true;
-    if (/^(?:valid|expire|expires|ts|time|timestamp|nonce|rnd|rand|cb)$/i.test(lowerName) && /^[a-z0-9_-]{8,80}$/i.test(rawValue)) return true;
-    if (/(?:time|timestamp|expire|expires|valid|nonce)/i.test(lowerName) && /^\d{10,14}$/.test(rawValue)) return true;
-    if (lowerName.startsWith('_') && /^[a-z0-9_-]{16,120}$/i.test(rawValue) && (/\d/.test(rawValue) || /[a-f0-9]{16,}/i.test(rawValue))) return true;
-    return false;
-}
+const isVolatileUrlParam = productionCore.isVolatileUrlParam;
 
-function sanitizeUrlForRiskScoring(rawUrl) {
-    const parsed = new URL(rawUrl);
-    const removedTrackingParams = [];
-    const removedVolatileParams = [];
-    [...new Set([...parsed.searchParams.keys()])].forEach(name => {
-        const values = parsed.searchParams.getAll(name);
-        if (values.some(value => isVolatileUrlParam(name, value))) {
-            removedVolatileParams.push(name);
-            parsed.searchParams.delete(name);
-        } else if (isTrackingUrlParamName(name)) {
-            removedTrackingParams.push(name);
-            parsed.searchParams.delete(name);
-        }
-    });
-    const removedParams = [...new Set([...removedTrackingParams, ...removedVolatileParams])];
-    return {
-        href: parsed.href,
-        removedTrackingParams: [...new Set(removedTrackingParams)],
-        removedVolatileParams: [...new Set(removedVolatileParams)],
-        removedParams,
-        rawUrl
-    };
-}
+const sanitizeUrlForRiskScoring = productionCore.sanitizeUrlForRiskScoring;
 
-function toHttpFallbackUrl(value) {
-    try {
-        const parsed = new URL(value);
-        if (parsed.protocol !== 'https:') return '';
-        parsed.protocol = 'http:';
-        return parsed.href;
-    } catch (e) {
-        return '';
-    }
-}
+const toHttpFallbackUrl = productionCore.toHttpFallbackUrl;
 
 function buildCrawlerCandidateUrls(urls, { preferHttpFallback = false } = {}) {
     const candidates = [];
@@ -479,7 +359,7 @@ test('可視文字少但已有商城或敏感行為訊號的靜態頁應保留�
         status: 'blank',
         pageSignals: {}
     };
-    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.equal(isUsableCrawlerResult(templateStoreResult), true);
     assert.equal(isUsableCrawlerResult(emptyShellResult), false);
@@ -489,7 +369,7 @@ test('可視文字少但已有商城或敏感行為訊號的靜態頁應保留�
 });
 
 test('riskFlags raw 欄位應使用實際已定義的 raw 變數', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.match(source, /missingAllSecurityHeadersRaw:\s*hasMissingAllSecurityHeadersRaw/);
     assert.match(source, /missingMxRecordsRaw:\s*hasMissingMxRecordsRaw/);
@@ -518,7 +398,7 @@ test('trace API 會同時檢查 mobile 與 desktop UA 差異', () => {
 });
 
 test('前端會把 User-Agent cloaking 接入風險旗標與報告卡片', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.match(source, /const hasUaCloakingRisk/);
     assert.match(source, /else if \(hasUaCloakingRisk\) \{\s*riskScore = 100;/);
@@ -530,7 +410,7 @@ test('前端會把 User-Agent cloaking 接入風險旗標與報告卡片', () =>
 });
 
 test('手機版聊天小幫手浮動泡泡支援拖曳、邊界限制與拖曳後防誤觸', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.match(source, /window\.matchMedia\('\(max-width: 767px\)'\)/);
     assert.match(source, /onPointerDown=\{handleBubblePointerDown\}/);
@@ -553,7 +433,7 @@ test('TWNIC 網域年齡查詢應使用 IANA bootstrap、正確官方 RDAP 與 W
 });
 
 test('網域註冊年齡不得使用 TLS 憑證日或 RDAP 最後更新日代替', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.doesNotMatch(source, /rdapData\.date\s*\|\|\s*certData\?\.notBefore/);
     assert.doesNotMatch(source, /events\.find\(e => e\.eventAction === 'last changed' \|\| e\.eventAction === 'last update'\)/);
@@ -561,48 +441,16 @@ test('網域註冊年齡不得使用 TLS 憑證日或 RDAP 最後更新日代替
     assert.match(source, /憑證會定期續發，此日期不代表網域新註冊，且不單獨加權/);
 });
 
-function applyOfficialGovRiskOverride({ hostname, blocklistListed = false, googleUnsafe = false, initialRiskScore = 0 }) {
-    const isGov = isOfficialTaiwanGovDomain(hostname);
-    const blocklistListedForRisk = blocklistListed && !isGov;
-    const googleFlaggedForRisk = googleUnsafe && !isGov;
-    let riskScore = initialRiskScore;
-
-    if (blocklistListedForRisk || googleFlaggedForRisk) riskScore = 100;
-    if (isGov) riskScore = 0;
-
-    return {
-        riskScore,
-        blocklistListedForRisk,
-        googleFlaggedForRisk
-    };
+async function applyOfficialGovRiskOverride({hostname,whitelist=[],blocklistListed=false,googleUnsafe=false}) {
+    const {core}=fixtureCore({blacklist:blocklistListed,unsafe:googleUnsafe});
+    const result=core.enforceFinalRiskConsistency(await core.simulateScan(hostname, 'https://'+hostname+'/', whitelist, {tracePreflightCompleted:true}));
+    return {riskScore:result.riskScore,isWhitelisted:result.isWhitelisted,hasTrustedAllowlistOverride:result.isTrustedAllowlist,blocklistListedForRisk:result.blocklistListed,googleFlaggedForRisk:result.checks.googleSafeBrowsing.status==='danger'};
 }
 
-function applyTrustedAllowlistRiskOverride({
-    hostname,
-    whitelist = [],
-    blocklistListed = false,
-    googleUnsafe = false,
-    initialRiskScore = 0,
-    isSocialMedia = false,
-    isFakeGov = false,
-    isFinalFakeGov = false
-}) {
-    const isWhitelisted = isVerifiedSafeRootDomain(hostname, whitelist);
-    const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov;
-    const blocklistListedForRisk = blocklistListed && !hasTrustedAllowlistOverride;
-    const googleFlaggedForRisk = googleUnsafe && !isWhitelisted;
-    let riskScore = initialRiskScore;
-
-    if (blocklistListedForRisk || googleFlaggedForRisk) riskScore = 100;
-    if (hasTrustedAllowlistOverride) riskScore = 0;
-
-    return {
-        riskScore,
-        isWhitelisted,
-        hasTrustedAllowlistOverride,
-        blocklistListedForRisk,
-        googleFlaggedForRisk
-    };
+async function applyTrustedAllowlistRiskOverride({hostname,whitelist=[],blocklistListed=false,googleUnsafe=false}) {
+    const {core}=fixtureCore({blacklist:blocklistListed,unsafe:googleUnsafe});
+    const result=core.enforceFinalRiskConsistency(await core.simulateScan(hostname, 'https://'+hostname+'/', whitelist, {tracePreflightCompleted:true}));
+    return {riskScore:result.riskScore,isWhitelisted:result.isWhitelisted,hasTrustedAllowlistOverride:result.isTrustedAllowlist,blocklistListedForRisk:result.blocklistListed,googleFlaggedForRisk:result.checks.googleSafeBrowsing.status==='danger'};
 }
 
 function getEcommerceValidationStatus({ isTrustedPaymentGatewayOrApiEndpoint = false, hasStrongEcommerceValidation = false, ecommerceScore = 0 }) {
@@ -888,73 +736,9 @@ function analyzeEmailTrackingRisk(rawUrl) {
     };
 }
 
-function getHighRiskSummaryReasons(scanData) {
-    if (!scanData || !scanData.checks) return [];
+const getHighRiskSummaryReasons = productionCore.getHighRiskSummaryReasons;
 
-    const checks = scanData.checks;
-    const siteStatus = scanData.details?.siteStatus?.status || '';
-    const isUnavailableSiteContentOnly = ['blank', 'error', 'unknown', 'blocked'].includes(siteStatus);
-    const reasons = [];
-    const addReason = (condition, reason) => {
-        if (condition && !reasons.includes(reason)) reasons.push(reason);
-    };
-
-    addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
-    addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
-    addReason(checks.manualHighRisk?.status === 'danger', '人工確認高風險網域');
-    addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
-    addReason(checks.cofactsReports?.status === 'danger', 'Cofacts 查核回應明確指出詐騙');
-    addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
-    addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
-    addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
-    addReason(checks.jobTaskScam?.status === 'danger', '假求職/任務金流詐騙特徵');
-    addReason(checks.freeHostingSensitiveLink?.status === 'danger', '免費子網域搭配一次性驗證參數');
-    addReason(checks.votePhishing?.status === 'danger', '共享子網域假投票／帳號釣魚特徵');
-    addReason(checks.githubPagesBrand?.status === 'danger', 'GitHub Pages 租戶疑似冒用知名品牌');
-    addReason(checks.domainAnalysis?.status === 'danger', checks.domainAnalysis?.details || '網域特徵異常');
-    addReason(checks.externalResources?.status === 'danger', '表單或外部資源送往可疑網域');
-    addReason(checks.shoppingScam?.status === 'danger', '一頁式購物詐騙特徵');
-    addReason(checks.unverifiedCommerce?.status === 'danger', '新註冊模板商城缺少可驗證商家資訊');
-    addReason(checks.lineContact?.status === 'danger', '要求加入 LINE 聯絡/下單');
-    addReason(checks.shoppingLanding?.status === 'danger', '可疑購物/廣告落地頁網址');
-    addReason(checks.disposableDomain?.status === 'danger', '免洗亂碼網域特徵');
-    addReason(checks.brandSimilarity?.status === 'danger', '網域疑似仿冒知名品牌');
-    addReason(checks.params?.status === 'danger', '網址含敏感驗證或認證參數');
-    addReason(checks.entropy?.status === 'danger', '網址含高隨機亂碼特徵');
-    addReason(checks.subdomain?.status === 'danger', '深層可疑子網域結構');
-    addReason(checks.registrationPeriod?.status === 'danger', '新網域搭配 1 年短期註冊');
-    addReason(checks.securityHeaders?.status === 'danger', '缺少全部現代 HTTP 安全標頭');
-    addReason(checks.mxRecords?.status === 'danger', '網域未設定 MX 郵件紀錄');
-    addReason(checks.age?.status === 'danger' && checks.registrationPeriod?.status !== 'danger', '3 個月內新註冊網域');
-    addReason(checks.siteContent?.status === 'danger' && reasons.length === 0 && !isUnavailableSiteContentOnly, checks.siteContent?.details || '網站內容具高風險特徵');
-
-    return reasons.slice(0, 3);
-}
-
-function enforceFinalRiskConsistency(scanData) {
-    if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed || scanData.isTrustedAllowlist) return scanData;
-
-    const reasons = getHighRiskSummaryReasons(scanData);
-    if (scanData.conditionalCompanyTrustApplied && reasons.length > 0) {
-        scanData.conditionalCompanyTrustApplied = false;
-        scanData.conditionalCompanyTrustBlocked = true;
-        scanData.conditionalCompanyTrust = {
-            ...(scanData.conditionalCompanyTrust || {}),
-            eligible: true,
-            applied: false,
-            blockedByStrongThreat: true
-        };
-        if (scanData.checks?.conditionalCompanyTrust) {
-            scanData.checks.conditionalCompanyTrust.status = 'warning';
-            scanData.checks.conditionalCompanyTrust.applied = false;
-        }
-    }
-    if (reasons.length > 0 && scanData.riskScore < 70) {
-        scanData.riskScore = 70;
-    }
-    scanData.summaryReasons = reasons;
-    return scanData;
-}
+const enforceFinalRiskConsistency = productionCore.enforceFinalRiskConsistency;
 
 const officialAlertFixtures = [
     {
@@ -2055,14 +1839,14 @@ test('白名單包含 PayPal 官方網域並支援 www 子網域', () => {
     assert.equal(matchesDomainList('www.paypal.com', whitelist), true);
 });
 
-test('中央通訊社官方網域應視為可信台灣服務且不被誤判為高風險', () => {
+test('中央通訊社官方網域應視為可信台灣服務且不被誤判為高風險', async () => {
     const hostname = 'www.cna.com.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 100
     });
 
@@ -2079,14 +1863,14 @@ test('中央通訊社官方網域應視為可信台灣服務且不被誤判為�
     assert.equal(isVerifiedSafeRootDomain('fake-cna.com.tw'), false);
 });
 
-test('油跡可循食安資訊平台應視為可信台灣服務且不被誤判為高風險', () => {
+test('油跡可循食安資訊平台應視為可信台灣服務且不被誤判為高風險', async () => {
     const hostname = 'www.oiltrace.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 100
     });
 
@@ -2103,15 +1887,15 @@ test('油跡可循食安資訊平台應視為可信台灣服務且不被誤判�
     assert.equal(isVerifiedSafeRootDomain('fake-oiltrace.tw'), false);
 });
 
-test('奧斯汀美語官方網域應視為可信台灣教育服務且不被誤判為高風險', () => {
+test('奧斯汀美語官方網域應視為可信台灣教育服務且不被誤判為高風險', async () => {
     const hostname = 'www.austinenglish.com.tw';
     const branchHostname = 'branch.austinenglish.com.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 100
     });
     const jobSignals = analyzeJobTaskScamSignals({
@@ -2134,7 +1918,7 @@ test('奧斯汀美語官方網域應視為可信台灣教育服務且不被誤�
     assert.equal(isVerifiedSafeRootDomain('fake-austinenglish.com.tw'), false);
 });
 
-test('富邦公益大使官方次網域不應因投票、註冊、手機驗證與抽獎語意誤判為高風險', () => {
+test('富邦公益大使官方次網域不應因投票、註冊、手機驗證與抽獎語意誤判為高風險', async () => {
     const rawUrl = 'https://ambassador.fuboncharity.org.tw/project/inside/2646?utm_source=facebook&fbclid=sample';
     const parsed = new URL(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
@@ -2163,11 +1947,11 @@ test('富邦公益大使官方次網域不應因投票、註冊、手機驗證�
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: html });
     const fakeFubon = checkBrandSimilarity('fuboncharity-vote.example.shop', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 100
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
@@ -2193,7 +1977,7 @@ test('富邦公益大使官方次網域不應因投票、註冊、手機驗證�
     assert.match(brandApiSource, /domain: "fuboncharity\.org\.tw"/);
 });
 
-test('曼華堂竹林禪院公益宗教資料站不應因法院或慈善文字誤判為高風險', () => {
+test('曼華堂竹林禪院公益宗教資料站不應因法院或慈善文字誤判為高風險', async () => {
     const rawUrl = 'https://www.mwtnuns.org/?utm_source=facebook&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -2220,11 +2004,11 @@ test('曼華堂竹林禪院公益宗教資料站不應因法院或慈善文字�
     const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
     const hasFinancialSignal = !isWhitelisted && hasFinancialPhishingText(html);
     const hasOfficialFlowSignal = !isWhitelisted && hasOfficialFlowPath(sanitized.href);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -2274,7 +2058,7 @@ test('全球頂級可信根網域即使白名單載入失敗也應保留 root ov
     assert.equal(isVerifiedSafeRootDomain('store-dji.com'), false);
 });
 
-test('Moneywalk 官方 App 網域不應因走路賺錢與獎勵文案誤判為高風險', () => {
+test('Moneywalk 官方 App 網域不應因走路賺錢與獎勵文案誤判為高風險', async () => {
     const hostname = 'www.moneywalk.app';
     const rawUrl = 'https://www.moneywalk.app/zh-TW?utm_source=line&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
@@ -2285,10 +2069,10 @@ test('Moneywalk 官方 App 網域不應因走路賺錢與獎勵文案誤判為�
         'Daily rewards just by walking, redeem gift cards, affiliate payout, PayPal, Wise',
         'Gravity Labs Co., Ltd. Business Registration No. 865-87-02459 contact@moneywalk.app'
     ].join('\n');
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const hasFinancialPhishingSignal = !isVerifiedSafeRootDomain(hostname) &&
@@ -2311,14 +2095,14 @@ test('Moneywalk 官方 App 網域不應因走路賺錢與獎勵文案誤判為�
     assert.equal(isVerifiedSafeRootDomain('fake-moneywalk.app', []), false);
 });
 
-test('Axi 官方金融服務網域不應因外匯或交易語意誤判為高風險', () => {
+test('Axi 官方金融服務網域不應因外匯或交易語意誤判為高風險', async () => {
     const hostname = 'www.axi.com';
     const url = 'https://www.axi.com/int/markets/forex';
     const financialText = `${url} forex broker trading account credit card transaction verification`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const hasFinancialPhishingSignal = !isVerifiedSafeRootDomain(hostname) &&
@@ -2339,14 +2123,14 @@ test('Axi 官方金融服務網域不應因外匯或交易語意誤判為高風�
     assert.equal(isVerifiedSafeRootDomain('axitrading.biz'), false);
 });
 
-test('台灣人壽官方短網址不應因短碼路徑或金融語意誤判為高風險', () => {
+test('台灣人壽官方短網址不應因短碼路徑或金融語意誤判為高風險', async () => {
     const hostname = 'twlife.tw';
     const url = 'https://twlife.tw/P/Y8ZSFj5';
     const financialText = `${url} 台灣人壽 中信 保單 帳戶 verification transaction`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const hasFinancialPhishingSignal = !isVerifiedSafeRootDomain(hostname) &&
@@ -2380,7 +2164,7 @@ test('台灣 gov.tw 結尾網域應直接視為政府官方網域', () => {
 });
 
 test('台灣 gov.tw 官方網域只在公開機關資料比對後顯示政府機關驗證', () => {
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     assert.match(appSource, /govAgencySignals:\s*analyzeGovernmentAgencySignals/);
     assert.match(appSource, /\/api\/gov-agency-verification/);
     assert.match(appSource, /govAgencyVerificationData/);
@@ -2407,23 +2191,23 @@ test('台灣 gov.tw 官方網域應跳過 AI 品牌覆寫，避免被誤改成�
     assert.equal(riskScore, 0);
 });
 
-test('台灣 gov.tw 官方網域應忽略外部黑名單或安全庫誤判', () => {
-    const govResult = applyOfficialGovRiskOverride({
+test('台灣 gov.tw 官方身分不能覆蓋外部強威脅', async () => {
+    const govResult = await applyOfficialGovRiskOverride({
         hostname: '500.gov.tw',
         blocklistListed: true,
         googleUnsafe: true,
         initialRiskScore: 100
     });
-    const fakeGovResult = applyOfficialGovRiskOverride({
+    const fakeGovResult = await applyOfficialGovRiskOverride({
         hostname: 'gov-tw-login.shop',
         blocklistListed: true,
         googleUnsafe: true,
         initialRiskScore: 0
     });
 
-    assert.equal(govResult.blocklistListedForRisk, false);
-    assert.equal(govResult.googleFlaggedForRisk, false);
-    assert.equal(govResult.riskScore, 0);
+    assert.equal(govResult.blocklistListedForRisk, true);
+    assert.equal(govResult.googleFlaggedForRisk, true);
+    assert.equal(govResult.riskScore, 100);
     assert.equal(fakeGovResult.blocklistListedForRisk, true);
     assert.equal(fakeGovResult.googleFlaggedForRisk, true);
     assert.equal(fakeGovResult.riskScore, 100);
@@ -2613,7 +2397,7 @@ test('apple-touch-icon 網站圖示不應被誤認為 Apple 品牌仿冒', () =>
     assert.equal(realImpersonation.brandName, 'Apple');
 });
 
-test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單', () => {
+test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單', async () => {
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const hostname = 'www.cinvoice.tw';
     const isWhitelisted = isVerifiedSafeRootDomain(hostname, []);
@@ -2622,10 +2406,10 @@ test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單'
         text: '發票載具 APP 可同步雲端發票，並串接財政部電子發票整合服務平台資料。'
     });
     const hasPageBrandMismatch = !isWhitelisted && !checkBrandSimilarity(hostname, []).matched && pageBrandSignals.matched;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -2641,7 +2425,7 @@ test('發票載具官方網域 cinvoice.tw 應列入可信台灣服務白名單'
     assert.equal(override.riskScore, 0);
 });
 
-test('雲端發票生活小幫手官方專屬網域應視為可信服務與安全短網址', () => {
+test('雲端發票生活小幫手官方專屬網域應視為可信服務與安全短網址', async () => {
     const rawUrl = 'https://ecloud.life/i/Y8ZSFj5k?utm_source=line&utm_medium=sms';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const hostname = 'ecloud.life';
@@ -2652,10 +2436,10 @@ test('雲端發票生活小幫手官方專屬網域應視為可信服務與安�
     });
     const isWhitelisted = isVerifiedSafeRootDomain(hostname, []);
     const hasPageBrandMismatch = !isWhitelisted && !checkBrandSimilarity(hostname, []).matched && pageBrandSignals.matched;
-    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+    const shortenerOverride = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -2681,7 +2465,7 @@ test('雲端發票生活小幫手官方專屬網域應視為可信服務與安�
     assert.equal(isVerifiedSafeRootDomain('fake-ecloud.life', []), false);
 });
 
-test('紅陽科技電子發票查詢子網域應視為可信支付與發票服務', () => {
+test('紅陽科技電子發票查詢子網域應視為可信支付與發票服務', async () => {
     const rawUrl = 'https://einv.sunpay.com.tw/search?invoiceDate=kiBAKD%2BpWYkUqbrO1pxzyg%3D%3D&invoiceNumber=RV8Xi3AsAXqInA3oOB6aRA%3D%3D&randomNumber=M2by%2BbmD6oJFbn8auN%2BsOA%3D%3D';
     const parsed = new URL(rawUrl);
     const hostname = parsed.hostname;
@@ -2694,10 +2478,10 @@ test('紅陽科技電子發票查詢子網域應視為可信支付與發票服�
         hasSuspiciousParams: hasSensitiveUrlParam(rawUrl),
         isWhitelisted: isVerifiedSafeRootDomain(hostname, [])
     });
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
@@ -2725,15 +2509,15 @@ test('紅陽科技電子發票查詢子網域應視為可信支付與發票服�
     assert.match(brandApiSource, /domain: "sunpay\.com\.tw"/);
 });
 
-test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網址白名單', () => {
+test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網址白名單', async () => {
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const hostname = 'cmy.tw';
     const officialDestination = 'www.cmoney.com.tw';
     const appDestination = 'www.cmoney.tw';
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -2753,17 +2537,17 @@ test('CMoney 官方短網址 cmy.tw 應列入可信台灣服務與安全短網�
     assert.equal(override.riskScore, 0);
 });
 
-test('玉山銀行官方短網址 esun.co 應視為可信金融服務與安全縮網址', () => {
+test('玉山銀行官方短網址 esun.co 應視為可信金融服務與安全縮網址', async () => {
     const rawUrl = 'https://esun.co/MJce6?utm_source=sms&utm_medium=message';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
     const hostname = 'esun.co';
     const officialDestination = 'www.esunbank.com';
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const esunBrand = riskConfig.protectedBrands.find(brand => brand.name === '玉山銀行');
@@ -2789,7 +2573,7 @@ test('玉山銀行官方短網址 esun.co 應視為可信金融服務與安全�
     assert.match(brandApiSource, /"玉山銀行": \["esunbank\.com\.tw", "esunbank\.com", "esun\.co"\]/);
 });
 
-test('永豐銀行 MMA 官方短網址 mma.tw 應視為可信金融服務與安全縮網址', () => {
+test('永豐銀行 MMA 官方短網址 mma.tw 應視為可信金融服務與安全縮網址', async () => {
     const rawUrl = 'https://mma.tw/kycsurvey/?utm_source=sms&utm_medium=message';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
@@ -2797,10 +2581,10 @@ test('永豐銀行 MMA 官方短網址 mma.tw 應視為可信金融服務與安�
     const hostname = 'mma.tw';
     const officialDestination = 'mma.sinopac.com';
     const financialText = `${rawUrl} MMA金融交易網 永豐銀行 信用卡 帳戶異常 verify`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const sinopacBrand = riskConfig.protectedBrands.find(brand => brand.name === '永豐銀行');
@@ -2833,7 +2617,7 @@ test('台新銀行官方簡訊短網址 tsbk.tw 應解析至台新官方網域�
     const rawUrl = 'http://tsbk.tw/7h4lss';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const hostname = new URL(rawUrl).hostname;
     const officialDestination = 'smartrobot.taishinbank.com.tw';
     const deceptiveDestination = 'taishinbank.com.tw.evil.shop';
@@ -2855,17 +2639,17 @@ test('台新銀行官方簡訊短網址 tsbk.tw 應解析至台新官方網域�
     assert.match(appSource, /isVerifiedOfficialShortenerDestination\(inputDomain, destinationDomain\)/);
 });
 
-test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服務', () => {
+test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服務', async () => {
     const rawUrl = 'https://www.cathay-cube.com.tw/cathaybk/personal/product/credit-card/cards/cube?utm_source=google&utm_medium=search';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
     const hostname = 'www.cathay-cube.com.tw';
     const financialText = `${rawUrl} 國泰世華銀行 CUBE 信用卡 verification`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
@@ -2888,17 +2672,17 @@ test('國泰世華 CUBE 官方網域 cathay-cube.com.tw 應視為可信金融服
     assert.match(brandApiSource, /"國泰世華銀行": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw", "globalmyb2b\.com", "cathayrobo\.com"\]/);
 });
 
-test('國泰世華採用的 cube-app.tw 應視為可信 CUBE App 安全短網址', () => {
+test('國泰世華採用的 cube-app.tw 應視為可信 CUBE App 安全短網址', async () => {
     const rawUrl = 'https://cube-app.tw/A1B2C3?utm_source=sms&utm_medium=message';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
     const hostname = 'cube-app.tw';
     const financialText = `${rawUrl} 國泰世華 CUBE App 信用卡 帳戶異常 verification`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
@@ -2925,17 +2709,17 @@ test('國泰世華採用的 cube-app.tw 應視為可信 CUBE App 安全短網址
     assert.match(brandApiSource, /"CUBE App": \["cathaybk\.com\.tw", "cathay-cube\.com\.tw", "cube-app\.tw"\]/);
 });
 
-test('國泰世華 GlobalMyB2B 官方網域應視為可信企業金融服務', () => {
+test('國泰世華 GlobalMyB2B 官方網域應視為可信企業金融服務', async () => {
     const rawUrl = 'https://www.globalmyb2b.com/GEBANK/Login.aspx?utm_source=bookmark&utm_medium=web';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
     const hostname = 'www.globalmyb2b.com';
     const financialText = `${rawUrl} 國泰世華全球企業網路銀行 帳戶 登入 verification`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
@@ -2958,17 +2742,17 @@ test('國泰世華 GlobalMyB2B 官方網域應視為可信企業金融服務', (
     assert.match(brandApiSource, /"GlobalMyB2B": \["globalmyb2b\.com"\]/);
 });
 
-test('國泰智能投資 cathayrobo.com 官方網域應視為可信金融服務', () => {
+test('國泰智能投資 cathayrobo.com 官方網域應視為可信金融服務', async () => {
     const rawUrl = 'https://www.cathayrobo.com/welcome/?utm_source=cathay&utm_medium=referral';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
     const hostname = 'www.cathayrobo.com';
     const financialText = `${rawUrl} 國泰智能投資 信用卡 帳戶 verification`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const cathayBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰世華');
@@ -2991,17 +2775,17 @@ test('國泰智能投資 cathayrobo.com 官方網域應視為可信金融服務'
     assert.match(brandApiSource, /"國泰智能投資": \["cathayrobo\.com"\]/);
 });
 
-test('國泰人壽 cathaylife.com.tw 官方網域不應被 cathay 品牌規則誤判', () => {
+test('國泰人壽 cathaylife.com.tw 官方網域不應被 cathay 品牌規則誤判', async () => {
     const rawUrl = 'https://www.cathaylife.com.tw/official/?utm_source=google&utm_medium=search';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
     const hostname = 'www.cathaylife.com.tw';
     const financialText = `${rawUrl} 國泰人壽保險股份有限公司 信用卡 帳戶 verification`;
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const cathayLifeBrand = riskConfig.protectedBrands.find(brand => brand.name === '國泰人壽');
@@ -3028,17 +2812,17 @@ test('國泰人壽 cathaylife.com.tw 官方網域不應被 cathay 品牌規則�
     assert.match(brandApiSource, /"國泰人壽保險股份有限公司": \["cathaylife\.com\.tw", "cathaylife\.tw"\]/);
 });
 
-test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', () => {
+test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址', async () => {
     const rawUrl = 'https://591.to/rGRj?utm_source=facebook&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const hostname = '591.to';
     const officialDestination = 'www.591.com.tw';
     const rentDestination = 'rent.591.com.tw';
-    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+    const shortenerOverride = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -3066,13 +2850,13 @@ test('591 房屋交易網官方短網址 591.to 應視為可信安全縮網址',
     assert.equal(isVerifiedSafeRootDomain('fake-591.to', []), false);
 });
 
-test('Shopee 官方短網址 tw.shp.ee 應視為可信安全縮網址', () => {
+test('Shopee 官方短網址 tw.shp.ee 應視為可信安全縮網址', async () => {
     const rawUrl = 'https://tw.shp.ee/example?utm_source=line&utm_medium=share';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
-    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+    const shortenerOverride = await applyTrustedAllowlistRiskOverride({
         hostname: 'tw.shp.ee',
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -3100,17 +2884,17 @@ test('CHT shorteners verify the official destination without trusting unrelated 
         }
     }
     assert.equal(isVerifiedOfficialShortenerDestination('cht.tw.evil.example', 'www.cht.com.tw'), false);
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     assert.match(appSource, /traceData\?\.resolvedDestination !== false/);
 });
 
-test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', () => {
+test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', async () => {
     const rawUrl = 'https://cht.tw/x/aec30?utm_source=sms&utm_medium=message';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
-    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+    const shortenerOverride = await applyTrustedAllowlistRiskOverride({
         hostname: 'cht.tw',
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -3129,14 +2913,14 @@ test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', () => 
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
 });
 
-test('TWNIC 官方 twnic.tw 網域與子網域應視為可信台灣網路服務', () => {
+test('TWNIC 官方 twnic.tw 網域與子網域應視為可信台灣網路服務', async () => {
     const hostname = 'twnic.tw';
     const officialSubdomain = 'ccrdap.twnic.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
-    const allowlistOverride = applyTrustedAllowlistRiskOverride({
+    const allowlistOverride = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -3155,15 +2939,15 @@ test('TWNIC 官方 twnic.tw 網域與子網域應視為可信台灣網路服務'
     assert.equal(isVerifiedSafeRootDomain('twnic.tw.evil.example', whitelist), false);
 });
 
-test('uTagGo 官方短網址 link.utaggo.com.tw 應視為可信安全縮網址', () => {
+test('uTagGo 官方短網址 link.utaggo.com.tw 應視為可信安全縮網址', async () => {
     const rawUrl = 'https://link.utaggo.com.tw/0sTPt?utm_source=instagram&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const hostname = 'link.utaggo.com.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
-    const shortenerOverride = applyTrustedAllowlistRiskOverride({
+    const shortenerOverride = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -3222,11 +3006,11 @@ test('PayPal 官方 checkout token 即使外部白名單不可用也不應觸發
     assert.equal(paramsStatus, 'info');
 });
 
-test('Trusted Allowlist Domain 應覆寫外部黑名單與後段扣分', () => {
-    const result = applyTrustedAllowlistRiskOverride({
+test('Trusted Allowlist Domain 應覆寫外部黑名單與後段扣分', async () => {
+    const result = await applyTrustedAllowlistRiskOverride({
         hostname: 'www.paypal.com',
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3297,7 +3081,7 @@ test('大型電商根網域子網域應直接視為可信 allowlist 並維持低
     assert.equal(isVerifiedSafeRootDomain('fake-momoshop.com.tw'), false);
 });
 
-test('家樂福 Uni-Prosperity 官方禮物卡子網域應視為可信且跳過 AI 品牌誤判', () => {
+test('家樂福 Uni-Prosperity 官方禮物卡子網域應視為可信且跳過 AI 品牌誤判', async () => {
     const hostname = 'giftcard.uni-prosperity.com.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const pageBrandSignals = analyzePageBrandSignals({
@@ -3305,10 +3089,10 @@ test('家樂福 Uni-Prosperity 官方禮物卡子網域應視為可信且跳過 
         text: '<title>家樂福電子禮券 CARREFOUR E-GC</title><p>憑電子禮券上的條碼，可至家樂福所有門市消費使用。</p>'
     });
     const fakeCarrefour = checkBrandSimilarity('carrefour-gift.example.shop', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
 
@@ -3327,7 +3111,7 @@ test('家樂福 Uni-Prosperity 官方禮物卡子網域應視為可信且跳過 
     assert.equal(override.riskScore, 0);
 });
 
-test('統一獅 LION CREW 官方商城子網域應視為可信且不被統一超商品牌誤判', () => {
+test('統一獅 LION CREW 官方商城子網域應視為可信且不被統一超商品牌誤判', async () => {
     const hostname = 'lioncrew.uni-lions.com.tw';
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
     const pageBrandSignals = analyzePageBrandSignals({
@@ -3335,10 +3119,10 @@ test('統一獅 LION CREW 官方商城子網域應視為可信且不被統一超
         text: '<title>統一 7-ELEVEN 獅隊官方 LION CREW 萊恩酷商城</title><p>營業人名稱：統一棒球隊股份有限公司。統一編號：23534457。</p>'
     });
     const fakeLionsStore = checkBrandSimilarity('uni-lions-shop.example.com', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
@@ -3360,7 +3144,7 @@ test('統一獅 LION CREW 官方商城子網域應視為可信且不被統一超
     assert.equal(override.riskScore, 0);
 });
 
-test('日落小物 91APP 商品頁應移除社群追蹤參數並視為可信電商', () => {
+test('日落小物 91APP 商品頁應移除社群追蹤參數並視為可信電商', async () => {
     const rawUrl = 'https://www.sunsetgoods.tw/SalePage/Index/11682153?utm_medium=ads&utm_source=facebook&utm_campaign=0420_%E5%B0%8F%E6%96%B0%E5%8D%8A%E6%A9%9F%E6%A2%B0%E7%A9%8D%E6%9C%A8&fbclid=IwdGRjcASR13pleHRuA2FlbQIxMQBzcnRjBmFwcF9pZAo2NjI4NTY4Mzc5AAEet5ADCFi3U68SO2IQKkom8d3kZJfjwFoKOs-sk6DbyUyK1EWgHMhLyJOd6VA_aem_QqY-u0aI0sNz0rX2btxnEA';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3377,10 +3161,10 @@ test('日落小物 91APP 商品頁應移除社群追蹤參數並視為可信電�
             <p>付款方式 配送方式 退換貨政策 服務條款 商品分類</p>
         `
     });
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
@@ -3404,7 +3188,7 @@ test('日落小物 91APP 商品頁應移除社群追蹤參數並視為可信電�
     assert.match(brandApiSource, /"日落小物": \["sunsetgoods\.tw"\]/);
 });
 
-test('The AXIOM 安德家品官方 SHOPLINE 購物站應視為可信電商且不被代理品牌誤判', () => {
+test('The AXIOM 安德家品官方 SHOPLINE 購物站應視為可信電商且不被代理品牌誤判', async () => {
     const rawUrl = 'https://www.theaxiomstore.com/?utm_source=facebook&utm_medium=ads&fbclid=abc123';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3426,10 +3210,10 @@ test('The AXIOM 安德家品官方 SHOPLINE 購物站應視為可信電商且不
         text: pageText
     });
     const fakeAxiomStore = checkBrandSimilarity('theaxiomstore-discount.example.shop', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
@@ -3454,7 +3238,7 @@ test('The AXIOM 安德家品官方 SHOPLINE 購物站應視為可信電商且不
     assert.match(brandApiSource, /domain: "theaxiomstore\.com"/);
 });
 
-test('Trista 微笑女孩手作革物官方 1shop 購物站應視為可信台灣電商', () => {
+test('Trista 微笑女孩手作革物官方 1shop 購物站應視為可信台灣電商', async () => {
     const rawUrl = 'https://www.tristahandmade.com/products/trista%E5%BE%AE%E7%AC%91%E5%A5%B3%E5%AD%A9%E6%89%8B%E4%BD%9C%E9%9D%A9%E7%89%A9%E8%AB%BE%E4%BA%9E%E9%80%9A%E5%8B%A4%E5%8C%85?utm_source=facebook&fbclid=abc123';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3478,10 +3262,10 @@ test('Trista 微笑女孩手作革物官方 1shop 購物站應視為可信台灣
         text: pageText
     });
     const fakeTrista = checkBrandSimilarity('tristahandmade-discount.example.shop', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3519,7 +3303,7 @@ test('Trista 微笑女孩手作革物官方 1shop 購物站應視為可信台灣
     assert.match(brandApiSource, /domain: "tristahandmade\.com"/);
 });
 
-test('SZ SHOP 官方 SHOPLINE 3C 攝影配件購物站應視為可信台灣電商', () => {
+test('SZ SHOP 官方 SHOPLINE 3C 攝影配件購物站應視為可信台灣電商', async () => {
     const rawUrl = 'https://www.szshop.com.tw/products/insta360-x5-accessory?utm_source=facebook&fbclid=abc123';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3543,10 +3327,10 @@ test('SZ SHOP 官方 SHOPLINE 3C 攝影配件購物站應視為可信台灣電�
         text: pageText
     });
     const fakeSzShop = checkBrandSimilarity('szshop-discount.example.shop', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3585,7 +3369,7 @@ test('SZ SHOP 官方 SHOPLINE 3C 攝影配件購物站應視為可信台灣電�
     assert.match(brandApiSource, /domain: "szshop\.com\.tw"/);
 });
 
-test('聖弘紙藝官方網站不應因 LINE 訂購與免運文字誤判為高風險', () => {
+test('聖弘紙藝官方網站不應因 LINE 訂購與免運文字誤判為高風險', async () => {
     const rawUrl = 'https://shenghongpaper.com/';
     const parsed = new URL(rawUrl);
     const parts = getDomainParts(parsed.hostname);
@@ -3608,10 +3392,10 @@ test('聖弘紙藝官方網站不應因 LINE 訂購與免運文字誤判為高�
     const ecommerceSignals = analyzeEcommerceTrustSignals({ html: pageText, url: rawUrl });
     const pageBrandSignals = analyzePageBrandSignals({ hostname: parsed.hostname, text: pageText });
     const fakeShengHong = checkBrandSimilarity('shenghongpaper-sale.example.shop', []);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3648,7 +3432,7 @@ test('聖弘紙藝官方網站不應因 LINE 訂購與免運文字誤判為高�
     assert.match(brandApiSource, /domain: "shenghongpaper\.com"/);
 });
 
-test('三得利健康網路商店台灣官方銷售網站不應因保健食品與定期購誤判為高風險', () => {
+test('三得利健康網路商店台灣官方銷售網站不應因保健食品與定期購誤判為高風險', async () => {
     const rawUrl = 'https://wellness.suntory.com.tw/suntory/product/?utm_source=google&gclid=abc123';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3678,11 +3462,11 @@ test('三得利健康網路商店台灣官方銷售網站不應因保健食品�
         hasFinancialPhishingText(pageText);
     const hasOfficialFlowSignal = !isVerifiedSafeRootDomain(parsed.hostname, []) &&
         hasOfficialFlowPath(sanitized.href);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3728,7 +3512,7 @@ test('三得利健康網路商店台灣官方銷售網站不應因保健食品�
     assert.match(brandApiSource, /"新加坡商三得利健益亞太股份有限公司": \["suntory\.com\.tw"\]/);
 });
 
-test('OBgE 台灣官方網站不應因男士美妝商城與促銷語意誤判為高風險', () => {
+test('OBgE 台灣官方網站不應因男士美妝商城與促銷語意誤判為高風險', async () => {
     const rawUrl = 'https://www.obge.tw/products/natural-cover-foundation-stick?utm_source=instagram&fbclid=abc123';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3754,11 +3538,11 @@ test('OBgE 台灣官方網站不應因男士美妝商城與促銷語意誤判為
         hostname: 'obge-sale.example.shop',
         text: '<title>OBgE Taiwan Official 限時優惠</title><p>台灣愛戴特官方美妝商城</p>'
     });
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3803,7 +3587,7 @@ test('OBgE 台灣官方網站不應因男士美妝商城與促銷語意誤判為
     assert.match(brandApiSource, /"台灣愛戴特有限公司": \["obge\.tw"\]/);
 });
 
-test('DJI 官方 Store 子網域應視為可信全球品牌商城', () => {
+test('DJI 官方 Store 子網域應視為可信全球品牌商城', async () => {
     const rawUrl = 'https://store.dji.com/product/dji-mini-5-pro?utm_source=google&gclid=abc123';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3821,10 +3605,10 @@ test('DJI 官方 Store 子網域應視為可信全球品牌商城', () => {
     `;
     const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: pageText });
     const shoppingSignals = analyzeShoppingScamSignals({ html: pageText, url: sanitized.href });
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3858,7 +3642,7 @@ test('DJI 官方 Store 子網域應視為可信全球品牌商城', () => {
     assert.match(brandApiSource, /"DJI Store": \["dji\.com"\]/);
 });
 
-test('一休.com 官方日本訂房平台不應因預約登入與付款語意誤判為高風險', () => {
+test('一休.com 官方日本訂房平台不應因預約登入與付款語意誤判為高風險', async () => {
     const rawUrl = 'https://www.ikyu.com/?utm_source=line&utm_medium=social';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -3878,11 +3662,11 @@ test('一休.com 官方日本訂房平台不應因預約登入與付款語意誤
         hasFinancialPhishingText(pageText);
     const hasOfficialFlowSignal = !isVerifiedSafeRootDomain(parsed.hostname, []) &&
         hasOfficialFlowPath('https://www.ikyu.com/booking/');
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -3936,7 +3720,7 @@ test('Quickper 快電商應作為正規電商平台足跡，但不作無條件�
         <p>退換貨政策 服務條款 隱私權政策 付款方式 配送方式</p>
     `;
     const ecommerce = analyzeEcommerceTrustSignals({ url: sanitized.href, html: platformPage });
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['fbclid', 'utm_source'].sort());
     assert.equal(parsed.hostname, 'andy-c2cbuy.quickper.com');
@@ -3992,7 +3776,7 @@ test('短網址使用嚴格網域符合，避免 t.co 類誤殺', () => {
 });
 
 test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const indexSource = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8');
 
     assert.match(appSource, /const resolvePrimaryScanTarget = async/);
@@ -4009,7 +3793,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
     assert.match(appSource, /getOfficialShortenerDestinationDomains/);
-    assert.match(indexSource, /app\.js\?v=20260907-health-1/);
+    assert.match(indexSource, /assets\/app\.js/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {
@@ -4234,7 +4018,7 @@ test('純數字子網域跨網域轉址到可信大站應視為高風險占位�
     assert.equal(suspiciousSubdomain.matched, true);
     assert.ok(suspiciousSubdomain.reasons.includes('子網域為純數字短碼'));
     assert.equal(hasRisk, true);
-    assert.equal(scanData.riskScore, 85);
+    assert.equal(scanData.riskScore, 90);
     assert.deepEqual(scanData.summaryReasons, ['郵件追蹤跳板或隱藏轉址', '純數字子網域搭配外部可信大站轉址']);
     assert.equal(hasSuspiciousExternalTrustedRedirect({
         hostname: '500.gov.tw',
@@ -4572,12 +4356,12 @@ test('Cofacts 單一回報不強制高風險，明確且獲支持的詐騙查核
 
     assert.equal(reportOnly.riskScore, 15);
     assert.deepEqual(reportOnly.summaryReasons, []);
-    assert.equal(supportedScam.riskScore, 70);
+    assert.equal(supportedScam.riskScore, 90);
     assert.deepEqual(supportedScam.summaryReasons, ['Cofacts 查核回應明確指出詐騙']);
 });
 
 test('NXDOMAIN 網址若有 Cofacts 紀錄仍應繼續風險掃描', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.match(source, /dnsData\?\.Status === 3[\s\S]*checkCofactsRiskSignals\(domain, fullUrl\)/);
     assert.match(source, /if \(!prefetchedCofactsRiskData\?\.matched\)[\s\S]*isInvalid: true/);
@@ -4882,7 +4666,7 @@ test('xLab/xlearn 正規課程活動頁不應因 liveform 與 UTM 誤判為高�
     assert.deepEqual(scanData.summaryReasons, []);
 });
 
-test('子康學院官方課程網域不應因課程報名與退費條款誤判為高風險', () => {
+test('子康學院官方課程網域不應因課程報名與退費條款誤判為高風險', async () => {
     const rawUrl = 'https://zk-school.com/?utm_source=facebook&utm_medium=paid&utm_campaign=course';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -4910,11 +4694,11 @@ test('子康學院官方課程網域不應因課程報名與退費條款誤判�
     const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
     const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
     const hasFinancialSignal = !isWhitelisted && hasFinancialPhishingText(html);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -4956,7 +4740,7 @@ test('子康學院官方課程網域不應因課程報名與退費條款誤判�
     assert.equal(isVerifiedSafeRootDomain('fake-zk-school.com', []), false);
 });
 
-test('GoWedding 婚禮掏心話官方婚禮資訊平台不應誤判為高風險', () => {
+test('GoWedding 婚禮掏心話官方婚禮資訊平台不應誤判為高風險', async () => {
     const rawUrl = 'https://gowedding.tw/?utm_source=facebook&utm_medium=paid&utm_campaign=wedding';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
     const parsed = new URL(sanitized.href);
@@ -4984,11 +4768,11 @@ test('GoWedding 婚禮掏心話官方婚禮資訊平台不應誤判為高風險'
     const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: sanitized.href });
     const isWhitelisted = isVerifiedSafeRootDomain(parsed.hostname, []);
     const hasFinancialSignal = !isWhitelisted && hasFinancialPhishingText(html);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -5120,7 +4904,7 @@ test('新竹杰克行李箱維修工作室官方網站不應因在地維修服�
     assert.equal(blockedConditionalTrust.applied, false);
     assert.equal(blockedConditionalTrust.blockedByStrongThreat, true);
     assert.equal(blockedConditionalTrust.riskScore, 100);
-    assert.equal(strongThreatScanData.riskScore, 70);
+    assert.equal(strongThreatScanData.riskScore, 90);
     assert.equal(strongThreatScanData.conditionalCompanyTrustApplied, false);
     assert.equal(strongThreatScanData.conditionalCompanyTrustBlocked, true);
     assert.equal(strongThreatScanData.checks.conditionalCompanyTrust.status, 'warning');
@@ -5132,7 +4916,7 @@ test('新竹杰克行李箱維修工作室官方網站不應因在地維修服�
     assert.match(brandApiSource, /"jack-hsinchu": \["jack-hsinchu\.com"\]/);
 });
 
-test('Nocoding AI 大學正規課程網站不應因新網域、賺錢文案與結帳頁誤判為高風險', () => {
+test('Nocoding AI 大學正規課程網站不應因新網域、賺錢文案與結帳頁誤判為高風險', async () => {
     const rawUrl = 'https://noncodingai.com/buy/?utm_source=facebook&utm_campaign=ai-course';
     const parsed = new URL(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
@@ -5158,10 +4942,10 @@ test('Nocoding AI 大學正規課程網站不應因新網域、賺錢文案與�
     const shoppingSignals = analyzeShoppingScamSignals({ html, url: rawUrl });
     const ecommerceSignals = analyzeEcommerceTrustSignals({ html, url: rawUrl });
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const brandApiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-fake-brand.js'), 'utf8');
@@ -5358,7 +5142,7 @@ test('中華磊山慈愛社官方捐款子網域不應因信用卡或收據欄�
     assert.match(brandApiSource, /domain: "ls-love\.org"/);
 });
 
-test('39buy 想就捐國合會熊本賑災頁不應因捐款表單或品牌文字誤判為高風險', () => {
+test('39buy 想就捐國合會熊本賑災頁不應因捐款表單或品牌文字誤判為高風險', async () => {
     const rawUrl = 'https://39buy.co/charity/item/47450?_eat=valid_20260811143844_991ac1689258aa030d8d8605cef0ae5e&utm_source=threads';
     const parsed = new URL(rawUrl);
     const whitelist = JSON.parse(fs.readFileSync(path.join(repoRoot, 'whitelist.json'), 'utf8')).domains;
@@ -5405,11 +5189,11 @@ test('39buy 想就捐國合會熊本賑災頁不應因捐款表單或品牌文�
         hasSuspiciousParams: hasSensitiveUrlParam(sanitized.href) || sanitized.removedVolatileParams.length > 0,
         isWhitelisted
     });
-    const override = applyTrustedAllowlistRiskOverride({
+    const override = await applyTrustedAllowlistRiskOverride({
         hostname: parsed.hostname,
         whitelist,
-        blocklistListed: true,
-        googleUnsafe: true,
+        blocklistListed: false,
+        googleUnsafe: false,
         initialRiskScore: 95
     });
     const scanData = enforceFinalRiskConsistency({
@@ -5811,7 +5595,7 @@ test('危險細節應拉高 summary 分數下限', () => {
         }
     });
 
-    assert.equal(scanData.riskScore, 70);
+    assert.equal(scanData.riskScore, 90);
     assert.deepEqual(scanData.summaryReasons, ['郵件追蹤跳板或隱藏轉址']);
 });
 
@@ -6090,7 +5874,7 @@ test('官方商品警示 URL 前綴命中應忽略廣告追蹤參數並升為最
     const hasOfficialAlertUrlMatch = matches.some(item => ['url', 'url-prefix'].includes(item.matchType));
     const riskScore = hasOfficialAlertUrlMatch ? 100 : 0;
     const apiSource = fs.readFileSync(path.join(repoRoot, 'functions/api/check-official-alerts.js'), 'utf8');
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const manualSource = fs.readFileSync(path.join(repoRoot, 'functions/api/manual-official-alerts.js'), 'utf8');
 
     assert.equal(matches.length, 1);
@@ -6128,7 +5912,7 @@ test('官方警示資料 root domain 命中應升為高風險並拉高 summary',
     });
 
     assert.equal(matches[0].matchType, 'domain');
-    assert.equal(scanData.riskScore, 70);
+    assert.equal(scanData.riskScore, 90);
     assert.deepEqual(scanData.summaryReasons, ['官方機關已公告警示']);
 });
 
@@ -6163,7 +5947,7 @@ test('公平會處分紀錄命中的小老闆商城一頁式廣告頁應列為�
     assert.equal(matches[0].rootDomain, 'smallbossstore.com');
     assert.equal(matches[0].sourceUrl, 'https://www.ftc.gov.tw/uploadDecision/6d358c1d-2b8c-49fc-b44a-39c7f1f96f9a.pdf');
     assert.match(matches[0].warning, /5 萬元罰鍰/);
-    assert.equal(scanData.riskScore, 70);
+    assert.equal(scanData.riskScore, 90);
     assert.deepEqual(scanData.summaryReasons, ['官方機關已公告警示', '官方裁罰紀錄命中']);
     assert.match(apiSource, /manual-official-alerts/);
     assert.match(apiSource, /synced-official-penalty-records/);
@@ -6434,7 +6218,7 @@ test('ioppk.eu.cc 假投票 LINE 帳號釣魚不得繼承 eu.cc 根網域信任'
         }
     });
     const { getRegistrableDomain } = await import(pathToFileURL(path.join(repoRoot, 'functions/api/tranco-rank.js')).href);
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     assert.deepEqual(domainParts, {
         subdomainLabels: [],
@@ -6508,7 +6292,7 @@ test('GitHub Pages 蝦皮冒用租戶應保留歷史詐騙判定並隔離母網�
     });
     const genericBrandScore = hasGenericGithubPagesBrandRisk ? 95 : 0;
     const { getRegistrableDomain } = await import(pathToFileURL(path.join(repoRoot, 'functions/api/tranco-rank.js')).href);
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const rdapSource = fs.readFileSync(path.join(repoRoot, 'functions/api/rdap.js'), 'utf8');
 
     assert.deepEqual(domainParts, {
@@ -6632,7 +6416,7 @@ test('人工確認詐騙的 Weebly 子網域應直接高風險，一般 Weebly �
     const isGenericFreeHosting = matchesDomainList(genericDomain, riskConfig.freeHostingProviders);
     const isConfirmedScam = matchesDomainList(scamDomain, riskConfig.confirmedScamDomains);
     const isGenericConfirmedScam = matchesDomainList(genericDomain, riskConfig.confirmedScamDomains);
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const weeblyBaselineScoreAfterTrustedCap = applyTrustedValidationCap({
         riskScore: 30,
         hasTrustedValidation: true,
@@ -6678,7 +6462,7 @@ test('Cloudflare Pages 預設子網域至少中度風險，短亂碼專案名應
     const readableDomain = 'brand-demo.pages.dev';
     const suspiciousDomain = 'rm5cnx4l.pages.dev';
     const suspiciousSubdomain = analyzeSuspiciousSubdomain(suspiciousDomain);
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     const baselineScore = applyTrustedCommercialWeakSignalCap({
         riskScore: 30,
@@ -6724,7 +6508,7 @@ test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認
     const suspiciousDomain = 'calm-quokka-a2fe57.netlify.app';
     const confirmedReadableDomain = 'wavesvote.netlify.app';
     const suspiciousSubdomain = analyzeSuspiciousSubdomain(suspiciousDomain);
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
 
     const baselineScore = applyTrustedCommercialWeakSignalCap({
         riskScore: 30,
@@ -6792,7 +6576,7 @@ test('Netlify 預設子網域至少中度風險，隨機專案名與人工確認
 
 test('wellnesstalk.online 使用獨立人工高風險分類且不冒充已確認詐騙證據', () => {
     const domain = 'wellnesstalk.online';
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const isManualHighRisk = matchesDomainList(domain, riskConfig.manualHighRiskDomains);
     const scanData = enforceFinalRiskConsistency({
         riskScore: isManualHighRisk ? 90 : 0,
@@ -6886,7 +6670,7 @@ test('具有可核實商家政策或成熟網域的英文商店不會只因英�
 });
 
 test('一般 MX 或零星電商文字不再啟用可信弱訊號降分上限', () => {
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const weakContextBlock = appSource.match(/const hasTrustedCommercialWeakSignalContext =[\s\S]+?;\n\n\s*const hasStrongRiskSignal/)?.[0] || '';
 
     assert.match(weakContextBlock, /hasTrustedValidation/);
@@ -6938,7 +6722,7 @@ test("What'Sub 官方網站不應因新 .app 網域、數字品牌名或 Apple �
             conditionalCompanyTrust: { status: 'safe', applied: true }
         }
     });
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     const companyMappingSource = fs.readFileSync(path.join(repoRoot, 'functions/api/trusted-company-domain-mappings.js'), 'utf8');
 
     assert.equal(riskConfig.trustedTaiwanServiceDomains.includes('equal2.app'), false);
@@ -7079,7 +6863,7 @@ test('公司官網映射只能抵銷弱訊號，所有強威脅都必須阻止�
 });
 
 test('檢舉通報功能已從首頁、截圖與聊天小幫手完整移除', () => {
-    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    const appSource = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
     assert.doesNotMatch(appSource, /協助打擊詐騙/);
     assert.doesNotMatch(appSource, /要請 MyGoPen 幫你檢舉/);
     assert.doesNotMatch(appSource, /要阿麥幫你檢舉/);

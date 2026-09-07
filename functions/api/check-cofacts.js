@@ -66,9 +66,23 @@ function dedupeRecords(records) {
 }
 
 export const cofactsRiskSignals = dedupeRecords([
-    ...manualCofactsRiskSignals,
-    ...syncedCofactsRiskSignals
+    ...manualCofactsRiskSignals.map(record => ({ ...record, collection: 'manual' })),
+    ...syncedCofactsRiskSignals.map(record => ({ ...record, collection: 'synced' }))
 ]);
+
+export function describeCofactsSources({ metadata = cofactsSyncMetadata, manual = manualCofactsRiskSignals, synced = syncedCofactsRiskSignals, now = Date.now() } = {}) {
+    const activeManual = manual.filter(record => isActiveRecord(record, now));
+    const activeSynced = synced.filter(record => isActiveRecord(record, now));
+    const generatedTime = Date.parse(metadata.generatedAt || '');
+    const validTime = Number.isFinite(generatedTime) && generatedTime <= now;
+    const state = ['disabled', 'awaiting-authorized-api-sync'].includes(metadata.status) ? 'disabled' : metadata.status !== 'ok' || !validTime ? 'unavailable'
+        : now - generatedTime > 8 * 86400000 ? 'stale' : 'ready';
+    const checkedDates = activeManual.map(record => record.checkedAt).filter(date => Number.isFinite(Date.parse(date))).sort();
+    return {
+        manual: { state: 'ready', records: activeManual.length, lastReviewedAt: checkedDates.at(-1) || null, coverage: '人工審核收錄案件，不代表 Cofacts 全站資料' },
+        synced: { state, records: activeSynced.length, generatedAt: metadata.generatedAt || null, queriedSince: metadata.queriedSince || null, sourceStatus: metadata.status || 'unknown', coverage: '已同步且尚未過期的網址索引，非即時全站搜尋' }
+    };
+}
 
 export function findCofactsMatches({ domain = '', targetUrl = '', records = cofactsRiskSignals, now = Date.now() } = {}) {
     const normalizedDomain = normalizeHostname(domain || targetUrl);
@@ -124,9 +138,14 @@ export async function onRequest(context) {
     const targetUrl = requestUrl.searchParams.get('url') || '';
     const matches = findCofactsMatches({ domain, targetUrl });
     const summary = summarizeCofactsMatches(matches);
+    const sources = describeCofactsSources();
 
     return new Response(JSON.stringify({
         ...summary,
+        status: 'ok',
+        checkedAt: new Date().toISOString(),
+        sources,
+        label: summary.matched ? summary.label : '未命中本機收錄索引；不代表 Cofacts 全站沒有回報',
         count: matches.length,
         matches,
         attribution: {

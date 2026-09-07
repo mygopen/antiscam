@@ -1,1 +1,5 @@
 .wrangler/
+node_modules/
+dist/
+.dev.vars
+wrangler.json

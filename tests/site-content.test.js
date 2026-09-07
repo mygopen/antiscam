@@ -29,7 +29,7 @@ test('Cloudflare challenge 與明確封鎖回應仍會被辨識', async () => {
 });
 
 test('前端備援封鎖偵測不得再以 cloudflare 單字直接判定', () => {
-  const source = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+  const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
   const block = source.match(/const detectCrawlerBlock = \(text, httpCode = 0\) => \{[\s\S]+?\n\s*\};\n\s*const getCrawlerCandidates/)?.[0] || '';
 
   assert.match(block, /challenge-platform/);
