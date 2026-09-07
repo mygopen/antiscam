@@ -42,6 +42,22 @@ test('bounded reads stop chunked large responses and redirect loops', async () =
         async () => assert.rejects(fetchPublicResource('https://example.com'), /redirect_loop/));
 });
 
+test('fixed DNS/API endpoints reject redirects without unsupported Workers redirect mode', async () => {
+    const { fetchPublicResource } = await load();
+    await mockFetch(async (url, init) => {
+        assert.equal(init.redirect, 'manual');
+        return new Response(null, { status: 302, headers: { location: 'https://unexpected.example' } });
+    }, async () => assert.rejects(fetchPublicResource('https://example.com'), /dns_unavailable/));
+    const { onRequest } = await import('../functions/api/safe-browsing.js');
+    await mockFetch(async (url, init) => {
+        assert.equal(init.redirect, 'manual');
+        return new Response(null, { status: 302, headers: { location: 'https://unexpected.example' } });
+    }, async () => {
+        const result = await onRequest({ request: new Request('https://scanner.test/api?url=https://example.com'), env: { GOOGLE_SAFE_BROWSING_API_KEY: 'test' } });
+        assert.equal((await result.json()).status, 'unavailable');
+    });
+});
+
 test('security headers on HTTP error pages remain unavailable', async () => {
     const { onRequest } = await import('../functions/api/security-headers.js');
     for (const status of [403, 404, 429, 500, 520]) await mockFetch(async url => dns(url) ? publicDns() : new Response('error', { status }), async () => {

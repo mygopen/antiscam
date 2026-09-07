@@ -58,7 +58,7 @@ async function verifyDns(host, signal) {
   let found = false;
   for (const type of ['A', 'AAAA']) {
     const response = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`, {
-      headers: { Accept: 'application/dns-json' }, redirect: 'error', signal
+      headers: { Accept: 'application/dns-json' }, redirect: 'manual', signal
     });
     if (!response.ok) throw new Error('dns_unavailable');
     const data = JSON.parse(await readBoundedText(response, 65536));

@@ -10,7 +10,7 @@ export async function onRequest({ request, env }) {
   const timer = setTimeout(() => controller.abort(), 3500);
   try {
     const response = await fetch(`https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${env.GOOGLE_SAFE_BROWSING_API_KEY}`, {
-      method: 'POST', signal: controller.signal, redirect: 'error',
+      method: 'POST', signal: controller.signal, redirect: 'manual',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client: { clientId: 'mygopen-antiscam', clientVersion: '1.1.0' },
