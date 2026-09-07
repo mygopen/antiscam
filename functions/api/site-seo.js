@@ -1,3 +1,5 @@
+import { publicUrl, fetchPublicResource } from '../lib/public-fetch.js';
+
 function jsonResponse(data, init = {}) {
   return new Response(JSON.stringify(data), {
     ...init,
@@ -15,7 +17,7 @@ function normalizeTargetUrl(value) {
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const url = new URL(withScheme);
-    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    if (!publicUrl(url.href)) return null;
     return url;
   } catch (err) {
     return null;
@@ -26,15 +28,15 @@ async function fetchText(url, timeoutMs = 2500) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      redirect: 'follow',
+    const result = await fetchPublicResource(url, {
+      maxBytes: 600000,
       signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 antiscam-site-seo'
       }
     });
-    const text = res.ok ? await res.text() : '';
-    return { ok: res.ok, status: res.status, url: res.url || url, text: text.slice(0, 600000) };
+    const res = result.response;
+    return { ok: res.ok, status: res.status, url: result.url, text: res.ok ? result.text : '' };
   } catch (err) {
     return { ok: false, status: 0, url, text: '', reason: 'fetch_failed' };
   } finally {

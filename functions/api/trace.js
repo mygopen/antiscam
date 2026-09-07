@@ -1,3 +1,5 @@
+import { publicUrl, fetchPublicResource } from '../lib/public-fetch.js';
+
 const MAX_REDIRECTS = 6;
 const PROFILE_TIMEOUT = 9000;
 const MAX_HTML_LENGTH = 256 * 1024;
@@ -43,7 +45,7 @@ function normalizeTargetUrl(value) {
   try {
     const url = new URL(withScheme);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    if (!isSafeOutboundUrl(url)) return null;
+    if (!isSafeOutboundUrl(url) || !publicUrl(url.href)) return null;
     return url.href;
   } catch (err) {
     return null;
@@ -256,14 +258,22 @@ async function traceWithProfile(targetUrl, profile) {
   try {
     while (redirectCount < MAX_REDIRECTS) {
       let response;
+      let fetchedText = '';
       try {
-        response = await fetch(currentUrl, {
-          redirect: 'manual',
+        const fetched = await fetchPublicResource(currentUrl, {
+          followRedirects: false,
+          maxBytes: MAX_HTML_LENGTH,
           signal: controller.signal,
           headers: profile.headers
         });
+        response = fetched.response;
+        fetchedText = fetched.text;
       } catch (fetchError) {
-        if (fetchError.name === 'AbortError') {
+        if (['blocked_target', 'blocked_private_target'].includes(fetchError.message)) {
+          status = 'blocked_private_target';
+          isHighRisk = true;
+          riskReason = '轉址目標包含不允許的位址或私有網路，已拒絕連線。';
+        } else if (fetchError.name === 'AbortError') {
           status = 'timeout';
           riskReason = '檢測超時 (Timeout)，網站可能依裝置或網路環境阻擋自動掃描。';
         } else {
@@ -315,7 +325,7 @@ async function traceWithProfile(targetUrl, profile) {
         if (contentType.includes('text/html')) {
           let text = '';
           try {
-            text = (await response.text()).slice(0, MAX_HTML_LENGTH);
+            text = fetchedText;
           } catch (err) {
             status = 'body_unavailable';
             riskReason = '已取得網頁回應，但無法讀取內容。';

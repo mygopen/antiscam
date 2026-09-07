@@ -72,7 +72,9 @@ test('不同 eu.cc 租戶不得被當成同一主網域', async () => {
 async function runTrace(targetUrl, fetchImpl) {
     const { onRequest } = await traceModulePromise;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchImpl;
+    globalThis.fetch = (url, init) => String(url).startsWith('https://cloudflare-dns.com/dns-query?')
+        ? Promise.resolve(Response.json({ Status: 0, Answer: [{ type: 1, data: '93.184.216.34' }] }))
+        : fetchImpl(url, init);
 
     try {
         const request = new Request(`https://scanner.test/api/trace?url=${encodeURIComponent(targetUrl)}`);

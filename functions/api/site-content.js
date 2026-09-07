@@ -1,4 +1,5 @@
 import { extractAnalyticsIdentifiers } from './analytics-identifiers.js';
+import { publicUrl, fetchPublicResource } from '../lib/public-fetch.js';
 
 function jsonResponse(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -17,7 +18,7 @@ function normalizeTargetUrl(value) {
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const url = new URL(withScheme);
-    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    if (!publicUrl(url.href)) return null;
     return url;
   } catch (err) {
     return null;
@@ -127,8 +128,7 @@ async function fetchWithBrowserHeaders(targetUrl, timeoutMs = 7000, profile = HE
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const origin = new URL(targetUrl).origin;
-    const res = await fetch(targetUrl, {
-      redirect: 'follow',
+    const result = await fetchPublicResource(targetUrl, {
       signal: controller.signal,
       headers: {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -144,12 +144,13 @@ async function fetchWithBrowserHeaders(targetUrl, timeoutMs = 7000, profile = HE
         ...profile.headers
       }
     });
-    const text = await res.text();
+    const res = result.response;
+    const text = result.text;
     return {
       ok: res.ok,
       status: {
         http_code: res.status,
-        url: res.url || targetUrl
+        url: result.url
       },
       contents: text.slice(0, 1000000),
       contentType: res.headers.get('content-type') || '',
@@ -182,11 +183,13 @@ export async function onRequest(context) {
   const rawUrl = normalizeTargetUrl(url.searchParams.get('rawUrl'))?.href || target.href;
   const candidates = buildCrawlerCandidateUrls([sanitized.href, target.href, rawUrl]);
   const attempts = [];
+  const deadline = Date.now() + 9000;
   let best = null;
 
   for (const candidate of candidates) {
     for (const profile of HEADER_PROFILES) {
-      const result = await fetchWithBrowserHeaders(candidate, 7000, profile);
+      if (Date.now() >= deadline || attempts.length >= 4) break;
+      const result = await fetchWithBrowserHeaders(candidate, Math.min(4000, deadline - Date.now()), profile);
       attempts.push({
         url: candidate,
         profile: profile.name,

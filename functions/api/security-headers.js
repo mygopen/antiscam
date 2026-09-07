@@ -1,9 +1,11 @@
+import { publicUrl, fetchPublicResource } from '../lib/public-fetch.js';
+
 function jsonResponse(data, init = {}) {
   return new Response(JSON.stringify(data), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=1800',
+      'Cache-Control': 'no-store',
       ...(init.headers || {})
     }
   });
@@ -15,7 +17,7 @@ function normalizeTargetUrl(value) {
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const url = new URL(withScheme);
-    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    if (!publicUrl(url.href)) return null;
     return url.toString();
   } catch (err) {
     return null;
@@ -23,9 +25,9 @@ function normalizeTargetUrl(value) {
 }
 
 async function fetchHeaders(targetUrl, method) {
-  return await fetch(targetUrl, {
+  return await fetchPublicResource(targetUrl, {
     method,
-    redirect: 'follow',
+    maxBytes: 65536,
     headers: {
       'User-Agent': 'Mozilla/5.0 antiscam-security-headers'
     }
@@ -40,10 +42,14 @@ export async function onRequest(context) {
   }
 
   try {
-    let res = await fetchHeaders(targetUrl, 'HEAD');
+    let result = await fetchHeaders(targetUrl, 'HEAD');
+    let res = result.response;
     if (!res.ok || res.status === 405 || res.status === 403) {
-      res = await fetchHeaders(targetUrl, 'GET');
+      result = await fetchHeaders(targetUrl, 'GET');
+      res = result.response;
     }
+
+    if (!res.ok) return jsonResponse({ status: 'unavailable', httpStatus: res.status, missingAll: false, missing: [], reason: 'http_error' });
 
     const headers = {
       csp: !!res.headers.get('content-security-policy'),
@@ -58,7 +64,7 @@ export async function onRequest(context) {
     return jsonResponse({
       status: 'ok',
       url: targetUrl,
-      finalUrl: res.url || targetUrl,
+      finalUrl: result.url,
       httpStatus: res.status,
       headers,
       missing,

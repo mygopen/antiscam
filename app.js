@@ -1421,6 +1421,7 @@ const { useState, useEffect, useRef } = React;
 
             const sensitiveKeywords = getRiskList('sensitiveFormKeywords');
             const sensitiveFields = [];
+            const sensitiveForms = new Set();
             doc.querySelectorAll('input, textarea, select').forEach(el => {
                 const type = (el.getAttribute('type') || '').toLowerCase();
                 const haystack = [
@@ -1438,6 +1439,7 @@ const { useState, useEffect, useRef } = React;
                 const strongSensitivePattern = /(password|passwd|pwd|passcode|otp|pin|creditcard|cardnumber|cvv|cvc|expire|expiry|bank|身分證|身份證|統一編號|信用卡|卡號|驗證碼|簡訊碼|密碼|銀行|金融卡|有效期限|安全碼)/i;
                 const isHighRisk = isStrongSensitiveType || strongSensitivePattern.test(haystack) || (matchedKeyword && strongSensitivePattern.test(matchedKeyword));
                 if (isStrongSensitiveType || isWeakSensitiveType || matchedKeyword) {
+                    if (isHighRisk) sensitiveForms.add(el.form || el.closest?.('form'));
                     sensitiveFields.push({
                         type: type || 'unknown',
                         keyword: matchedKeyword || type,
@@ -1459,7 +1461,12 @@ const { useState, useEffect, useRef } = React;
 
             doc.querySelectorAll('script[src]').forEach(el => collectExternalUrl(el.getAttribute('src'), 'script'));
             doc.querySelectorAll('iframe[src], frame[src]').forEach(el => collectExternalUrl(el.getAttribute('src'), 'iframe'));
-            doc.querySelectorAll('form[action]').forEach(el => collectExternalUrl(el.getAttribute('action'), 'form'));
+            let sensitiveFormActionCount = 0;
+            doc.querySelectorAll('form[action]').forEach(el => {
+                const before = externalResources.length;
+                collectExternalUrl(el.getAttribute('action'), 'form');
+                if (sensitiveForms.has(el) && externalResources.length > before) sensitiveFormActionCount++;
+            });
 
             const externalFormActions = externalResources.filter(item => item.kind === 'form');
             const externalIframeSources = externalResources.filter(item => item.kind === 'iframe');
@@ -1477,6 +1484,7 @@ const { useState, useEffect, useRef } = React;
                 externalResources: {
                     count: externalResources.length,
                     formActionCount: externalFormActions.length,
+                    sensitiveFormActionCount,
                     iframeCount: externalIframeSources.length,
                     suspiciousCount: suspiciousExternalResources.length,
                     suspiciousIframeCount: suspiciousExternalIframes.length,
@@ -2252,9 +2260,9 @@ const { useState, useEffect, useRef } = React;
 
             // 修正 1：嚴謹的白名單判定，並內建全球頂級可信根網域保護。
             const isWhitelisted = isOfficialTaiwanGov || isTrustedGlobalRootDomain || isTrustedEcommerceRootDomain || isTrustedTaiwanServiceRootDomain || isTrustedFinancialServiceRootDomain || isTrustedGovernmentServiceRootDomain || isTrustedPublicInterestRootDomain || isConfiguredAllowlistDomain;
-            const isConfirmedScam = !isWhitelisted && isConfirmedScamDomain(domain);
+            const isConfirmedScam = isConfirmedScamDomain(domain);
             const confirmedScamProfile = isConfirmedScam ? (RISK_CONFIG.confirmedScamProfiles?.[domain] || null) : null;
-            const isManualHighRisk = !isWhitelisted && isManualHighRiskDomain(domain);
+            const isManualHighRisk = isManualHighRiskDomain(domain);
 
             // 👇 判斷是否為社群平台
             const socialMediaDomains = getRiskList('socialMediaDomains');
@@ -2344,9 +2352,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
                 withTimeout(fetchSiteSeoData(fullUrl), 5000, { status: 'unavailable', matched: false, score: 0, robots: {}, sitemap: {} }),
                 withTimeout(
-                    isTrustedEcommerceRootDomain
-                        ? Promise.resolve(trustedEcommerceSiteStatus)
-                        : (hasUnresolvedPublicShortener
+                    (hasUnresolvedPublicShortener
                             ? Promise.resolve(unresolvedShortenerSiteStatus)
                             : checkSiteAvailability(fullUrl, {
                                 rawUrl: rawScanUrl,
@@ -2362,7 +2368,7 @@ const { useState, useEffect, useRef } = React;
                 withTimeout(fetchCertificateData(domain), 5000, { notBefore: null, source: null }),
                 withTimeout(tracePreflightCompleted ? Promise.resolve(preResolvedTrace) : fetchTraceData(fullUrl), 11000, null),
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
-                withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { isUnsafe: false }), 4000, { isUnsafe: false }),
+                withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { status: 'unavailable', isUnsafe: null }), 4000, { status: 'timeout', isUnsafe: null }),
                 withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] }),
                 prefetchedCofactsRiskData
                     ? Promise.resolve(prefetchedCofactsRiskData)
@@ -2675,7 +2681,7 @@ const { useState, useEffect, useRef } = React;
             const hasNetlifyAppRandomRisk = hasNetlifyAppBaselineRisk &&
                 (hasNetlifyAppRandomSubdomain || hasRandomizedPathToken || hasSuspiciousParams || hasNestedSuspiciousParams);
             const isFakeGov = domain.includes('gov') && !domain.endsWith('.gov') && !domain.endsWith('.gov.tw') && !isWhitelisted;
-            const hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov && !hasHighRiskRedirectTrace;
+            let hasTrustedAllowlistOverride = isWhitelisted && !isSocialMedia && !isFakeGov && !isFinalFakeGov && !hasHighRiskRedirectTrace && !unresolvedShortener;
             const isTrustedPaymentGatewayOrApiEndpoint = hasTrustedAllowlistOverride &&
                 (isGlobalPaymentGatewayDomain(domain) || (isTrustedGlobalRootDomain && hasPaymentOrApiPath));
             //新增：判斷是否假冒公共事業 (電子發票、台電、自來水、遠通)
@@ -2715,17 +2721,16 @@ const { useState, useEffect, useRef } = React;
             const regulatedTobaccoSalesSignals = pageSignals.regulatedTobaccoSalesSignals || createEmptyPageSignals().regulatedTobaccoSalesSignals;
             const officialAlertMatches = officialAlertData?.matches || [];
             const officialAlertMatch = officialAlertMatches[0] || null;
-            const hasOfficialAlert = !isWhitelisted && !!officialAlertData?.matched;
+            const hasOfficialAlert = !!officialAlertData?.matched;
             const hasOfficialAlertUrlMatch = hasOfficialAlert && officialAlertMatches.some(item => ['url', 'url-prefix'].includes(item.matchType));
             const cofactsMatches = cofactsRiskData?.matches || [];
             const cofactsMatch = cofactsMatches[0] || null;
             const hasCofactsRecord = !!cofactsRiskData?.matched;
-            const cofactsRiskScore = !isWhitelisted && hasCofactsRecord
+            const cofactsRiskScore = hasCofactsRecord
                 ? Math.max(0, Math.min(75, Number(cofactsRiskData?.riskScore || 0)))
                 : 0;
             const hasCofactsFraudEvidence = cofactsRiskScore >= 50;
-            const hasStrongCofactsRisk = !isWhitelisted &&
-                !!cofactsRiskData?.strongRisk &&
+            const hasStrongCofactsRisk = !!cofactsRiskData?.strongRisk &&
                 cofactsRiskScore >= 60 &&
                 !cofactsRiskData?.hasConflict;
             const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
@@ -2931,8 +2936,11 @@ const { useState, useEffect, useRef } = React;
                 hasNumericOnlySubdomain;
 
             const isGoogleFlagged = safeBrowsingData && safeBrowsingData.isUnsafe;
-            const blocklistListedForRisk = blocklistListed && !hasTrustedAllowlistOverride;
-            const isGoogleFlaggedForRisk = isGoogleFlagged && !isWhitelisted;
+            const blocklistListedForRisk = !!blocklistListed;
+            const isGoogleFlaggedForRisk = !!isGoogleFlagged;
+            const hasSensitiveExternalForm = (pageSignals.externalResources?.sensitiveFormActionCount || 0) > 0;
+            if (blocklistListedForRisk || isGoogleFlaggedForRisk || isConfirmedScam || isManualHighRisk ||
+                hasOfficialAlert || hasStrongCofactsRisk || hasSensitiveExternalForm) hasTrustedAllowlistOverride = false;
             const isApkSite = (siteStatusData.hasApk || apkUrlCount > 0) && !isWhitelisted;
             const isDownloadPhishingSignal = !isWhitelisted && !isApkSite &&
                 (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
@@ -3431,12 +3439,13 @@ const { useState, useEffect, useRef } = React;
                 riskScore = Math.min(riskScore, 20);
             }
 
-            // 只要是白名單，且不是惡意偽裝政府網站，就強制將風險歸零，忽略網站內容無法抓取的錯誤
-            if (hasTrustedAllowlistOverride) riskScore = 0; // 修正白名單歸零邏輯
+            if (hasTrustedAllowlistOverride) riskScore = Math.min(riskScore, 20);
+            if (blocklistListedForRisk || isGoogleFlaggedForRisk || isConfirmedScam || isManualHighRisk ||
+                hasOfficialAlert || hasStrongCofactsRisk || hasSensitiveExternalForm || hasHighRiskRedirectTrace) riskScore = Math.max(riskScore, 90);
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
-            if (isWhitelisted) {
+            if (isWhitelisted && hasTrustedAllowlistOverride) {
                 siteContentMsg = isOfficialTaiwanGov
                     ? '受信賴的台灣政府官方網域'
                     : (isTrustedEcommerceRootDomain
@@ -3721,6 +3730,7 @@ const { useState, useEffect, useRef } = React;
 
             return {
                 domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasGithubPagesBrandImpersonationRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasFreeHostingVotePhishingRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, confirmedScamCategory: confirmedScamProfile?.category || '', manualHighRiskDomain: isManualHighRisk, githubPagesBrandImpersonation: hasGithubPagesBrandImpersonationRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, freeHostingVotePhishing: hasFreeHostingVotePhishingRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                sensitiveExternalForm: hasSensitiveExternalForm,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
                     serverIp,
@@ -3730,9 +3740,11 @@ const { useState, useEffect, useRef } = React;
                 checks: {
                     // 👇 新增這行：Google 官方的標記卡片
                     googleSafeBrowsing: { 
-                        status: isGoogleFlaggedForRisk ? 'danger' : 'safe', 
+                        status: isGoogleFlaggedForRisk ? 'danger' : (safeBrowsingData?.status === 'clear' ? 'safe' : 'unknown'),
                         label: 'Google 官方安全庫', 
-                        details: isGoogleFlaggedForRisk ? `🚨 Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : (isOfficialTaiwanGov && isGoogleFlagged ? '台灣政府官方網域，忽略外部安全庫誤判' : (isGoogleFlagged && hasTrustedAllowlistOverride ? 'Trusted Allowlist Domain，忽略外部安全庫誤判' : 'Google Safe Browsing 未發現威脅'))
+                        details: isGoogleFlaggedForRisk ? `Google 官方標記為危險網站 (${safeBrowsingData.threatType})` : ({ clear: 'Google Safe Browsing 本次查詢未命中威脅', disabled: 'Google Safe Browsing 未啟用，未進行查詢', timeout: 'Google Safe Browsing 查詢逾時，無法判定' }[safeBrowsingData?.status] || 'Google Safe Browsing 暫時無法查詢，不代表安全'),
+                        sourceStatus: safeBrowsingData?.status || 'unavailable',
+                        checkedAt: safeBrowsingData?.checkedAt || null
                     },
                     officialAlerts: {
                         status: hasOfficialAlert ? 'danger' : 'safe',
@@ -4226,7 +4238,7 @@ const { useState, useEffect, useRef } = React;
             fallbackResult.resolvedFromShortener = preparedTarget.resolvedFromShortener;
             fallbackResult.unresolvedShortener = preparedTarget.unresolvedShortener;
             try {
-                return await withTimeout(
+                return window.ScanPolicy.finalize(await withTimeout(
                     simulateScan(
                         preparedTarget.targetDomain,
                         preparedTarget.fullUrl,
@@ -4235,7 +4247,7 @@ const { useState, useEffect, useRef } = React;
                     ),
                     20000,
                     fallbackResult
-                ) || fallbackResult;
+                ) || fallbackResult);
             } catch (err) {
                 console.error('風險掃描流程異常，已改用保守備援結果:', err);
                 return createScanFailureResult(
@@ -4364,6 +4376,7 @@ const { useState, useEffect, useRef } = React;
         };
 
         const enforceFinalRiskConsistency = (scanData) => {
+            window.ScanPolicy.finalize(scanData);
             if (!scanData || scanData.isInvalid || scanData.isSocialMedia || scanData.blocklistListed || scanData.isTrustedAllowlist) return scanData;
 
             const reasons = getHighRiskSummaryReasons(scanData);
@@ -4374,13 +4387,14 @@ const { useState, useEffect, useRef } = React;
                 scanData.riskScore = 70;
             }
             scanData.summaryReasons = reasons;
-            return scanData;
+            return window.ScanPolicy.finalize(scanData);
         };
 
-        const RiskMeter = ({ score }) => {
+        const RiskMeter = ({ score, assessment }) => {
             let color = 'bg-green-500', text = '低度風險', width = '10%';
             if (score >= 70) { color = 'bg-red-600'; text = '高度風險'; width = '90%'; }
             else if (score >= 30) { color = 'bg-yellow-500'; text = '中度風險'; width = '50%'; }
+            if (assessment === 'unknown') { color = 'bg-gray-400'; text = '資料不足／尚未確認'; width = '10%'; }
             return (
                 <div className="mt-4 mb-6">
                     <div className="flex justify-between mb-1 text-sm font-bold"><span>安全</span><span className={score >= 70 ? 'text-red-600' : (score >= 30 ? 'text-yellow-600' : 'text-green-600')}>{text}</span><span>危險</span></div>
@@ -4616,9 +4630,11 @@ const { useState, useEffect, useRef } = React;
             };
 
             const buildBotScanReply = (scanData, brandDataRes, contextText = '') => {
-                let riskLevel = scanData.riskScore >= 70 ? '🔴 高度危險' : (scanData.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 安全');
+                const presentation = window.ScanPolicy.presentation(scanData);
+                let riskLevel = presentation.label;
                 let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
                 if (contextText) replyText += `${contextText}\n\n`;
+                if (presentation.level === 'unknown') return { content: `${replyText}${presentation.title}。${presentation.reasons.join('；')}。請勿因此認定連結安全。` };
 
                 const warningLines = [];
                 if (brandDataRes?.isFakeBrand) warningLines.push('企圖假冒知名品牌');
@@ -5333,7 +5349,7 @@ const { useState, useEffect, useRef } = React;
                     // UX 動態文案
                     const progressMessages = [
                         "🔍 正在連線至目標網站...",
-                        "啟動 AI 深度檢測與畫面渲染...",
+                        "正在檢查網址與網頁內容...",
                         "正在交叉比對官方資料庫...",
                         "網站防護較嚴，請再稍等..."
                     ];
@@ -5368,7 +5384,10 @@ const { useState, useEffect, useRef } = React;
                     if (!scanData.isInvalid) {
                         // 根據 AI 分析結果，動態更新 UI 卡片結論
                         if (!skipAiBrandAnalysis && brandDataRes) {
-                            if (brandDataRes.isGenericScam) {
+                            if (brandDataRes.isFakeBrand === null) {
+                                scanData.checks.siteContent.status = 'unknown';
+                                scanData.checks.siteContent.details = brandDataRes.message || '品牌分析未完成，不代表沒有風險';
+                            } else if (brandDataRes.isGenericScam) {
                                 scanData.riskScore = 100;
                                 scanData.checks.domainAnalysis.status = 'danger';
                                 scanData.checks.domainAnalysis.details = brandDataRes.warningMessage;
@@ -5393,7 +5412,7 @@ const { useState, useEffect, useRef } = React;
                             else if (brandDataRes.detectedBrand && brandDataRes.officialDomain && scanData.riskScore < 70) {
                                 // 2. 發現是真正的官方網站
                                 scanData.checks.siteContent.status = 'safe';
-                                scanData.checks.siteContent.details = 'AI 確認此為正規之官方網站內容';
+                                scanData.checks.siteContent.details = '品牌與已知官方網域相符，仍以其他威脅證據綜合判定';
                             } else if (brandDataRes.detectedBrand && !brandDataRes.officialDomain) {
                                 // 3. 系統漏洞修補：AI 抓到品牌，但後端無法在資料庫驗證該品牌網域
                                 scanData.checks.siteContent.status = 'info';
@@ -5406,7 +5425,7 @@ const { useState, useEffect, useRef } = React;
                         } else if (!isSocialInput && !skipAiBrandAnalysis) {
                             // AI API 連線失敗時的備用文字 (排除社群網站)
                             scanData.checks.siteContent.status = 'info';
-                            scanData.checks.siteContent.details = '網頁內容已讀取 (AI 引擎暫時無回應)';
+                            scanData.checks.siteContent.details = 'AI 品牌分析暫時無回應，不代表沒有風險';
                         }
                     }
 
@@ -5444,12 +5463,12 @@ const { useState, useEffect, useRef } = React;
                 const siteStatus = result.details?.siteStatus || {};
                 
                 // 👇 複製報告時，也要考慮社群網站的特殊狀態
-                let riskLevel = result.riskScore >= 70 ? '🔴 高度風險' : (result.riskScore >= 30 ? '⚠️ 中度風險' : '✅ 低度風險');
+                let riskLevel = window.ScanPolicy.presentation(result).label;
                 if (result.isSocialMedia) {
                     riskLevel = '⚠️ 無法自動掃描 (社群平台)';
                 }
 
-                const warnings = [];
+                const warnings = [...(result.incompleteReasons || [])];
                 if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
                 
                 // 👇 社群專屬警告
@@ -5746,13 +5765,13 @@ const { useState, useEffect, useRef } = React;
                                         <span>伺服器: {result.details.serverCountry}</span>
                                     </div>
                                 </div>
-                                <RiskMeter score={result.riskScore} />
+                                <RiskMeter score={result.riskScore} assessment={result.assessment} />
 
                                 {/* ================= 核心結論區塊 (精簡版) ================= */}
-                                <div className={`mb-6 p-4 sm:p-5 md:p-8 rounded-2xl border-2 flex items-center gap-3 sm:gap-4 ${result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
+                                <div className={`mb-6 p-4 sm:p-5 md:p-8 rounded-2xl border-2 flex items-center gap-3 sm:gap-4 ${result.assessment === 'unknown' ? 'bg-gray-50 border-gray-300' : result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>
                                     
                                     {/* 👇 根據風險等級，動態切換圖示與角色圖片 (手機版縮小為 w-10 h-10 節省空間) 👇 */}
-                                    {result.isSocialMedia ? (
+                                    {result.isSocialMedia || result.assessment === 'unknown' ? (
                                         <AlertTriangle size={40} className="text-yellow-600 flex-shrink-0 w-10 h-10 sm:w-10 sm:h-10 md:w-12 md:h-12" />
                                     ) : result.riskScore >= 70 ? (
                                         <img src="https://ik.imagekit.io/mygopen/danger.png" alt="危險警告" className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 flex-shrink-0 object-contain" />
@@ -5763,9 +5782,10 @@ const { useState, useEffect, useRef } = React;
                                     )}
                                     <div className="min-w-0">
                                         {/* 👇 移除 whitespace-nowrap，加入 leading-snug 讓長句子可以自然換行且行距美觀 👇 */}
-                                        <h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide leading-snug ${result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
-                                            {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : (result.riskScore >= 70 ? '危險！請勿點擊或提供個資' : (result.riskScore >= 30 ? '警告！此網站存在風險' : '安全！未發現明顯風險'))}
+                                        <h3 className={`text-[1.15rem] sm:text-2xl md:text-3xl font-extrabold tracking-tight sm:tracking-wide leading-snug ${result.assessment === 'unknown' ? 'text-gray-800' : result.riskScore >= 70 ? 'text-red-800' : (result.riskScore >= 30 ? 'text-yellow-800' : 'text-green-800')}`}>
+                                            {result.isSocialMedia ? '這是社群平台，我們無法看到裡面的貼文，要多加小心留意！' : window.ScanPolicy.presentation(result).title}
                                         </h3>
+                                        {result.assessment === 'unknown' && <p className="text-sm text-gray-600 mt-2">{result.incompleteReasons.join('；')}</p>}
                                     </div>
                                 </div>
 
