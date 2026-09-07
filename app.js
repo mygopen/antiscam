@@ -355,6 +355,8 @@ const { useState, useEffect, useRef } = React;
                 let riskLevel = presentation.label;
                 let replyText = `【麥擱騙檢測報告】\n風險評估：${riskLevel}\n\n`;
                 if (contextText) replyText += `${contextText}\n\n`;
+                if (scanData.shortLinkNotice) replyText += `${scanData.shortLinkNotice}\n\n`;
+                if (scanData.checks?.reportedShortLink) replyText += `${scanData.checks.reportedShortLink.details}\n\n`;
                 if (presentation.level === 'unknown') return { content: `${replyText}${presentation.title}。${presentation.reasons.join('；')}。請勿因此認定連結安全。` };
 
                 const warningLines = [];
@@ -1190,6 +1192,8 @@ const { useState, useEffect, useRef } = React;
                 }
 
                 const warnings = [...(result.incompleteReasons || [])];
+                if (result.shortLinkNotice) warnings.push(result.shortLinkNotice);
+                if (result.checks?.reportedShortLink) warnings.push(result.checks.reportedShortLink.details);
                 if (result.blocklistListed) warnings.push('⚠️ 此網址已列入詐騙黑名單！');
                 
                 // 👇 社群專屬警告
@@ -1475,12 +1479,14 @@ const { useState, useEffect, useRef } = React;
                                             </div>
                                         )}
                                     </div>
-                                    <div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600">
+                                <div className="mt-4 md:mt-0 flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-sm text-gray-600">
                                         <Globe size={16} className="text-brand-red" />
                                         <span>伺服器: {result.details.serverCountry}</span>
                                     </div>
                                 </div>
                                 <RiskMeter score={result.riskScore} assessment={result.assessment} />
+                                {result.shortLinkNotice && <div className="mb-5 border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-gray-800 leading-relaxed"><strong>縮網址使用提醒</strong><p className="mt-1">{result.shortLinkNotice}</p></div>}
+                                {result.checks?.reportedShortLink && <p className="mb-5 text-sm font-medium text-red-800 leading-relaxed">{result.checks.reportedShortLink.details}</p>}
 
                                 {/* ================= 核心結論區塊 (精簡版) ================= */}
                                 <div className={`mb-6 p-4 sm:p-5 md:p-8 rounded-2xl border-2 flex items-center gap-3 sm:gap-4 ${result.assessment === 'unknown' ? 'bg-gray-50 border-gray-300' : result.riskScore >= 70 ? 'bg-red-50 border-red-200' : (result.riskScore >= 30 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200')} shadow-sm`}>

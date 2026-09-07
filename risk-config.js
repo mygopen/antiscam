@@ -92,9 +92,19 @@ window.RISK_CONFIG = {
     urlShorteners: [
         'bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'is.gd', 'buff.ly',
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
-        'ppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
+        'ppt.cc', 'myppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
         'aka.ms', 'shp.ee', 'cht.tw', 'chts.tw', '591.to', 'esun.co', 'mma.tw', 'tsbk.tw', 'cube-app.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
         'l.messenger.com'
+    ],
+    reportedShortLinks: [
+        {
+            hostname: 'myppt.cc',
+            pathname: '/c310jT',
+            category: '疑似偽冒繪畫比賽／投票詐騙',
+            source: '使用者回報',
+            reviewedAt: '2026-09-07',
+            verification: '目的地受 HTTP 403 阻擋，尚未獨立查證頁面內容'
+        }
     ],
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',

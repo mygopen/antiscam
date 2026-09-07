@@ -1430,6 +1430,7 @@
             const suspiciousExternalScripts = externalResources.filter(item => item.kind === 'script' && item.suspicious);
 
             return {
+                voteAccountSignals: window.ScanPolicy.analyzeVotePage(doc, fullUrl),
                 sensitiveFields: {
                     count: sensitiveFields.length,
                     highRiskCount: sensitiveFields.filter(item => item.risk === 'high').length,
@@ -4100,7 +4101,7 @@
             return result;
         };
 
-        const runRiskScanSafely = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
+        const executeRiskScan = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
             let preparedTarget;
             try {
                 preparedTarget = await resolvePrimaryScanTarget(targetDomain, fullUrl, scanOptions);
@@ -4150,6 +4151,11 @@
                     err
                 );
             }
+        };
+
+        const runRiskScanSafely = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
+            const scan = await executeRiskScan(targetDomain, fullUrl, currentWhitelist, scanOptions);
+            return window.ScanPolicy.attachShortLinkContext(scan, fullUrl, isKnownUrlShortenerDomain(targetDomain), getRiskList('reportedShortLinks'));
         };
 
         const runRiskAndBrandScan = async (targetDomain, fullUrl, currentWhitelist = [], scanOptions = {}) => {
@@ -4212,6 +4218,8 @@
             };
 
             addReason(checks.googleSafeBrowsing?.status === 'danger', 'Google 安全庫已標記危險');
+            addReason(checks.reportedShortLink?.status === 'danger', checks.reportedShortLink?.details);
+            addReason(checks.voteAccountPhishing?.status === 'danger', checks.voteAccountPhishing?.details);
             addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
             addReason(checks.manualHighRisk?.status === 'danger', '人工確認高風險網域');
             addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
