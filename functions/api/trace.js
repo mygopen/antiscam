@@ -247,6 +247,7 @@ async function traceWithProfile(targetUrl, profile) {
   let isHighRisk = false;
   let riskReason = '';
   let status = 'ok';
+  let completed = false;
   const seenUrls = new Set([currentUrl]);
 
   const controller = new AbortController();
@@ -280,7 +281,10 @@ async function traceWithProfile(targetUrl, profile) {
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('Location');
-        if (!location) break;
+        if (!location) {
+          status = 'missing_location';
+          break;
+        }
 
         const resolved = resolveNextUrl(location, currentUrl);
         if (!resolved.ok) {
@@ -344,9 +348,11 @@ async function traceWithProfile(targetUrl, profile) {
             continue;
           }
         }
+        completed = true;
         break;
       }
 
+      status = `http_${response.status}`;
       break;
     }
 
@@ -373,7 +379,8 @@ async function traceWithProfile(targetUrl, profile) {
       profileLabel: profile.label,
       finalUrl: currentUrl,
       redirectCount,
-      resolvedDestination: redirectCount > 0,
+      completed,
+      resolvedDestination: completed && redirectCount > 0,
       chain: redirectChain,
       isHighRisk,
       riskReason,
@@ -397,13 +404,16 @@ export async function onRequest(context) {
     const [mobileTrace, desktopTrace] = await Promise.all(
       USER_AGENT_PROFILES.map(profile => traceWithProfile(targetUrl, profile))
     );
-    const primaryTrace = mobileTrace || desktopTrace;
-    const uaDifference = !!(mobileTrace?.finalUrl && desktopTrace?.finalUrl) &&
+    // A failed intermediate request is not evidence of a different destination.
+    const primaryTrace = [mobileTrace, desktopTrace].find(trace => trace?.completed) || mobileTrace || desktopTrace;
+    const uaComparisonComplete = !!(mobileTrace?.completed && desktopTrace?.completed);
+    const uaDifference = uaComparisonComplete &&
       !isSameSiteUrl(mobileTrace.finalUrl, desktopTrace.finalUrl);
-    const isHighRisk = !!(primaryTrace?.isHighRisk || desktopTrace?.isHighRisk || uaDifference);
-    const riskReason = primaryTrace?.riskReason ||
-      desktopTrace?.riskReason ||
-      (uaDifference ? `偵測到 Mobile/Desktop 導向不同主網域：Mobile=${getHostname(mobileTrace.finalUrl)}，Desktop=${getHostname(desktopTrace.finalUrl)}` : '');
+    const threatTrace = [mobileTrace, desktopTrace].find(trace => trace?.isHighRisk);
+    const isHighRisk = !!(threatTrace || uaDifference);
+    const riskReason = threatTrace?.riskReason ||
+      (uaDifference ? `偵測到 Mobile/Desktop 導向不同主網域：Mobile=${getHostname(mobileTrace.finalUrl)}，Desktop=${getHostname(desktopTrace.finalUrl)}` : '') ||
+      (!uaComparisonComplete ? '部分裝置的轉址追蹤未完成，無法確認裝置間目的地是否一致。' : '');
 
     return jsonResponse({
       inputUrl: targetUrl,
@@ -414,6 +424,7 @@ export async function onRequest(context) {
       isHighRisk,
       riskReason,
       uaDifference,
+      uaComparisonComplete,
       mobileFinalUrl: mobileTrace?.finalUrl || null,
       desktopFinalUrl: desktopTrace?.finalUrl || null,
       variants: {

@@ -1946,7 +1946,8 @@ const { useState, useEffect, useRef } = React;
                 tracePreflightCompleted: true,
                 traceObservedAt: traceData?.observedAt || null
             };
-            const hasResolvedDestination = Number(traceData?.redirectCount || 0) > 0 &&
+            const hasResolvedDestination = traceData?.resolvedDestination !== false &&
+                Number(traceData?.redirectCount || 0) > 0 &&
                 !!traceData?.finalUrl;
 
             if (!hasResolvedDestination) {
@@ -2451,7 +2452,9 @@ const { useState, useEffect, useRef } = React;
                 (isInputShortener || hasUaDifference || !isTraceHighRiskSameRoot);
             const uaCloakingDetails = hasUaDifference
                 ? `Mobile 最終網址: ${traceData.mobileFinalUrl || '無法判定'}；Desktop 最終網址: ${traceData.desktopFinalUrl || '無法判定'}`
-                : 'Mobile 與 Desktop 檢測路徑未發現明顯差異';
+                : traceData?.uaComparisonComplete === false
+                    ? '部分裝置轉址追蹤未完成，無法確認 Mobile 與 Desktop 目的地是否一致'
+                    : 'Mobile 與 Desktop 檢測路徑未發現明顯差異';
             const freeHostingProviders = getRiskList('freeHostingProviders');
             const isFreeHosting = freeHostingProviders.some(p => isSameRootDomain(domain, p));
             const isCloudflarePagesDev = isCloudflarePagesDevHostname(domain);
@@ -3938,7 +3941,7 @@ const { useState, useEffect, useRef } = React;
                     subdomain: { status: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? 'info' : (isHighTraffic ? 'safe' : (hasDeepSubdomainPhishingPattern ? 'danger' : 'warning'))) : 'safe', label: '子網域深度', details: isDeepSubdomain ? (hasConditionalCompanyTrustApplied ? '組織官網映射已驗證，子網域深度只保留為背景資訊' : (isHighTraffic ? '子網域層級較多，但屬於受信賴網域' : (hasDeepSubdomainPhishingPattern ? '檢測到深層可疑子網域，伴隨偽裝後綴、連字號、隨機片段或可疑參數等釣魚特徵' : '檢測到多層子網域，需搭配其他風險特徵判斷'))) : '子網域層級正常' },
                     subdomainPattern: { status: suspiciousSubdomain.matched ? ((isWhitelisted || isHighTraffic || hasConditionalCompanyTrustApplied) ? 'info' : 'warning') : 'safe', label: '可疑子網域模式', details: suspiciousSubdomain.matched ? `偵測到可疑子網域「${suspiciousSubdomain.label}」：${suspiciousSubdomain.reasons.join('、')}${hasConditionalCompanyTrustApplied ? '；組織官網映射已驗證，本項不作風險加權' : ''}` : '未偵測到異常子網域命名模式' },
                     disposableDomain: { status: hasConditionalCompanyTrustApplied && hasDisposableRootLabel ? 'info' : (hasDisposableShoppingLandingRisk || hasDisposableRootPhishingRisk || hasDisposableUnreadablePageRisk ? 'danger' : (hasDisposableRootLabel ? 'warning' : 'safe')), label: '免洗亂碼網域', details: hasDisposableRootLabel ? `主網域「${rootLabel}」具有隨機生成或可快速棄置特徵：${disposableRoot.reasons.slice(0, 4).join('、')}${suspiciousSubdomain.matched ? '；並搭配可疑子網域命名' : ''}${hasSuspiciousLandingParams ? '；並搭配廣告追蹤落地頁參數' : ''}${unreadablePageStatuses.includes(siteStatusData.status) ? '；且頁面內容未完整取得' : ''}${hasConditionalCompanyTrustApplied ? '；組織官網映射已驗證，本項只保留為背景資訊' : ''}` : '未偵測到主網域亂碼免洗特徵' },
-                    userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : 'Mobile 與 Desktop User-Agent 未發現不同最終導向' },
+                    userAgentCloaking: { status: hasUaCloakingRisk ? 'danger' : (hasUaDifference || traceData?.uaComparisonComplete === false ? 'warning' : 'safe'), label: '裝置導向差異', details: hasUaDifference ? `${uaCloakingDetails}${hasUaCloakingRisk ? '；此行為常見於只對手機使用者展示釣魚頁或規避桌面掃描。' : '；目前未導向不同主網域，列為提醒。'}` : uaCloakingDetails },
                     redirect: { status: redirectStatus, label: '轉址/短網址', details: redirectCheckDetails, finalUrl: isRedirected ? siteStatusData.finalUrl : null },
                     network: { status: serverInfo?.isReal ? 'info' : (hasRootDomainTrustBaseline ? 'info' : 'unknown'), label: '網路服務商 (ISP/ASN)', details: serverInfo?.isReal ? `${serverInfo.org || '未知服務商'}${serverInfo.asn ? ` (${serverInfo.asn})` : ''}` : (hasRootDomainTrustBaseline ? '無法識別網路來源；已由根網域信任基線補強，不作為風險加權' : '無法識別網路來源') },
                     links: { status: siteStatusData.linkStats?.total <= 1 ? 'warning' : 'info', label: '網頁連結分析', details: siteStatusData.linkStats ? `共 ${siteStatusData.linkStats.total} 個連結 (內部: ${siteStatusData.linkStats.internal} / 外部: ${siteStatusData.linkStats.external})` : '無法分析頁面內容' },

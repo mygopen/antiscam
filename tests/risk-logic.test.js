@@ -3091,6 +3091,19 @@ test('Shopee 官方短網址 tw.shp.ee 應視為可信安全縮網址', () => {
     assert.deepEqual(sanitized.removedTrackingParams.sort(), ['utm_medium', 'utm_source'].sort());
 });
 
+test('CHT shorteners verify the official destination without trusting unrelated hosts', () => {
+    for (const hostname of ['cht.tw', 'chts.tw']) {
+        assert.equal(matchesDomainList(hostname, riskConfig.urlShorteners), true);
+        assert.equal(isVerifiedOfficialShortenerDestination(hostname, 'www.cht.com.tw'), true);
+        for (const target of ['chts.tw', 'cht.com.tw.evil.example', 'fake-cht.com.tw', 'eukka.eu.cc']) {
+            assert.equal(isVerifiedOfficialShortenerDestination(hostname, target), false);
+        }
+    }
+    assert.equal(isVerifiedOfficialShortenerDestination('cht.tw.evil.example', 'www.cht.com.tw'), false);
+    const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+    assert.match(appSource, /traceData\?\.resolvedDestination !== false/);
+});
+
 test('中華電信官方短網址 cht.tw 應視為可信安全縮網址', () => {
     const rawUrl = 'https://cht.tw/x/aec30?utm_source=sms&utm_medium=message';
     const sanitized = sanitizeUrlForRiskScoring(rawUrl);
@@ -3996,7 +4009,7 @@ test('公共縮網址應先解析並以最終目的地執行主掃描', () => {
     assert.match(appSource, /最終目的地網域/);
     assert.doesNotMatch(appSource, /隱匿型跳板：網址為跳板服務，但刻意阻擋系統追蹤真實目的地/);
     assert.match(appSource, /getOfficialShortenerDestinationDomains/);
-    assert.match(indexSource, /app\.js\?v=20260905-cross-brand/);
+    assert.match(indexSource, /app\.js\?v=20260907-cht-trace/);
 });
 
 test('亂碼網域會抓到無母音、連續子音與長隨機字串', () => {

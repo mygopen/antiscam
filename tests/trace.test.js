@@ -3,6 +3,61 @@ const assert = require('node:assert/strict');
 
 const traceModulePromise = import('../functions/api/trace.js');
 
+const chtInput = 'https://cht.tw/x/b0rts';
+const chtIntermediate = 'https://chts.tw/zymXVy';
+const chtDestination = 'https://www.cht.com.tw/home/campaign/msecuritygo2';
+
+for (const failedProfile of ['mobile', 'desktop', 'none', 'both']) {
+    test(`CHT redirect chain with ${failedProfile} unavailable`, async () => {
+        const result = await runTrace(chtInput, async (input, init) => {
+            const mobile = init.headers['User-Agent'].includes('iPhone');
+            if (input === chtInput) return new Response(null, { status: 301, headers: { location: chtIntermediate } });
+            if (input === chtIntermediate) {
+                if (failedProfile === 'both' || failedProfile === (mobile ? 'mobile' : 'desktop')) throw new Error('fetch failed');
+                return new Response(null, { status: 302, headers: { location: chtDestination } });
+            }
+            assert.equal(input, chtDestination);
+            return new Response('Official campaign', { status: 200 });
+        });
+        assert.equal(result.data.isHighRisk, false);
+        assert.equal(result.data.uaDifference, false);
+        assert.equal(result.data.uaComparisonComplete, failedProfile === 'none');
+        assert.equal(result.data.resolvedDestination, failedProfile !== 'both');
+        assert.equal(result.data.finalUrl, failedProfile === 'both' ? chtIntermediate : chtDestination);
+    });
+}
+
+for (const failureStatus of [403, 404, 429, 503]) {
+    test(`HTTP ${failureStatus} at an intermediate hop is not UA cloaking`, async () => {
+        const result = await runTrace(chtInput, async (input, init) => {
+            const mobile = init.headers['User-Agent'].includes('iPhone');
+            if (input === chtInput) return new Response(null, { status: 301, headers: { location: chtIntermediate } });
+            if (input === chtIntermediate) return mobile
+                ? new Response('Unavailable', { status: failureStatus })
+                : new Response(null, { status: 302, headers: { location: chtDestination } });
+            return new Response('Official campaign');
+        });
+        assert.equal(result.data.finalUrl, chtDestination);
+        assert.equal(result.data.isHighRisk, false);
+        assert.equal(result.data.uaComparisonComplete, false);
+        assert.equal(result.data.variants.mobile.status, `http_${failureStatus}`);
+        assert.equal(result.data.variants.mobile.resolvedDestination, false);
+    });
+}
+
+test('successful desktop trace must not suppress dangerous mobile redirect', async () => {
+    const result = await runTrace(chtInput, async (input, init) => {
+        if (input === chtInput) return new Response(null, { status: 302, headers: {
+            location: init.headers['User-Agent'].includes('iPhone') ? 'http://127.0.0.1/admin' : chtDestination
+        } });
+        assert.equal(input, chtDestination);
+        return new Response('Official campaign');
+    });
+    assert.equal(result.data.finalUrl, chtDestination);
+    assert.equal(result.data.isHighRisk, true);
+    assert.match(result.data.riskReason, /私有網路/);
+});
+
 test('不同 eu.cc 租戶不得被當成同一主網域', async () => {
     const { getComparableRoot } = await traceModulePromise;
     assert.equal(getComparableRoot('ioppk.eu.cc'), 'ioppk.eu.cc');
