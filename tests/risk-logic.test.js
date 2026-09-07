@@ -4334,40 +4334,6 @@ test('shopkitchenette.com 到期後重新註冊並更換基礎設施，應列為
     assert.ok(scanData.summaryReasons.includes('人工確認詐騙網域'));
 });
 
-test('Cofacts 單一回報不強制高風險，明確且獲支持的詐騙查核才升高', () => {
-    const reportOnly = enforceFinalRiskConsistency({
-        riskScore: 15,
-        checks: {
-            cofactsReports: {
-                status: 'warning',
-                details: '曾有民眾回報，尚未查核'
-            }
-        }
-    });
-    const supportedScam = enforceFinalRiskConsistency({
-        riskScore: 65,
-        checks: {
-            cofactsReports: {
-                status: 'danger',
-                details: 'Cofacts 查核回應指出詐騙，且獲社群支持'
-            }
-        }
-    });
-
-    assert.equal(reportOnly.riskScore, 15);
-    assert.deepEqual(reportOnly.summaryReasons, []);
-    assert.equal(supportedScam.riskScore, 90);
-    assert.deepEqual(supportedScam.summaryReasons, ['Cofacts 查核回應明確指出詐騙']);
-});
-
-test('NXDOMAIN 網址若有 Cofacts 紀錄仍應繼續風險掃描', () => {
-    const source = ['app.js', 'scan-core.js'].map(file => fs.readFileSync(path.join(repoRoot, file), 'utf8')).join('\n');
-
-    assert.match(source, /dnsData\?\.Status === 3[\s\S]*checkCofactsRiskSignals\(domain, fullUrl\)/);
-    assert.match(source, /if \(!prefetchedCofactsRiskData\?\.matched\)[\s\S]*isInvalid: true/);
-    assert.match(source, /prefetchedCofactsRiskData[\s\S]*Promise\.resolve\(prefetchedCofactsRiskData\)/);
-});
-
 test('一頁式購物廣告落地頁即使抓不到 HTML 也應由 URL-only 訊號升高風險', () => {
     const url = 'https://ako.kforgmamgeq.com/?ldtag_cl=X5wRd8EWSDuCPfRkaiUG7AAA&lt_r=126';
     const hasRisk = hasSuspiciousShoppingLandingUrlRisk(url, { isUnknownTraffic: true });

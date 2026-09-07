@@ -8,7 +8,7 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
-for (const [name, options] of Object.entries({ Google: { unsafe: true }, blacklist: { blacklist: true }, official: { officialAlert: true }, cofacts: { cofacts: { status: 'ok', matched: true, strongRisk: true, riskScore: 65, label: 'Supported scam', matches: [] } } })) {
+for (const [name, options] of Object.entries({ Google: { unsafe: true }, blacklist: { blacklist: true }, official: { officialAlert: true } })) {
     test(`production flow: ${name} strong threat overrides trusted domain`, async () => {
         const result = await scan(options);
         assert.equal(result.assessment, 'high');
@@ -38,10 +38,12 @@ test('production flow: resolved shortener scores the destination, not the truste
     assert.equal(result.primaryDomain, 'ioppk.eu.cc');
     assert.equal(result.assessment, 'high');
 });
-test('production flow: disabled Cofacts sync is disclosed, never presented as a clean full search', async () => {
-    const result = await scan({ cofacts: { status: 'ok', matched: false, sources: { manual: { records: 1 }, synced: { state: 'disabled', records: 0 } } } });
-    assert.equal(result.checks.cofactsReports.status, 'unknown');
-    assert.match(result.checks.cofactsReports.details, /未啟用／等待授權/);
+test('production flow: removed community integration has no requests or indicators', async () => {
+    const { core, requests } = fixtureCore();
+    const result = await core.runRiskScanSafely('www.cht.com.tw', 'https://www.cht.com.tw/', ['cht.com.tw']);
+    assert.equal(requests.some(url => /cofacts/i.test(url)), false);
+    assert.equal(/cofacts/i.test(JSON.stringify(result)), false);
+    assert.equal(core.checkCofactsRiskSignals, undefined);
 });
 test('production finalizer preserves strong threats in conditional company results', () => {
     const core = createCore();

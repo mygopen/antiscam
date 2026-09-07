@@ -11,7 +11,7 @@ test('unresolved trusted shortener never becomes safe in any report', () => {
     assert.match(presentation(scan).title, /無法確認安全/);
 });
 
-for (const key of ['googleSafeBrowsing', 'officialAlerts', 'cofactsReports', 'userAgentCloaking', 'redirect']) {
+for (const key of ['googleSafeBrowsing', 'officialAlerts', 'userAgentCloaking', 'redirect']) {
     test(`trusted domain cannot override strong ${key} evidence`, () => {
         const scan = base();
         scan.checks[key] = { status: 'danger' };

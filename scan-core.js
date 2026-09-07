@@ -1994,18 +1994,6 @@
             }
         };
 
-        const checkCofactsRiskSignals = async (domain, fullUrl) => {
-            try {
-                const params = new URLSearchParams({ domain, url: fullUrl, sourceSchema: '2' });
-                return await fetchJsonSafely(
-                    `/api/check-cofacts?${params.toString()}`,
-                    { status: 'unavailable', matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false }
-                );
-            } catch (e) {
-                return { status: 'unavailable', matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false };
-            }
-        };
-
         const checkAnalyticsClusterSignals = async (domain, identifiers = []) => {
             const ids = [...new Set((Array.isArray(identifiers) ? identifiers : [])
                 .map(item => typeof item === 'string' ? item : item?.id)
@@ -2180,18 +2168,10 @@
             }
 
             let resolvedIp = null;
-            let prefetchedCofactsRiskData = null;
             try {
                 const dnsData = await fetchJsonSafely(`https://dns.google/resolve?name=${targetDomain}&type=A`, null);
                 if (dnsData?.Status === 3) {
-                    prefetchedCofactsRiskData = await withTimeout(
-                        checkCofactsRiskSignals(domain, fullUrl),
-                        4000,
-                        { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false }
-                    );
-                    if (!prefetchedCofactsRiskData?.matched) {
-                        return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
-                    }
+                    return { domain: targetDomain, isInvalid: true, invalidMsg: '此網域尚未註冊或不存在 (NXDOMAIN)' };
                 }
                 if (dnsData?.Answer && dnsData.Answer.length > 0) {
                     const aRecord = dnsData.Answer.find(r => r.type === 1);
@@ -2243,7 +2223,7 @@
             };
 
             // 將 Google Safe Browsing 加入平行掃描陣列中
-            const [geoLocationData, networkInfoData, securityHeadersData, siteSeoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData, cofactsRiskData] = await Promise.all([
+            const [geoLocationData, networkInfoData, securityHeadersData, siteSeoData, siteStatusData, blocklistListed, trancoData, rdapData, certData, traceData, safeBrowsingData, officialAlertData] = await Promise.all([
                 withTimeout(resolvedIp ? fetchGeoLocation(resolvedIp) : Promise.resolve(null), 2000, null),
                 withTimeout(fetchNetworkInfo(domain), 5000, null),
                 withTimeout(fetchSecurityHeaders(fullUrl), 5000, { status: 'unavailable', missingAll: false, missing: [] }),
@@ -2267,9 +2247,6 @@
                 // 👇 新增：呼叫自己寫好的 Google Safe Browsing 代理 API
                 withTimeout(fetchJsonSafely(`/api/safe-browsing?url=${encodeURIComponent(fullUrl)}`, { status: 'unavailable', isUnsafe: null }), 4000, { status: 'timeout', isUnsafe: null }),
                 withTimeout(checkOfficialAlerts(domain, fullUrl), 4000, { matched: false, count: 0, matches: [] }),
-                prefetchedCofactsRiskData
-                    ? Promise.resolve(prefetchedCofactsRiskData)
-                    : withTimeout(checkCofactsRiskSignals(domain, fullUrl), 4000, { matched: false, count: 0, matches: [], level: 'none', riskScore: 0, strongRisk: false })
             ]);
 
             const companyFallback = {
@@ -2620,16 +2597,6 @@
             const officialAlertMatch = officialAlertMatches[0] || null;
             const hasOfficialAlert = !!officialAlertData?.matched;
             const hasOfficialAlertUrlMatch = hasOfficialAlert && officialAlertMatches.some(item => ['url', 'url-prefix'].includes(item.matchType));
-            const cofactsMatches = cofactsRiskData?.matches || [];
-            const cofactsMatch = cofactsMatches[0] || null;
-            const hasCofactsRecord = !!cofactsRiskData?.matched;
-            const cofactsRiskScore = hasCofactsRecord
-                ? Math.max(0, Math.min(75, Number(cofactsRiskData?.riskScore || 0)))
-                : 0;
-            const hasCofactsFraudEvidence = cofactsRiskScore >= 50;
-            const hasStrongCofactsRisk = !!cofactsRiskData?.strongRisk &&
-                cofactsRiskScore >= 60 &&
-                !cofactsRiskData?.hasConflict;
             const hasInstallKeywordSignal = installKeywordCount >= 2 || (installKeywordCount > 0 && suspiciousDownloadPath);
             const hasDynamicDownloadSignal = dynamicDownloadCount >= 2 && (installKeywordCount >= 2 || suspiciousDownloadPath);
             const hasSuspiciousDownloadLanding = suspiciousDownloadPath &&
@@ -2837,7 +2804,7 @@
             const isGoogleFlaggedForRisk = !!isGoogleFlagged;
             const hasSensitiveExternalForm = (pageSignals.externalResources?.sensitiveFormActionCount || 0) > 0;
             if (blocklistListedForRisk || isGoogleFlaggedForRisk || isConfirmedScam || isManualHighRisk ||
-                hasOfficialAlert || hasStrongCofactsRisk || hasSensitiveExternalForm) hasTrustedAllowlistOverride = false;
+                hasOfficialAlert || hasSensitiveExternalForm) hasTrustedAllowlistOverride = false;
             const isApkSite = (siteStatusData.hasApk || apkUrlCount > 0) && !isWhitelisted;
             const isDownloadPhishingSignal = !isWhitelisted && !isApkSite &&
                 (hasInstallKeywordSignal || hasDynamicDownloadSignal || hasSuspiciousDownloadLanding);
@@ -2915,7 +2882,6 @@
                 isConfirmedScam ||
                 isManualHighRisk ||
                 hasOfficialAlert ||
-                hasStrongCofactsRisk ||
                 isApkSite ||
                 isGoogleFlaggedForRisk ||
                 hasEmailTrackingPhishingPattern ||
@@ -2940,7 +2906,6 @@
                 hasShoppingLineContactRisk;
 
             const hasSecondaryFraudEvidence = hasConfirmedThreatSignal ||
-                hasCofactsFraudEvidence ||
                 hasNewOneYearRegistrationRisk ||
                 isVeryNewDomain ||
                 isNewDomainWithNewCertificate ||
@@ -3095,7 +3060,6 @@
                     else if (hasUrgencyScamSignal) riskScore += 10;
                     if (hasHomographSignal) riskScore += 85;
                     if (hasOfficialAlert) riskScore += hasOfficialAlertUrlMatch ? 100 : 90;
-                    if (cofactsRiskScore > 0) riskScore += cofactsRiskScore;
                     if (isFakeGov || isFinalFakeGov) riskScore += 90;
                     if (isFakeService) riskScore += 90;
                     if (hasBrandSimilarity) riskScore += 80;
@@ -3208,7 +3172,6 @@
                 isConfirmedScam ||
                 isManualHighRisk ||
                 hasOfficialAlert ||
-                hasStrongCofactsRisk ||
                 isApkSite ||
                 isGoogleFlaggedForRisk ||
                 isVeryHighRiskTLD ||
@@ -3253,7 +3216,6 @@
                 isConfirmedScam ||
                 isManualHighRisk ||
                 hasOfficialAlert ||
-                hasStrongCofactsRisk ||
                 isGoogleFlaggedForRisk ||
                 isApkSite ||
                 isDownloadPhishingSignal ||
@@ -3297,7 +3259,6 @@
                     isConfirmedScam ||
                     isManualHighRisk ||
                     hasOfficialAlert ||
-                    hasStrongCofactsRisk ||
                     hasEmailTrackingPhishingPattern ||
                     hasFinancialPhishingSignal ||
                     (hasPublicUtilityScamSignal && hasBrandSimilarity) ||
@@ -3338,7 +3299,7 @@
 
             if (hasTrustedAllowlistOverride) riskScore = Math.min(riskScore, 20);
             if (blocklistListedForRisk || isGoogleFlaggedForRisk || isConfirmedScam || isManualHighRisk ||
-                hasOfficialAlert || hasStrongCofactsRisk || hasSensitiveExternalForm || hasHighRiskRedirectTrace) riskScore = Math.max(riskScore, 90);
+                hasOfficialAlert || hasSensitiveExternalForm || hasHighRiskRedirectTrace) riskScore = Math.max(riskScore, 90);
 
             // 修正：網站內容狀態標籤邏輯
             let siteContentMsg = siteStatusData.msg;
@@ -3377,10 +3338,6 @@
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `🚨 官方警示資料命中：${officialAlertMatch.source} 已公告「${officialAlertMatch.title}」，${officialAlertMatch.warning}`;
                 siteContentMsg = '危險：此網址已出現在官方警示資料';
-            } else if (hasStrongCofactsRisk) {
-                domainAnalysisStatus = 'danger';
-                domainAnalysisDetails = `🚨 Cofacts 社群查核強風險訊號：${cofactsRiskData.label}。此為群眾協作查核資料，仍應搭配網站證據判斷。`;
-                siteContentMsg = '危險：Cofacts 查核回應明確指出詐騙且獲得支持';
             } else if (hasGithubPagesBrandImpersonationRisk) {
                 domainAnalysisStatus = 'danger';
                 domainAnalysisDetails = `偵測到 GitHub Pages 租戶「${domain}」在非官方網域使用「${matchedBrandSimilarity.brandName}」品牌名稱；即使頁面目前為 404、空白或已下架，仍屬高度品牌冒用風險。`;
@@ -3609,9 +3566,6 @@
                 hasShoppingLineContactRisk ||
                 hasJobTaskScamSignal ||
                 hasRegulatedTobaccoSalesSignal;
-            const cofactsPresentation = window.ScanPolicy.cofactsPresentation(cofactsRiskData);
-            const cofactsCheckStatus = cofactsPresentation.status;
-            const cofactsCheckDetails = cofactsPresentation.details;
             const siteContentStatus = isSocialMedia
                 ? 'warning'
                 : (hasConfirmedSiteContentThreat
@@ -3621,7 +3575,7 @@
                         : (hasCrawlerBlockedTrustedContext ? 'info' : 'warning')));
 
             return {
-                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasStrongCofactsRisk || hasGithubPagesBrandImpersonationRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasFreeHostingVotePhishingRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, confirmedScamCategory: confirmedScamProfile?.category || '', manualHighRiskDomain: isManualHighRisk, githubPagesBrandImpersonation: hasGithubPagesBrandImpersonationRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, freeHostingVotePhishing: hasFreeHostingVotePhishingRisk, cofactsStrongRisk: hasStrongCofactsRisk, cofactsLevel: cofactsRiskData?.level || 'none', jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
+                domain: targetDomain, inputDomain, inputScanUrl, primaryDomain: domain, primaryUrl: fullUrl, resolvedFromShortener, unresolvedShortener, unresolvedPublicShortener: hasUnresolvedPublicShortener, resolvedFinalUrl: scanOptions.resolvedFinalUrl || null, traceObservedAt: scanOptions.traceObservedAt || null, traceVariants: traceData?.variants || null, destinationRemovedTrackingParams: scanOptions.destinationRemovedTrackingParams || [], destinationRemovedVolatileParams: scanOptions.destinationRemovedVolatileParams || [], scannedUrl: fullUrl, rawUrl: rawScanUrl, sanitizedUrl: sanitizedScanUrl, removedTrackingParams: removedTrackingParamsForScan, removedVolatileParams: removedVolatileParamsForScan, removedParams: removedParamsForScan, traceChain: traceChain, riskScore: Math.min(100, riskScore), risk_flag: isConfirmedScam || isManualHighRisk || hasGithubPagesBrandImpersonationRisk || hasJobTaskScamSignal || hasUnverifiedCommerceRisk || hasFreeHostingVotePhishingRisk || hasUaCloakingRisk || hasHighRiskRedirectTrace || (!hasConditionalCompanyTrustApplied && (hasNewOneYearRegistrationRisk || hasMissingAllSecurityHeaders || hasMissingMxRecords)), riskFlags: { confirmedScamDomain: isConfirmedScam, confirmedScamCategory: confirmedScamProfile?.category || '', manualHighRiskDomain: isManualHighRisk, githubPagesBrandImpersonation: hasGithubPagesBrandImpersonationRisk, unverifiedCommerce: hasUnverifiedCommerceRisk, freeHostingVotePhishing: hasFreeHostingVotePhishingRisk, jobTaskScam: hasJobTaskScamSignal, newDomainOneYearRegistration: hasNewOneYearRegistrationRisk, missingAllSecurityHeaders: hasMissingAllSecurityHeaders, missingMxRecords: hasMissingMxRecords, uaCloaking: hasUaCloakingRisk, redirectTrace: hasHighRiskRedirectTrace, missingAllSecurityHeadersRaw: hasMissingAllSecurityHeadersRaw, missingMxRecordsRaw: hasMissingMxRecordsRaw, trustedValidation: hasTrustedValidation, conditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, blocklistListed: blocklistListedForRisk, isSocialMedia: isSocialMedia, isWhitelisted: isWhitelisted, isTrustedAllowlist: hasTrustedAllowlistOverride, isConditionalCompanyTrust: hasConditionalCompanyTrust, conditionalCompanyTrustApplied: hasConditionalCompanyTrustApplied, conditionalCompanyTrustBlocked: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat, conditionalCompanyTrust: { eligible: hasConditionalCompanyTrust, applied: hasConditionalCompanyTrustApplied, blockedByStrongThreat: hasConditionalCompanyTrust && hasConditionalCompanyTrustBlockingThreat }, crawlerBlockedTrustedContext: hasCrawlerBlockedTrustedContext, rootDomainTrust: { registrableDomain, hasRankedRootDomainFallback, isTrustedEcommerceRootDomain, isTrustedTaiwanServiceRootDomain, isTrustedFinancialServiceRootDomain, isTrustedGovernmentServiceRootDomain, isTrustedPublicInterestRootDomain },
                 sensitiveExternalForm: hasSensitiveExternalForm,
                 details: {
                     serverCountry: serverInfo?.isReal ? `${serverInfo.country}${serverIp ? ` (${serverIp})` : ''}` : '隱藏/無法偵測',
@@ -3645,16 +3599,6 @@
                             `${officialAlertMatch.source} 公告：${officialAlertMatch.category}「${officialAlertMatch.productName || officialAlertMatch.title}」。${officialAlertMatch.violationType}；${officialAlertMatch.warning}${officialAlertMatch.claimSummary ? ` ${officialAlertMatch.claimSummary}` : ''}` :
                             '未命中目前內建的官方警示資料',
                         link: hasOfficialAlert ? officialAlertMatch.sourceUrl : null
-                    },
-                    cofactsReports: {
-                        status: cofactsCheckStatus,
-                        label: 'Cofacts 群眾回報',
-                        details: cofactsCheckDetails,
-                        sources: cofactsPresentation.sources,
-                        checkedAt: cofactsRiskData?.checkedAt || null,
-                        link: hasCofactsRecord ? cofactsMatch?.articleUrl : null,
-                        attribution: cofactsRiskData?.attribution?.text || '',
-                        license: cofactsRiskData?.attribution?.license || ''
                     },
                     analyticsCluster: {
                         ...analyticsClusterData,
@@ -4026,7 +3970,6 @@
                 checks: {
                     googleSafeBrowsing: createScanCheck('unknown', 'Google 官方安全庫', '檢測流程未完整完成，無法取得 Google Safe Browsing 結果'),
                     officialAlerts: createScanCheck('unknown', '官方警示資料', '檢測流程未完整完成，無法查詢官方警示資料'),
-                    cofactsReports: createScanCheck('unknown', 'Cofacts 群眾回報', '檢測流程未完整完成，無法查詢 Cofacts 群眾回報與查核資料'),
                     analyticsCluster: createScanCheck('unknown', '詐騙站群關聯', '檢測流程未完整完成，無法比對共享分析識別碼'),
                     siteContent: createScanCheck(isFallbackConfirmedScam || isFallbackManualHighRisk || isFallbackSuspiciousAdLanding ? 'danger' : (isFallbackCloudflarePagesRandomRisk ? 'info' : 'unknown'), '網站內容狀態', isFallbackConfirmedScam ? fallbackConfirmedScamDetails : (isFallbackManualHighRisk ? fallbackManualHighRiskDetails : (isFallbackSuspiciousAdLanding ? fallbackAdLandingDetails : fallbackDetails))),
                     domainAnalysis: createScanCheck(fallbackDomainStatus, '網域特徵分析', fallbackDomainDetails),
@@ -4223,7 +4166,6 @@
             addReason(checks.confirmedScam?.status === 'danger', '人工確認詐騙網域');
             addReason(checks.manualHighRisk?.status === 'danger', '人工確認高風險網域');
             addReason(checks.officialAlerts?.status === 'danger', '官方機關已公告警示');
-            addReason(checks.cofactsReports?.status === 'danger', 'Cofacts 查核回應明確指出詐騙');
             addReason(checks.apkCheck?.status === 'danger', '誘導下載可疑 App 或 APK');
             addReason(checks.redirect?.status === 'danger', '郵件追蹤跳板或隱藏轉址');
             addReason(checks.regulatedProduct?.status === 'danger', '違法電子菸/加熱菸網路販售風險');
@@ -4292,5 +4234,5 @@
         };
 
 
-        return { getPseudoRandom, withTimeout, readJsonSafely, fetchJsonSafely, calculateEntropy, normalizeHostname, sanitizeUrlInput, normalizeInputHostname, isValidHostname, parseUserUrl, isTrackingUrlParamName, isVolatileUrlParam, sanitizeUrlForRiskScoring, toHttpFallbackUrl, buildCrawlerCandidateUrls, isOfficialTaiwanGovDomain, isSameRootDomain, isKnownUrlShortenerDomain, getOfficialShortenerDestinationDomains, isVerifiedOfficialShortenerDestination, isTrustedGlobalDomain, isTrustedEcommerceDomain, isTrustedTaiwanServiceDomain, isTrustedFinancialServiceDomain, isTrustedGovernmentServiceDomain, isTrustedPublicInterestDomain, isGlobalPaymentGatewayDomain, isConfirmedScamDomain, isManualHighRiskDomain, isVerifiedSafeRootDomain, shouldSkipAiBrandAnalysis, isTrustedResourceDomain, hasRiskyHostnamePattern, isCloudflarePagesDevHostname, isNetlifyAppHostname, isGithubPagesHostname, hasGeneratedNetlifySubdomain, isEmailTrackingRedirector, extractNestedUrls, hasFinancialPhishingText, hasPublicUtilityScamText, hasLogisticsScamText, hasOfficialFlowPath, hasPunycodeOrUnicodeHostname, createEmptyPageSignals, decodeSignalText, normalizeBusinessName, extractBusinessNames, analyzeSuspiciousDownloadPath, analyzeDownloadSignals, getComparableDomainText, levenshteinDistance, damerauLevenshteinDistance, checkBrandSimilarity, getDomainParts, TAIWAN_GOV_ROOT_AGENCY_NAMES, cleanDisplayText, chooseGovernmentSiteName, extractGovernmentAgencyName, analyzeGovernmentAgencySignals, hasReadableVowelPattern, analyzeDisposableRootLabel, hasSensitiveUrlParam, analyzeSuspiciousSubdomain, escapeRegExp, getPageBrandKeywordContexts, isBenignCommerceBrandReference, analyzePageBrandSignals, analyzeUrgencySignals, analyzeTrustSignals, analyzeSeoSignals, analyzeLanguageSignals, analyzeBusinessIdentitySignals, analyzeLineOfficialSignals, analyzeEcommerceTrustSignals, analyzeShoppingScamSignals, analyzeJobTaskScamSignals, analyzeRegulatedTobaccoSalesSignals, analyzePageSignals, fetchGeoLocation, fetchNetworkInfo, fetchSecurityHeaders, fetchSiteSeoData, checkSiteAvailability, checkTrancoRank, getDaysBetweenDates, getPastAgeDays, isOneYearRegistrationPeriod, getDomainAgeRiskScore, fetchRDAPData, fetchCertificateData, fetchTraceData, resolvePrimaryScanTarget, checkOfficialAlerts, checkCofactsRiskSignals, checkAnalyticsClusterSignals, checkOrganizationVerification, checkGovernmentAgencyVerification, checkCommunityBlocklists, simulateScan, createScanCheck, createScanFailureResult, createUrlOnlySuspiciousAdLandingResult, runRiskScanSafely, runRiskAndBrandScan, getHighRiskSummaryReasons, revokeConditionalCompanyTrust, enforceFinalRiskConsistency };
+        return { getPseudoRandom, withTimeout, readJsonSafely, fetchJsonSafely, calculateEntropy, normalizeHostname, sanitizeUrlInput, normalizeInputHostname, isValidHostname, parseUserUrl, isTrackingUrlParamName, isVolatileUrlParam, sanitizeUrlForRiskScoring, toHttpFallbackUrl, buildCrawlerCandidateUrls, isOfficialTaiwanGovDomain, isSameRootDomain, isKnownUrlShortenerDomain, getOfficialShortenerDestinationDomains, isVerifiedOfficialShortenerDestination, isTrustedGlobalDomain, isTrustedEcommerceDomain, isTrustedTaiwanServiceDomain, isTrustedFinancialServiceDomain, isTrustedGovernmentServiceDomain, isTrustedPublicInterestDomain, isGlobalPaymentGatewayDomain, isConfirmedScamDomain, isManualHighRiskDomain, isVerifiedSafeRootDomain, shouldSkipAiBrandAnalysis, isTrustedResourceDomain, hasRiskyHostnamePattern, isCloudflarePagesDevHostname, isNetlifyAppHostname, isGithubPagesHostname, hasGeneratedNetlifySubdomain, isEmailTrackingRedirector, extractNestedUrls, hasFinancialPhishingText, hasPublicUtilityScamText, hasLogisticsScamText, hasOfficialFlowPath, hasPunycodeOrUnicodeHostname, createEmptyPageSignals, decodeSignalText, normalizeBusinessName, extractBusinessNames, analyzeSuspiciousDownloadPath, analyzeDownloadSignals, getComparableDomainText, levenshteinDistance, damerauLevenshteinDistance, checkBrandSimilarity, getDomainParts, TAIWAN_GOV_ROOT_AGENCY_NAMES, cleanDisplayText, chooseGovernmentSiteName, extractGovernmentAgencyName, analyzeGovernmentAgencySignals, hasReadableVowelPattern, analyzeDisposableRootLabel, hasSensitiveUrlParam, analyzeSuspiciousSubdomain, escapeRegExp, getPageBrandKeywordContexts, isBenignCommerceBrandReference, analyzePageBrandSignals, analyzeUrgencySignals, analyzeTrustSignals, analyzeSeoSignals, analyzeLanguageSignals, analyzeBusinessIdentitySignals, analyzeLineOfficialSignals, analyzeEcommerceTrustSignals, analyzeShoppingScamSignals, analyzeJobTaskScamSignals, analyzeRegulatedTobaccoSalesSignals, analyzePageSignals, fetchGeoLocation, fetchNetworkInfo, fetchSecurityHeaders, fetchSiteSeoData, checkSiteAvailability, checkTrancoRank, getDaysBetweenDates, getPastAgeDays, isOneYearRegistrationPeriod, getDomainAgeRiskScore, fetchRDAPData, fetchCertificateData, fetchTraceData, resolvePrimaryScanTarget, checkOfficialAlerts, checkAnalyticsClusterSignals, checkOrganizationVerification, checkGovernmentAgencyVerification, checkCommunityBlocklists, simulateScan, createScanCheck, createScanFailureResult, createUrlOnlySuspiciousAdLandingResult, runRiskScanSafely, runRiskAndBrandScan, getHighRiskSummaryReasons, revokeConditionalCompanyTrust, enforceFinalRiskConsistency };
 });

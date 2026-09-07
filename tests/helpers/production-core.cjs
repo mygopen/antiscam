@@ -10,7 +10,7 @@ const riskConfig = sandbox.window.RISK_CONFIG;
 function createCore(options = {}) {
     return create({ riskConfig, policy, DOMParser, ...options });
 }
-function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', googleStatus = 'clear', cofacts = {}, trace = null, pageSignals = null, officialAlert = false } = {}) {
+function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', googleStatus = 'clear', trace = null, pageSignals = null, officialAlert = false } = {}) {
     let core;
     const requests = [];
     core = createCore({
@@ -24,7 +24,6 @@ function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', google
             if (url.includes('dns.google')) return Response.json({ Status: 0, Answer: [{ type: 1, data: '93.184.216.34' }] });
             if (url.includes('/safe-browsing')) return Response.json({ status: unsafe ? 'matched' : googleStatus, isUnsafe: unsafe || (googleStatus === 'clear' ? false : null) });
             if (url.includes('/check-blacklist')) return Response.json({ listed: blacklist, isBlacklisted: blacklist });
-            if (url.includes('/check-cofacts')) return Response.json(cofacts);
             if (url.includes('/check-official-alerts')) return Response.json({ matched: officialAlert, matches: officialAlert ? [{ title: 'Test alert', matchType: 'url' }] : [] });
             if (url.includes('/trace')) return Response.json(trace || { resolvedDestination: false, isHighRisk: false, chain: [], uaComparisonComplete: false });
             return Response.json({ status: 'unavailable', entities: [], matches: [], dns: { mx: {} } });

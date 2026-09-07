@@ -16,7 +16,6 @@
     "build:verified": "node scripts/verified-build.cjs",
     "test:core": "node --test tests/scan-core.test.js",
     "sync:analytics-cluster-signals": "node scripts/sync-analytics-cluster-signals.mjs",
-    "sync:cofacts-risk-signals": "node scripts/sync-cofacts-risk-signals.mjs",
     "sync:fda-puffery-ads": "node scripts/sync-fda-puffery-ads.mjs",
     "sync:ftc-decisions": "node scripts/sync-ftc-decisions.mjs",
     "sync:legal-entity-records": "node scripts/sync-legal-entity-records.mjs",
