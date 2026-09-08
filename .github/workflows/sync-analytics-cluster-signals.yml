@@ -38,6 +38,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add functions/api/synced-analytics-cluster-signals.js
-          # Remove the Pages skip after its build command/output are corrected.
-          git commit -m "[CF-Pages-Skip] chore: sync analytics cluster signals"
+          git commit -m "chore: sync analytics cluster signals"
           git push

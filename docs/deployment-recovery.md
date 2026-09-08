@@ -6,10 +6,10 @@ The source index requested nonexistent /assets/app.js (and other assets).
 Pages returned its HTML fallback with HTTP 200, which the browser cannot
 execute as JavaScript. A successful homepage HTTP response is insufficient.
 
-The tested precompiled site was restored with Wrangler. The four data-sync
-workflows temporarily use [CF-Pages-Skip] so they cannot replace the site
-with unbuilt source. Data still syncs into Git and is included in the next
-direct deployment; it is not published automatically during this mitigation.
+The tested precompiled site was initially restored with Wrangler. The four
+data-sync workflows temporarily used [CF-Pages-Skip] to prevent another
+unbuilt deployment. That mitigation has now been removed after verifying
+the corrected Git build; synchronized data can publish automatically again.
 
 The existing antiscam Pages project was corrected through the authenticated
 dashboard on 2026-09-08. The saved settings were confirmed through the API:
@@ -19,10 +19,11 @@ dashboard on 2026-09-08. The saved settings were confirmed through the API:
 - Root directory: repository root
 
 The connector can read settings but cannot currently update them; the dashboard
-was used to save them without retrieving OAuth credentials manually. This
-commit verifies the corrected Git deployment path. After a successful Git
-build and live check, remove the temporary skip prefix from all four sync
-workflows.
+was used to save them without retrieving OAuth credentials manually.
+Git commit a59e23f triggered deployment 46ebb33e-5534-4643-a383-e69687febe09,
+which completed successfully using the saved settings. The live asset check
+then passed for all eight local JavaScript/CSS assets. Normal code commits
+and all four data-sync workflows now use the standard Git deployment path.
 
 After each deployment, run:
 
