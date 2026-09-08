@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, renameSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { trustedLegalEntityDomainMappings } from '../functions/api/trusted-legal-entity-domain-mappings.js';
@@ -10,7 +10,6 @@ const TAX_REGISTRATION_URL = 'https://eip.fia.gov.tw/data/BGMOPEN1.csv';
 const JUDICIAL_QUERY_URL = 'https://aomp109.judicial.gov.tw/judbp/whd6k/WHD6K01.htm';
 const JUDICIAL_CSV_URL = courtCode => `https://aomp109.judicial.gov.tw/judbp/whd6k/WHD6K01/PUB_DATA/${courtCode}_RA.csv`;
 const DEFAULT_OUTPUT_PATH = 'functions/api/synced-legal-entity-records.js';
-const REQUEST_TIMEOUT_MS = 120000;
 
 const COURT_NAMES = {
   TPD: '臺灣臺北地方法院', PCD: '臺灣新北地方法院', SLD: '臺灣士林地方法院',
@@ -103,31 +102,77 @@ function rowToObject(headers, row) {
   return Object.fromEntries(headers.map((header, index) => [cleanText(header), cleanText(row[index])]));
 }
 
-async function fetchCsv(url, onRecord) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: 'text/csv,*/*', 'User-Agent': 'MyGoPen-AntiScam-LegalEntitySync/1.0' },
-      signal: controller.signal
-    });
-    if (!response.ok || !response.body) throw new Error(`Unable to download ${url}: ${response.status}`);
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let headers = null;
-    const parser = createCsvRowParser(row => {
-      if (!headers) headers = row.map(cleanText);
-      else onRecord(rowToObject(headers, row));
-    });
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      parser.push(decoder.decode(value, { stream: true }));
+export async function fetchCsv(url, selectRecord, {
+  fetchImpl = fetch, maxAttempts = 3, connectTimeoutMs = 60000,
+  idleTimeoutMs = 120000, totalTimeoutMs = 600000,
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  log = event => process.stdout.write(`${JSON.stringify(event)}\n`)
+} = {}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const started = Date.now();
+    let phaseTimer;
+    let reader;
+    let bytes = 0;
+    let rows = 0;
+    let lastProgress = started;
+    const arm = (phase, ms) => {
+      clearTimeout(phaseTimer);
+      phaseTimer = setTimeout(() => controller.abort(new Error(`${phase} timeout after ${ms}ms`)), ms);
+    };
+    const totalTimer = setTimeout(() => controller.abort(new Error(`total timeout after ${totalTimeoutMs}ms`)), totalTimeoutMs);
+    log({ event: 'download_start', url, attempt });
+    try {
+      arm('connection', connectTimeoutMs);
+      const response = await fetchImpl(url, {
+        headers: { Accept: 'text/csv,*/*', 'User-Agent': 'MyGoPen-AntiScam-LegalEntitySync/1.0' },
+        signal: controller.signal
+      });
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        const error = new Error(`HTTP ${response.status}`);
+        error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+        throw error;
+      }
+      reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let headers = null;
+      const records = [];
+      const parser = createCsvRowParser(row => {
+        if (!headers) headers = row.map(cleanText);
+        else {
+          rows += 1;
+          const record = selectRecord(rowToObject(headers, row));
+          if (record) records.push(record);
+        }
+      });
+      while (true) {
+        arm('download idle', idleTimeoutMs);
+        const { value, done } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        parser.push(decoder.decode(value, { stream: true }));
+        if (Date.now() - lastProgress >= 30000) {
+          log({ event: 'download_progress', url, attempt, bytes, rows, elapsedMs: Date.now() - started });
+          lastProgress = Date.now();
+        }
+      }
+      parser.push(decoder.decode());
+      parser.finish();
+      log({ event: 'download_complete', url, attempt, bytes, rows, matches: records.length, elapsedMs: Date.now() - started });
+      return records;
+    } catch (error) {
+      log({ event: 'download_failed', url, attempt, bytes, rows, elapsedMs: Date.now() - started, error: (controller.signal.reason || error).message, cause: error.cause?.code || error.cause?.message });
+      if (error.retryable === false || attempt === maxAttempts) {
+        throw new Error(`Download failed for ${url} (attempt ${attempt}): ${(controller.signal.reason || error).message}`, { cause: error });
+      }
+    } finally {
+      clearTimeout(phaseTimer);
+      clearTimeout(totalTimer);
+      controller.abort();
+      await reader?.cancel().catch(() => {});
     }
-    parser.push(decoder.decode());
-    parser.finish();
-  } finally {
-    clearTimeout(timeout);
+    await sleep(5000 * 2 ** (attempt - 1));
   }
 }
 
@@ -196,43 +241,47 @@ function renderModule(records) {
   return `// Generated by scripts/sync-legal-entity-records.mjs. Keep this file deterministic.\nexport const syncedLegalEntityRecordsVersion = '${version}';\n\nexport const syncedLegalEntityRecords = ${serialized};\n`;
 }
 
-export async function syncLegalEntityRecords({ output = DEFAULT_OUTPUT_PATH } = {}) {
+export async function syncLegalEntityRecords({ output = DEFAULT_OUTPUT_PATH, download = fetchCsv } = {}) {
   const targetTaxIds = new Set(trustedLegalEntityDomainMappings.flatMap(mapping => mapping.taxIds || []).map(String));
   const targetNames = new Set(trustedLegalEntityDomainMappings.flatMap(mapping => mapping.names || []).map(normalizeName));
-  const taxRecords = [];
-  await fetchCsv(TAX_REGISTRATION_URL, row => {
+  const taxRecords = await download(TAX_REGISTRATION_URL, row => {
     const taxId = String(row['統一編號'] || '').replace(/\D/g, '');
     if (!targetTaxIds.has(taxId)) return;
-    taxRecords.push({
+    return {
       taxId,
       name: row['營業人名稱'],
       capital: Number(String(row['資本額'] || '').replace(/[^\d]/g, '')) || null,
       setupDate: normalizeRocDate(row['設立日期']),
       organizationType: row['組織別名稱']
-    });
+    };
   });
 
   const judicialRecordsByCourt = new Map();
   const courtCodes = [...new Set(trustedLegalEntityDomainMappings.map(mapping => mapping.courtCode).filter(Boolean))].sort();
   for (const courtCode of courtCodes) {
-    const records = [];
-    await fetchCsv(JUDICIAL_CSV_URL(courtCode), row => {
+    const records = await download(JUDICIAL_CSV_URL(courtCode), row => {
       if (!targetNames.has(normalizeName(row['法人名稱']))) return;
-      records.push({
+      return {
         name: row['法人名稱'],
         registrationNumber: row['登記號數'],
         registrationDate: normalizeRocDate(row['登記日期']),
         setupDate: normalizeRocDate(row['設立登記日期']),
         canceledAt: normalizeRocDate(row['註銷日期']),
         revokedAt: normalizeRocDate(row['撤銷日期'])
-      });
+      };
     });
     judicialRecordsByCourt.set(courtCode, records);
   }
 
   const records = buildLegalEntityRecords(trustedLegalEntityDomainMappings, taxRecords, judicialRecordsByCourt);
   const outputPath = resolve(output);
-  writeFileSync(outputPath, renderModule(records), 'utf8');
+  const temporaryPath = `${outputPath}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporaryPath, renderModule(records), 'utf8');
+    renameSync(temporaryPath, outputPath);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
   return { outputPath, count: records.length };
 }
 

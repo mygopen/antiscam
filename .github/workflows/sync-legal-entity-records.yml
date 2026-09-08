@@ -11,6 +11,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,7 +22,21 @@ jobs:
           node-version: 24
 
       - name: Sync official legal entity records
+        id: download
         run: npm run sync:legal-entity-records
+
+      - name: Record synchronization status
+        if: always()
+        env:
+          SYNC_OUTCOME: ${{ steps.download.outcome }}
+        run: |
+          if [ "$SYNC_OUTCOME" = "success" ]; then
+            echo "### Legal entity download and validation succeeded" >> "$GITHUB_STEP_SUMMARY"
+            echo "Validated records are ready for the commit step." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Legal entity synchronization incomplete" >> "$GITHUB_STEP_SUMMARY"
+            echo "Previous published records remain unchanged. See download_failed logs for source URL, progress, elapsed time and retry count." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Commit updated legal entity records
         run: |
