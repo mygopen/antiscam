@@ -8,6 +8,24 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
+test('verified Hsinchu event domain is trusted, but lookalikes are not', async () => {
+    const core = createCore();
+    for (const host of ['hsinchucitygoods.com', 'www.hsinchucitygoods.com']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), true);
+        assert.equal((await scan({}, `https://${host}/`)).assessment, 'low');
+    }
+    for (const host of ['hsinchucitygoods.com.evil.example', 'fake-hsinchucitygoods.com']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+});
+test('verified event retains strong threat overrides and incomplete-check warnings', async () => {
+    const url = 'https://www.hsinchucitygoods.com/';
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan(options, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+});
 for (const [name, options] of Object.entries({ Google: { unsafe: true }, blacklist: { blacklist: true }, official: { officialAlert: true } })) {
     test(`production flow: ${name} strong threat overrides trusted domain`, async () => {
         const result = await scan(options);

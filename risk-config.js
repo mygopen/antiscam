@@ -37,6 +37,8 @@ window.RISK_CONFIG = {
         'mababy.com', 'sunpay.com.tw', 'mypay.com.tw', 'spay.com.tw',
         '39buy.co', '39buy.com.tw', 'icdf.org.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
+        // Reviewed event evidence: docs/hsinchucitygoods-review.md
+        'hsinchucitygoods.com',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'twnic.tw', 'oiltrace.tw', 'austinenglish.com.tw',
         'noncodingai.com', 'fuboncharity.org.tw', 'utaggo.com.tw',
