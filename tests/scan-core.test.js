@@ -1,6 +1,15 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { fixtureCore, createCore, policy } = require('./helpers/production-core.cjs');
+const { fixtureCore, createCore, policy, riskConfig } = require('./helpers/production-core.cjs');
+test('long readable domain is not extreme gibberish even without trusted mapping', async () => {
+    const config = { ...riskConfig, trustedTaiwanServiceDomains: riskConfig.trustedTaiwanServiceDomains.filter(domain => domain !== 'hsinchucitygoods.com') };
+    const { core } = fixtureCore({ config });
+    const result = core.enforceFinalRiskConsistency(await core.runRiskScanSafely('hsinchucitygoods.com', 'https://hsinchucitygoods.com/'));
+    assert.equal(result.checks.entropy.status, 'safe');
+    assert.equal(result.summaryReasons.includes('網址含高隨機亂碼特徵'), false);
+    const random = await core.runRiskScanSafely('x7q9z2v8k4j6p3r5.com', 'https://x7q9z2v8k4j6p3r5.com/');
+    assert.equal(random.checks.entropy.status, 'danger');
+});
 async function scan(options = {}, target = 'https://www.cht.com.tw/') {
     const { core } = fixtureCore(options);
     return core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(target).hostname, target, ['cht.com.tw']));

@@ -10,10 +10,11 @@ const riskConfig = sandbox.window.RISK_CONFIG;
 function createCore(options = {}) {
     return create({ riskConfig, policy, DOMParser, ...options });
 }
-function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', googleStatus = 'clear', trace = null, pageSignals = null, officialAlert = false } = {}) {
+function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', googleStatus = 'clear', trace = null, pageSignals = null, officialAlert = false, config = riskConfig } = {}) {
     let core;
     const requests = [];
     core = createCore({
+        riskConfig: config,
         services: {
             checkSiteAvailability: async () => ({ status: content, pageSignals: pageSignals || core.createEmptyPageSignals(), linkStats: { total: 10, internal: 10, external: 0 } }),
             checkCommunityBlocklists: async () => blacklist

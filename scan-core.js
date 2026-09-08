@@ -2413,8 +2413,6 @@
             // 可讀的長英文品牌名不是亂碼；長度規則需同時帶有數字或高亂度。
             const isLongGibberish = entropy > 3.6 ||
                 (/^[a-z0-9]{12,30}$/.test(subdomainPart) && /\d/.test(subdomainPart));
-            // 👇 新增：極端亂碼檢查 (15碼以上的隨機英數，極高機率為釣魚專屬追蹤碼)
-            const isExtremeGibberish = /^[a-z0-9]{15,50}$/.test(subdomainPart);
             // 👇 2. 新增：短亂碼 (DGA 演算法) 暴力檢查法
             // 特徵 A：5個字母以上，卻完全沒有母音 a, e, i, o, u (例如 yqhgw, xsddk)
             const lacksVowels = subdomainPart.length >= 5 && !/[aeiou]/i.test(subdomainPart);
@@ -2425,6 +2423,8 @@
             
             // 只要符合任一項特徵，且不是常見的 www 等，就判定為高風險亂碼
             const isHighEntropy = (isLongGibberish || lacksVowels || hasConsecutiveConsonants) && subdomainPart !== 'www';
+            // Length alone is not randomness; keep scoring and displayed evidence consistent.
+            const isExtremeGibberish = isHighEntropy && /^[a-z0-9]{15,50}$/.test(subdomainPart);
             const isSuspiciousRootLabel = rootLabel.length >= 8 &&
                 !['example', 'google', 'facebook', 'instagram', 'youtube', 'twitter', 'shopline', 'myshopify', 'quickper'].includes(rootLabel) &&
                 (!hasReadableVowelPattern(rootLabel) || rootEntropy > 3.2 || /[bcdfghjklmnpqrstvwxz]{4,}/i.test(rootLabel));

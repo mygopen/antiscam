@@ -15,3 +15,10 @@ Use the existing trusted Taiwan service domain mechanism to suppress weak
 heuristic false positives. Do not infer a business registration or tax ID.
 Domain-boundary matching must reject lookalikes and suffix attacks. Existing
 strong threat overrides and incomplete-check handling remain in force.
+
+Root cause: the extreme-gibberish flag used only a 15-50 character length
+pattern. It marked the entropy check dangerous even when the high-entropy
+flag was false and its description said the name was normal. The final
+consistency pass then raised the score to 70. Require the existing randomness
+signal as well as length, matching the scoring branch. Regression coverage
+removes the trusted mapping to ensure this fix is not merely an allowlist bypass.
