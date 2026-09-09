@@ -1,4 +1,6 @@
 window.RISK_CONFIG = {
+    // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
+    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org'],
     companyVerificationVersion: '2026-08-27-1',
     organizationVerificationVersion: '2026-09-03-1',
     socialMediaDomains: [

@@ -20,3 +20,13 @@ contributed to the result. A civic activity domain need not receive email.
 Apply the existing reviewed-domain background-risk exemption, retaining strong
 threat overrides and unknown outcomes for incomplete checks. Do not fabricate a
 company tax ID or registration match, and do not extend trust to lookalike hosts.
+
+## Operator-approved content baseline
+
+On 2026-09-09 the operator explicitly requested safe classification. The apex
+and www hosts now have a manual content baseline: content-fetch incompleteness
+alone does not force an unknown result when the existing trusted-domain override
+is active and the score is low. Other subdomains do not inherit this exception.
+Google check failures, unresolved short links and strong threats still take
+precedence. The report discloses the manual baseline and keeps raw fetch status;
+it must not claim that an unsuccessful live crawl succeeded.

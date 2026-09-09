@@ -32,7 +32,14 @@ test('Taipei civic activity trust is boundary-safe and is not government verific
         { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
         assert.equal((await scan(options, url)).assessment, 'high');
     }
-    assert.equal((await scan({ content: 'unknown' }, url)).assessment, 'unknown');
+    for (const content of ['unknown', 'blocked', 'error', 'blank']) {
+        const result = await scan({ content }, url);
+        assert.equal(result.assessment, 'low');
+        assert.equal(result.details.siteStatus.status, content);
+        assert.match(result.checks.manualContentReview.details, /不代表本次已完整取得/);
+        assert.equal((await scan({ content, unsafe: true }, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ content: 'unknown' }, 'https://unreviewed.taipeispeaksup.org/')).assessment, 'unknown');
     assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
 });
 test('verified Hsinchu event domain is trusted, but lookalikes are not', async () => {

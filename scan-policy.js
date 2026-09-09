@@ -23,7 +23,16 @@
         const unavailable = [];
         if (scan.unresolvedShortener) unavailable.push('縮網址最終目的地尚未確認');
         const site = scan.details?.siteStatus?.status;
-        if (!['ok', 'trusted'].includes(site)) unavailable.push('網頁內容未完整取得');
+        const reviewedContent = scan.manuallyReviewedContent === true && scan.isTrustedAllowlist === true && !strong && scan.riskScore < 30 && !scan.unresolvedShortener;
+        if (scan.manuallyReviewedContent) {
+            checks.manualContentReview = {
+                status: reviewedContent ? 'info' : 'warning', label: '人工活動網域審核',
+                details: reviewedContent
+                    ? '管理者已確認此活動網域，採人工審核的安全基線；不代表本次已完整取得網頁內容，仍保留即時威脅檢查。'
+                    : '此網域曾經人工審核；目前仍依即時威脅與檢測結果判定。'
+            };
+        }
+        if (!['ok', 'trusted'].includes(site) && !reviewedContent) unavailable.push('網頁內容未完整取得');
         if (checks.googleSafeBrowsing?.status !== 'safe' && checks.googleSafeBrowsing?.status !== 'danger') unavailable.push('Google 安全庫未完成查詢');
         scan.assessment = scan.riskScore >= 70 ? 'high' : unavailable.length ? 'unknown' : scan.riskScore >= 30 ? 'medium' : 'low';
         scan.incompleteReasons = unavailable;
