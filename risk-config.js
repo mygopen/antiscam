@@ -1,4 +1,5 @@
 window.RISK_CONFIG = {
+    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
     manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org'],
     companyVerificationVersion: '2026-08-27-1',

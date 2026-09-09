@@ -17,6 +17,25 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
+test('ticket pickup references are not brand impersonation but credential requests remain suspicious', () => {
+    const core = createCore();
+    for (const text of ['取票方式：全家取票，手續費請於全家便利商店繳納給櫃臺', '全家便利商店 FamiPort 取票說明']) {
+        assert.equal(core.isBenignCommerceBrandReference('全家便利商店', '全家', [text]), true);
+    }
+    assert.equal(core.isBenignCommerceBrandReference('全家便利商店', '全家', ['全家取票，請輸入信用卡卡號、安全碼及簡訊碼驗證']), false);
+});
+test('National Day organizer trust does not trust all KKTIX tenants or bypass threats', async () => {
+    const core = createCore();
+    const url = 'https://rocbirthday.kktix.cc/events/2bd341df';
+    assert.equal((await scan({}, url)).assessment, 'low');
+    for (const host of ['other.kktix.cc', 'kktix.cc', 'rocbirthday.kktix.cc.evil.example', 'fake-rocbirthday.kktix.cc']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true }]) {
+        assert.equal((await scan(options, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ content: 'unknown' }, url)).assessment, 'unknown');
+});
 test('EasyCard short link scores its official destination and preserves threat checks', async () => {
     const url = 'https://link.easycard.tw/8v7hsb';
     const destination = 'https://epkaw.easycard.com.tw/?url=https://epkaw.easycard.com.tw/sl/ABC';

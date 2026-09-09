@@ -251,7 +251,8 @@
         };
 
         const isTrustedTaiwanServiceDomain = (hostname) => {
-            return getRiskList('trustedTaiwanServiceDomains').some(domain => isSameRootDomain(hostname, domain));
+            return getRiskList('trustedTaiwanServiceHosts').includes(normalizeHostname(hostname)) ||
+                getRiskList('trustedTaiwanServiceDomains').some(domain => isSameRootDomain(hostname, domain));
         };
 
         const isTrustedFinancialServiceDomain = (hostname) => {
@@ -869,7 +870,7 @@
 
             return contexts.every(context => {
                 const isWeakKeyword = weakConvenienceKeywords.includes(normalizedKeyword);
-                const hasFulfillmentContext = fulfillmentPattern.test(context);
+                const hasFulfillmentContext = fulfillmentPattern.test(context) || /(?:超商|全家|便利商店|famiport|ibon).{0,12}取票|取票方式|取票說明/i.test(context);
                 const hasSensitiveContext = sensitiveImpersonationPattern.test(context);
                 return !hasSensitiveContext && (hasFulfillmentContext || isWeakKeyword);
             });
