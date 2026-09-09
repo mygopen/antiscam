@@ -36,6 +36,7 @@ window.RISK_CONFIG = {
     trustedTaiwanServiceDomains: [
         'cinvoice.tw', 'cmoney.tw', 'cmoney.com.tw', 'cmy.tw',
         '591.com.tw', '591.to',
+        'easycard.com.tw', 'link.easycard.tw',
         'mababy.com', 'sunpay.com.tw', 'mypay.com.tw', 'spay.com.tw',
         '39buy.co', '39buy.com.tw', 'icdf.org.tw', 'xlearn.tw', 'cht.tw',
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
@@ -100,7 +101,7 @@ window.RISK_CONFIG = {
         'adf.ly', 'ow.ly', 'bit.do', 'su.pr', 'reurl.cc', 'pic.see',
         'ppt.cc', 'myppt.cc', 'mz.cm', 'i.gal', 'tiny.cc', 't.cn', 'zingala.cc',
         'aka.ms', 'shp.ee', 'cht.tw', 'chts.tw', '591.to', 'esun.co', 'mma.tw', 'tsbk.tw', 'cube-app.tw', 'ecloud.life', 'link.utaggo.com.tw', 'truthsocial.com', 'l.facebook.com', 'l.instagram.com',
-        'l.messenger.com'
+        'l.messenger.com', 'link.easycard.tw'
     ],
     reportedShortLinks: [
         {
@@ -115,9 +116,10 @@ window.RISK_CONFIG = {
     safeShorteners: [
         'lihi.io', 'reurl.cc', 'picsee.io', 'pse.is', 'bit.ly',
         'bitly.com', 'aka.ms', 'cmy.tw', 'shp.ee', 'cht.tw', '591.to', 'esun.co', 'mma.tw', 'tsbk.tw', 'cube-app.tw',
-        'ecloud.life', 'link.utaggo.com.tw'
+        'ecloud.life', 'link.utaggo.com.tw', 'link.easycard.tw'
     ],
     officialShortenerDestinations: {
+        'link.easycard.tw': ['easycard.com.tw'],
         'tsbk.tw': ['taishinbank.com.tw'],
         'cht.tw': ['cht.com.tw'],
         'chts.tw': ['cht.com.tw']

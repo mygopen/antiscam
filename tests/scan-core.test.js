@@ -17,6 +17,29 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
+test('EasyCard short link scores its official destination and preserves threat checks', async () => {
+    const url = 'https://link.easycard.tw/8v7hsb';
+    const destination = 'https://epkaw.easycard.com.tw/?url=https://epkaw.easycard.com.tw/sl/ABC';
+    const core = createCore();
+    assert.equal(core.isKnownUrlShortenerDomain('link.easycard.tw'), true);
+    assert.equal(core.isVerifiedOfficialShortenerDestination('link.easycard.tw', 'epkaw.easycard.com.tw'), true);
+    for (const host of ['link.easycard.tw.evil.example', 'epkaw.easycard.com.tw.evil.example', 'fake-easycard.com.tw']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    const trace = { resolvedDestination: true, redirectCount: 3, finalUrl: destination, isHighRisk: false,
+        chain: [{ url, status: 302 }, { url: destination, status: 200 }], uaComparisonComplete: true };
+    const result = await scan({ trace }, url);
+    assert.equal(result.primaryDomain, 'epkaw.easycard.com.tw');
+    assert.equal(result.assessment, 'low');
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true }]) {
+        assert.equal((await scan({ ...options, trace }, url)).assessment, 'high');
+    }
+    assert.equal((await scan({}, url)).assessment, 'unknown');
+    const hostile = 'https://ioppk.eu.cc/vote';
+    const bad = await scan({ trace: { ...trace, finalUrl: hostile, chain: [{ url, status: 302 }, { url: hostile, status: 200 }] } }, url);
+    assert.equal(bad.primaryDomain, 'ioppk.eu.cc');
+    assert.equal(bad.assessment, 'high');
+});
 test('Taipei civic activity trust is boundary-safe and is not government verification', async () => {
     const core = createCore();
     for (const host of ['taipeispeaksup.org', 'www.taipeispeaksup.org']) {
