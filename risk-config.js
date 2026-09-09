@@ -39,6 +39,8 @@ window.RISK_CONFIG = {
         'niceday.tw', 'ecloudlife.com', 'ecloud.life', 'agrijourney.org',
         // Reviewed event evidence: docs/hsinchucitygoods-review.md
         'hsinchucitygoods.com',
+        // User-confirmed civic event; evidence limitations: docs/taipeispeaksup-review.md
+        'taipeispeaksup.org',
         'ntpcart-sy2026.com', 'pxmartevent.com.tw', 'ls-love.org',
         'cna.com.tw', 'twnic.tw', 'oiltrace.tw', 'austinenglish.com.tw',
         'noncodingai.com', 'fuboncharity.org.tw', 'utaggo.com.tw',

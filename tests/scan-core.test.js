@@ -17,6 +17,24 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
+test('Taipei civic activity trust is boundary-safe and is not government verification', async () => {
+    const core = createCore();
+    for (const host of ['taipeispeaksup.org', 'www.taipeispeaksup.org']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), true);
+        assert.equal(core.isOfficialTaiwanGovDomain(host), false);
+        assert.equal((await scan({}, `https://${host}/`)).assessment, 'low');
+    }
+    for (const host of ['taipeispeaksup.org.evil.example', 'fake-taipeispeaksup.org']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    const url = 'https://taipeispeaksup.org/';
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan(options, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ content: 'unknown' }, url)).assessment, 'unknown');
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+});
 test('verified Hsinchu event domain is trusted, but lookalikes are not', async () => {
     const core = createCore();
     for (const host of ['hsinchucitygoods.com', 'www.hsinchucitygoods.com']) {
