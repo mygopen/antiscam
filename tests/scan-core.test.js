@@ -17,6 +17,31 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
+test('Bank of Taiwan identity service has a reviewed baseline without bypassing threats', async () => {
+    const core = createCore();
+    const url = 'https://idf.bot.com.tw/idf/resources/index.html';
+    for (const host of ['bot.com.tw', 'www.bot.com.tw', 'idf.bot.com.tw']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), true);
+    }
+    for (const host of ['idf.bot.com.tw.evil.example', 'fake-bot.com.tw', 'bot-com.tw']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    for (const content of ['ok', 'unknown', 'blocked', 'error', 'blank']) {
+        const result = await scan({ content }, url);
+        assert.equal(result.assessment, 'low');
+        assert.equal(result.details.siteStatus.status, content);
+        assert.match(result.checks.manualContentReview.details, /不代表本次已完整取得/);
+        assert.equal(result.checks.manualContentReview.label, '人工網域審核');
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan({ content: 'unknown', ...options }, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+    for (const host of ['unreviewed.bot.com.tw', 'child.idf.bot.com.tw']) {
+        assert.equal((await scan({ content: 'unknown' }, `https://${host}/`)).assessment, 'unknown');
+    }
+});
 test('ticket pickup references are not brand impersonation but credential requests remain suspicious', () => {
     const core = createCore();
     for (const text of ['取票方式：全家取票，手續費請於全家便利商店繳納給櫃臺', '全家便利商店 FamiPort 取票說明']) {

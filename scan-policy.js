@@ -26,9 +26,9 @@
         const reviewedContent = scan.manuallyReviewedContent === true && scan.isTrustedAllowlist === true && !strong && scan.riskScore < 30 && !scan.unresolvedShortener;
         if (scan.manuallyReviewedContent) {
             checks.manualContentReview = {
-                status: reviewedContent ? 'info' : 'warning', label: '人工活動網域審核',
+                status: reviewedContent ? 'info' : 'warning', label: '人工網域審核',
                 details: reviewedContent
-                    ? '管理者已確認此活動網域，採人工審核的安全基線；不代表本次已完整取得網頁內容，仍保留即時威脅檢查。'
+                    ? '此網域已經人工查核，採人工審核的安全基線；不代表本次已完整取得網頁內容，仍保留即時威脅檢查。'
                     : '此網域曾經人工審核；目前仍依即時威脅與檢測結果判定。'
             };
         }

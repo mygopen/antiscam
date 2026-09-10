@@ -1,7 +1,7 @@
 window.RISK_CONFIG = {
     trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
-    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org'],
+    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw'],
     companyVerificationVersion: '2026-08-27-1',
     organizationVerificationVersion: '2026-09-03-1',
     socialMediaDomains: [
@@ -51,6 +51,8 @@ window.RISK_CONFIG = {
         'zk-school.com', 'gowedding.tw'
     ],
     trustedFinancialServiceDomains: [
+        // Bank identity service review: docs/bot-identity-review.md
+        'bot.com.tw',
         'axi.com', 'twlife.tw', 'taiwanlife.com', 'esun.co', 'mma.tw', 'tsbk.tw',
         'cathay-cube.com.tw', 'cube-app.tw', 'globalmyb2b.com',
         'cathayrobo.com', 'cathaylife.com.tw'
