@@ -127,6 +127,25 @@ test('verified event retains strong threat overrides and incomplete-check warnin
     }
     assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
 });
+test('reviewed Hsinchu voting host tolerates content timeouts without trusting phishing', async () => {
+    const url = 'https://www.hsinchucitygoods.com/vote';
+    for (const content of ['ok', 'unknown', 'blocked', 'error', 'blank']) {
+        const result = await scan({ content }, url);
+        assert.equal(result.assessment, 'low');
+        assert.equal(result.details.siteStatus.status, content);
+        assert.match(result.checks.manualContentReview.details, /不代表本次已完整取得/);
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'LINE credential collection' } } }]) {
+        assert.equal((await scan({ content: 'unknown', ...options }, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+    for (const host of ['hsinchucitygoods.com', 'other.hsinchucitygoods.com', 'www.hsinchucitygoods.com.evil.example']) {
+        const result = await scan({ content: 'unknown' }, `https://${host}/vote`);
+        assert.notEqual(result.manuallyReviewedContent, true);
+        assert.notEqual(result.assessment, 'low');
+    }
+});
 for (const [name, options] of Object.entries({ Google: { unsafe: true }, blacklist: { blacklist: true }, official: { officialAlert: true } })) {
     test(`production flow: ${name} strong threat overrides trusted domain`, async () => {
         const result = await scan(options);
