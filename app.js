@@ -112,14 +112,15 @@ const { useState, useEffect, useRef } = React;
         );
 
         const RiskMeter = ({ score, assessment }) => {
+            const isUnknown = assessment === 'unknown';
             let color = 'bg-green-500', text = '低度風險', width = '10%';
             if (score >= 70) { color = 'bg-red-600'; text = '高度風險'; width = '90%'; }
             else if (score >= 30) { color = 'bg-yellow-500'; text = '中度風險'; width = '50%'; }
-            if (assessment === 'unknown') { color = 'bg-gray-400'; text = '資訊不足／尚未確認'; width = '10%'; }
+            if (isUnknown) text = '資訊不足／尚未確認';
             return (
                 <div className="mt-4 mb-6">
-                    <div className="flex justify-between gap-2 mb-1 text-sm font-bold"><span>安全</span><span className={assessment === 'unknown' ? 'text-gray-600 text-center' : score >= 70 ? 'text-red-600' : (score >= 30 ? 'text-yellow-600' : 'text-green-600')}>{text}</span><span>危險</span></div>
-                    <div className="h-3 w-full bg-gray-200 rounded-full overflow-hidden"><div className={`h-full ${color} transition-all duration-1000 ease-out`} style={{ width: width }}></div></div>
+                    <div className={`flex ${isUnknown ? 'justify-center' : 'justify-between'} gap-2 mb-1 text-sm font-bold`}>{!isUnknown && <span>安全</span>}<span className={isUnknown ? 'text-gray-600 text-center' : score >= 70 ? 'text-red-600' : (score >= 30 ? 'text-yellow-600' : 'text-green-600')}>{text}</span>{!isUnknown && <span>危險</span>}</div>
+                    <div aria-hidden="true" className="h-3 w-full bg-gray-200 rounded-full overflow-hidden">{!isUnknown && <div className={`h-full ${color} transition-all duration-1000 ease-out`} style={{ width: width }}></div>}</div>
                 </div>
             );
         };
