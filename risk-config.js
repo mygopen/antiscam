@@ -1,7 +1,7 @@
 window.RISK_CONFIG = {
     trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
-    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com'],
+    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org'],
     companyVerificationVersion: '2026-08-27-1',
     organizationVerificationVersion: '2026-09-03-1',
     socialMediaDomains: [
@@ -61,7 +61,7 @@ window.RISK_CONFIG = {
         'imigrasi.go.id'
     ],
     trustedPublicInterestDomains: [
-        'mwtnuns.org'
+        'mwtnuns.org', 'wfp.org'
     ],
     confirmedScamDomains: [
         'jinguan.web.app',

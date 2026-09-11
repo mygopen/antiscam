@@ -17,6 +17,30 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });
+test('WFP donation review tolerates missing content and advertising parameters, not threats', async () => {
+    const core = createCore();
+    const clean = 'https://donate.wfp.org/zh-hans/1244/donation/single/';
+    const url = clean + '?utm_source=facebook&utm_medium=cpm&utm_campaign={{campaign.id}}&campaign=6075&utm_ad={{ad.id}}&utm_adset={{adset.id}}&utm_cid=701SX00000lfyl9YAA&fbclid=example-tracking-id';
+    for (const target of [clean, url]) {
+        for (const content of ['ok', 'unknown', 'blocked', 'error', 'blank']) {
+            const result = await scan({ content }, target);
+            assert.equal(result.assessment, 'low');
+            assert.equal(result.details.siteStatus.status, content);
+            assert.match(result.checks.manualContentReview.details, /不代表本次已完整取得/);
+        }
+    }
+    for (const host of ['donate.wfp.org.evil.example', 'fake-wfp.org', 'wfp-donate.org']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan({ content: 'unknown', ...options }, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+    for (const host of ['other.wfp.org', 'child.donate.wfp.org']) {
+        assert.equal((await scan({ content: 'unknown' }, `https://${host}/`)).assessment, 'unknown');
+    }
+});
 test('Bank of Taiwan identity service has a reviewed baseline without bypassing threats', async () => {
     const core = createCore();
     const url = 'https://idf.bot.com.tw/idf/resources/index.html';
