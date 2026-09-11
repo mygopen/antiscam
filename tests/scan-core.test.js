@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { DOMParser } = require('linkedom');
 const { fixtureCore, createCore, policy, riskConfig } = require('./helpers/production-core.cjs');
 test('long readable domain is not extreme gibberish even without trusted mapping', async () => {
     const config = { ...riskConfig, trustedTaiwanServiceDomains: riskConfig.trustedTaiwanServiceDomains.filter(domain => domain !== 'hsinchucitygoods.com') };
@@ -14,6 +15,33 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
     const { core } = fixtureCore(options);
     return core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(target).hostname, target, ['cht.com.tw']));
 }
+test('Apple PWA metadata is not impersonation; actual Apple claims remain detected', () => {
+    const core = createCore();
+    const metadata = '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="/img/logo-app.png">';
+    const analyze = body => {
+        const html = `<html><head><title>點點投</title>${metadata}</head><body>${body}</body></html>`;
+        return core.analyzePageBrandSignals(new DOMParser().parseFromString(html, 'text/html'), 'https://unreviewed.example/', html);
+    };
+    assert.equal(analyze('').matched, false);
+    assert.equal(analyze('<form>Apple ID 驗證<input type="password"></form>').brandName, 'Apple');
+    assert.equal(analyze('<meta name="apple-mobile-web-app-title" content="Apple ID">').brandName, 'Apple');
+});
+test('Nantou portal review is tenant-specific and strong threats override trust', async () => {
+    const core = createCore();
+    const url = 'https://portal.nantou.citycoins.cc/';
+    for (const content of ['ok', 'unknown', 'blocked', 'blank']) {
+        assert.equal((await scan({ content }, url)).assessment, 'low');
+    }
+    for (const host of ['citycoins.cc', 'nantou.citycoins.cc', 'portal.other.citycoins.cc', 'portal.nantou.citycoins.cc.evil.example']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan(options, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+    assert.equal(core.isOfficialTaiwanGovDomain('portal.nantou.citycoins.cc'), false);
+});
 test('production flow: trusted official site with completed checks is low risk', async () => {
     assert.equal((await scan()).assessment, 'low');
 });

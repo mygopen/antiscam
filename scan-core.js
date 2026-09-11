@@ -880,9 +880,18 @@
             let domainHostname = '';
             try { domainHostname = new URL(fullUrl).hostname; } catch (e) { }
 
-            const rawBrandText = String(rawText || '')
+            let rawBrandText = String(rawText || '')
                 .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
                 .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
+            // Apple PWA metadata names describe browser compatibility, not page identity.
+            if (/apple-(?:mobile-web-app|touch-icon)/i.test(rawBrandText) && DOMParser) {
+                const brandDoc = new DOMParser().parseFromString(rawBrandText, 'text/html');
+                brandDoc.querySelectorAll('meta[name], link[rel]').forEach(el => {
+                    if (/^apple-mobile-web-app-(?:capable|status-bar-style|title)$/i.test(el.getAttribute('name') || '')) el.removeAttribute('name');
+                    if (/^apple-touch-icon(?:-precomposed)?$/i.test(el.getAttribute('rel') || '')) el.removeAttribute('rel');
+                });
+                rawBrandText = brandDoc.documentElement.outerHTML;
+            }
             const textParts = [rawBrandText, doc?.title || ''];
             if (doc) {
                 doc.querySelectorAll('meta[name="description"], meta[property="og:title"], meta[property="og:site_name"], img[alt], [aria-label], link[rel*="icon"]').forEach(el => {
