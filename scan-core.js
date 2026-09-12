@@ -900,6 +900,7 @@
             }
 
             const haystack = decodeSignalText(textParts.join('\n'));
+            let brandMention = null;
             for (const brand of getRiskList('protectedBrands')) {
                 const officialDomains = brand.domains || [];
                 if (officialDomains.some(domain => isSameRootDomain(domainHostname, domain))) continue;
@@ -910,11 +911,18 @@
                     return contexts.length > 0 && !isBenignCommerceBrandReference(brand.name, keyword, contexts);
                 });
                 if (matchedKeyword) {
-                    return { matched: true, brandName: brand.name, keyword: matchedKeyword, source: 'page' };
+                    const identityText = [doc?.title || '', ...Array.from(doc?.querySelectorAll('h1, meta[property="og:site_name"]') || []).map(el => el.textContent || el.getAttribute('content') || '')].join(' ');
+                    const claimsIdentity = keywords.some(keyword => getPageBrandKeywordContexts(identityText, keyword).length > 0);
+                    const asksCredentials = Array.from(doc?.querySelectorAll('form') || []).some(form =>
+                        keywords.some(keyword => getPageBrandKeywordContexts(form.textContent || '', keyword).length > 0) &&
+                        Array.from(form.querySelectorAll('input')).some(input => input.type !== 'hidden' && /password|one-time-code|\botp\b|cvv|密碼|驗證碼/i.test(['type', 'name', 'autocomplete', 'placeholder'].map(attr => input.getAttribute(attr) || '').join(' '))));
+                    const signal = { matched: true, brandName: brand.name, keyword: matchedKeyword, source: 'page', evidenceLevel: claimsIdentity || asksCredentials ? 'impersonation' : 'mention' };
+                    if (signal.evidenceLevel === 'impersonation') return signal;
+                    brandMention ||= signal;
                 }
             }
 
-            return { matched: false, brandName: null, keyword: null, source: null };
+            return brandMention || { matched: false, brandName: null, keyword: null, source: null };
         };
 
         const analyzeUrgencySignals = (doc, rawText = '') => {
@@ -2618,6 +2626,7 @@
             const hasBrandSimilarity = !!matchedBrandSimilarity.matched;
             const hasGithubPagesBrandImpersonationRisk = !isWhitelisted && isGithubPagesSite && hasBrandSimilarity;
             const domainAgeDays = getPastAgeDays(rdapDate);
+            const hasEstablishedDomainAge = !ignoreSharedTenantRegistration && !blocksSharedProviderTrust && !isFreeHosting && domainAgeDays !== null && domainAgeDays >= 365 * 3;
             const isVeryNewDomain = domainAgeDays !== null && domainAgeDays < 90;
             const isNewDomainUnderSixMonths = domainAgeDays !== null && domainAgeDays < 183;
             const registrationPeriodDays = !ignoreSharedTenantRegistration && rdapData.registrationPeriodDays !== null && rdapData.registrationPeriodDays !== undefined
@@ -2653,7 +2662,7 @@
                 trustedTaiwanRegistrars.some(r => registrarName.toLowerCase().includes(r));
             const combinedSeoScore = Math.min(100, (seoSignals.score || 0) + Math.min(60, siteSeoData?.score || 0));
             const hasMatureSeoSignals = combinedSeoScore >= 60 || (seoSignals.matched && siteSeoData?.matched);
-            const hasPageBrandMismatch = !isWhitelisted && !hasBrandSimilarity && !!pageBrandSignals.matched;
+            const hasPageBrandMismatch = !isWhitelisted && !hasBrandSimilarity && !!pageBrandSignals.matched && pageBrandSignals.evidenceLevel !== 'mention';
             const hasOfficialFlowPathSignal = !isWhitelisted && hasOfficialFlowPath(fullUrl);
             const hasUrgencyScamSignal = !isWhitelisted && (urgencySignals.count || 0) > 0;
             const hasHomographSignal = !isWhitelisted && hasPunycodeOrUnicodeHostname(domain, fullUrl);
@@ -2694,6 +2703,7 @@
                 !hasDisposableRootLabel &&
                 !hasSuspiciousTempDomain;
             const hasSmallBusinessTrustContext = hasStrongEcommerceValidation ||
+                hasEstablishedDomainAge ||
                 hasVerifiedBusinessEntity ||
                 isTrustedTaiwanRegistrar ||
                 hasMatureSeoSignals ||
@@ -2737,13 +2747,16 @@
                 unreadablePageStatuses.includes(siteStatusData.status) &&
                 (isEuCcHostedSite || hasDisposableRootLabel || suspiciousSubdomain.matched || isLowTraffic);
             const hasDisposableShoppingLandingRisk = !isWhitelisted &&
+                !hasEstablishedDomainAge &&
                 hasDisposableRootLabel &&
                 hasSuspiciousLandingParams;
             const hasDisposableUnreadablePageRisk = !isWhitelisted &&
+                !hasEstablishedDomainAge &&
                 hasDisposableRootLabel &&
                 !isHighTraffic &&
                 unreadablePageStatuses.includes(siteStatusData.status);
             const hasDisposableRootPhishingRisk = !isWhitelisted &&
+                !hasEstablishedDomainAge &&
                 hasDisposableRootLabel &&
                 !isHighTraffic &&
                 (
@@ -2756,15 +2769,10 @@
                 !hasStrongEcommerceValidation &&
                 shoppingScamSignals.matched &&
                 (
-                    isLowTraffic ||
-                    isHighEntropy ||
-                    isSuspiciousRootLabel ||
                     hasSuspiciousTempDomain ||
-                    hasSuspiciousParams ||
-                    hasSuspiciousLandingParams ||
-                    isVeryNewDomain ||
-                    externalFormActionCount > 0 ||
-                    suspiciousSubdomain.matched
+                    (pageSignals.externalResources?.sensitiveFormActionCount || 0) > 0 ||
+                    (isVeryNewDomain && !shoppingScamSignals.hasMerchantInfo) ||
+                    (externalFormActionCount > 0 && highRiskSensitiveFieldCount > 0)
                 );
             const hasUnverifiedCommerceRisk = !isWhitelisted &&
                 !hasStrongEcommerceValidation &&
@@ -3306,6 +3314,11 @@
             if (hasConditionalCompanyTrustApplied) {
                 riskScore = Math.min(riskScore, 20);
             }
+            const matureBusinessTrust = hasEstablishedDomainAge && domainAgeDays >= 365 * 5 &&
+                hasVerifiedBusinessEntity && hasMatureSeoSignals && ecommerceTrustSignals.score >= 50 &&
+                siteStatusData.status === 'ok' && !unresolvedShortener && !hasStrongRiskSignal &&
+                !hasConditionalCompanyTrustBlockingThreat && !hasSensitiveExternalForm;
+            if (matureBusinessTrust) riskScore = Math.min(riskScore, 25);
 
             if (hasTrustedAllowlistOverride) riskScore = Math.min(riskScore, 20);
             if (blocklistListedForRisk || isGoogleFlaggedForRisk || isConfirmedScam || isManualHighRisk ||
@@ -3595,6 +3608,14 @@
                     siteStatus: siteStatusData
                 },
                 checks: {
+                    domainMaturity: {
+                        hidden: !hasEstablishedDomainAge,
+                        status: 'info', label: '網域年齡與商家佐證',
+                        applied: matureBusinessTrust,
+                        details: matureBusinessTrust
+                            ? '網域已存在至少 5 年，且商家身份、網站內容與電商佐證相符，已降低弱訊號權重；不代表持續營運或交易安全保證。'
+                            : '網域已存在至少 3 年，降低低流量與命名弱訊號的權重；不以預繳年限或憑證日期判定安全，強威脅仍優先攔截。'
+                    },
                     // 👇 新增這行：Google 官方的標記卡片
                     googleSafeBrowsing: { 
                         status: isGoogleFlaggedForRisk ? 'danger' : (safeBrowsingData?.status === 'clear' ? 'safe' : 'unknown'),
@@ -3856,7 +3877,7 @@
                     lineContact: { status: hasShoppingLineContactRisk ? 'danger' : (shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? 'info' : 'warning') : 'safe'), label: 'LINE 聯絡導流', details: shoppingScamSignals.hasLineContactSignal ? (hasStrongEcommerceValidation ? `偵測到 LINE 聯絡資訊，但同時具備正規電商佐證${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}` : `偵測到要求加入 LINE 聯絡/下單${shoppingScamSignals.lineContactExamples?.length ? `：${shoppingScamSignals.lineContactExamples.join('、')}` : ''}`) : '未偵測到 LINE 聯絡導流' },
                     shoppingLanding: { status: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? 'info' : ((hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk) ? 'danger' : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? 'info' : 'warning') : 'safe')), label: '購物/廣告落地頁網址', details: hasConditionalCompanyTrustApplied && (hasShoppingLandingUrlRisk || hasSuspiciousTldAdLandingRisk || hasSuspiciousLandingParams) ? '偵測到廣告或落地頁網址特徵；組織官網映射已驗證，本項只保留為背景資訊' : (hasSuspiciousTldAdLandingRisk ? `原始網址含社群/廣告追蹤參數：${rawAdLandingParamDetails.slice(0, 4).join('、')}；且網域使用可疑後綴、缺少可信商家或正規電商佐證` : (hasShoppingLandingUrlRisk ? `即使未取得頁面內容，網址本身已符合可疑購物落地頁特徵：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}` : (hasSuspiciousLandingParams ? ((hasStrongEcommerceValidation || isWhitelisted || isTrustedTLD || hasSmallBusinessTrustContext) ? `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}；但網域/頁面具備台灣商業或正規電商脈絡，未單獨判為風險` : `偵測到廣告落地頁追蹤參數：${matchedLandingParams.slice(0, 4).join('、')}${(isSuspiciousRootLabel || isSuspiciousLandingRootLabel) ? '；主網域名稱隨機度偏高' : ''}`) : '未偵測到可疑購物落地頁參數'))) },
                     brandSimilarity: { status: hasBrandSimilarity ? 'danger' : 'safe', label: '品牌相似網域', details: hasBrandSimilarity ? `網域疑似模仿「${matchedBrandSimilarity.brandName}」相關名稱 (${matchedBrandSimilarity.keyword})` : '未偵測到常見品牌相似網域' },
-                    pageBrand: { status: hasPageBrandMismatch ? 'danger' : 'safe', label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面內容疑似出現「${pageBrandSignals.brandName}」品牌，但網域不是官方網站` : '未偵測到頁面品牌與網域不一致' },
+                    pageBrand: { status: hasPageBrandMismatch ? 'danger' : (pageBrandSignals.evidenceLevel === 'mention' ? 'info' : 'safe'), label: '頁面品牌一致性', details: hasPageBrandMismatch ? `頁面疑似以「${pageBrandSignals.brandName}」為身份或索取品牌帳密，但網域不是官方網站` : (pageBrandSignals.evidenceLevel === 'mention' ? `頁面提及「${pageBrandSignals.brandName}」，未取得品牌身份冒用或帳密索取佐證，不單憑品牌名稱判為高風險。` : '未偵測到頁面品牌與網域不一致') },
                     officialFlowPath: { status: hasOfficialFlowPathSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || isVeryNewDomain || isLowTraffic) ? 'warning' : 'info') : 'safe', label: '官方流程路徑', details: hasOfficialFlowPathSignal ? '網址路徑含登入、驗證、帳戶、領取、配送或付款等流程字樣，需搭配網域可信度判斷' : '未偵測到可疑官方流程路徑' },
                     urgency: { status: hasUrgencyScamSignal ? ((hasBrandSimilarity || hasPageBrandMismatch || hasFinancialPhishingSignal || isVeryNewDomain) ? 'warning' : 'info') : 'safe', label: '限時/恐嚇話術', details: hasUrgencyScamSignal ? `偵測到限時、帳戶異常或立即驗證類話術：${urgencySignals.examples.slice(0, 3).join('、')}` : '未偵測到常見限時或恐嚇話術' },
                     homograph: { status: hasHomographSignal ? 'danger' : 'safe', label: '相似字元網域', details: hasHomographSignal ? '網域含 Punycode 或非 ASCII 字元，可能利用相似字元混淆官方網域' : '未偵測到 Punycode 或 Unicode 混淆網域' },

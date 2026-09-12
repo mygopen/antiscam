@@ -19,6 +19,11 @@
             scan.isTrustedAllowlist = false;
             scan.conditionalCompanyTrustApplied = false;
             scan.risk_flag = true;
+            if (checks.domainMaturity) {
+                checks.domainMaturity.applied = false;
+                checks.domainMaturity.status = 'warning';
+                checks.domainMaturity.details = '已偵測到強威脅，網域年齡與商家佐證不提供降分。';
+            }
         }
         const unavailable = [];
         if (scan.unresolvedShortener) unavailable.push('縮網址最終目的地尚未確認');

@@ -10,7 +10,7 @@ const riskConfig = sandbox.window.RISK_CONFIG;
 function createCore(options = {}) {
     return create({ riskConfig, policy, DOMParser, ...options });
 }
-function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', googleStatus = 'clear', trace = null, pageSignals = null, officialAlert = false, config = riskConfig } = {}) {
+function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', googleStatus = 'clear', trace = null, pageSignals = null, officialAlert = false, rdap = null, config = riskConfig } = {}) {
     let core;
     const requests = [];
     core = createCore({
@@ -22,6 +22,7 @@ function fixtureCore({ unsafe = false, blacklist = false, content = 'ok', google
         fetch: async input => {
             const url = String(input);
             requests.push(url);
+            if (url.includes('/api/rdap') && rdap) return Response.json(rdap);
             if (url.includes('dns.google')) return Response.json({ Status: 0, Answer: [{ type: 1, data: '93.184.216.34' }] });
             if (url.includes('/safe-browsing')) return Response.json({ status: unsafe ? 'matched' : googleStatus, isUnsafe: unsafe || (googleStatus === 'clear' ? false : null) });
             if (url.includes('/check-blacklist')) return Response.json({ listed: blacklist, isBlacklisted: blacklist });
