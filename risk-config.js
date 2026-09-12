@@ -1,5 +1,5 @@
 window.RISK_CONFIG = {
-    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc'],
+    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc', 'dearbb.design'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
     manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org', 'portal.nantou.citycoins.cc'],
     companyVerificationVersion: '2026-08-27-1',

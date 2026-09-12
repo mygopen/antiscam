@@ -15,6 +15,21 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
     const { core } = fixtureCore(options);
     return core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(target).hostname, target, ['cht.com.tw']));
 }
+test('reviewed Dear BB shop suppresses customer-logo false positives but retains threat checks', async () => {
+    const core = createCore();
+    const url = 'https://dearbb.design/';
+    const pageSignals = { ...core.createEmptyPageSignals(), pageBrandSignals: { matched: true, brandName: '富邦銀行', keyword: '富邦', source: 'page' } };
+    assert.equal((await scan({ pageSignals }, url)).assessment, 'low');
+    for (const host of ['test.dearbb.design', 'dearbb.design.evil.example', 'fake-dearbb.design']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan(options, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ content: 'unknown' }, url)).assessment, 'unknown');
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+});
 test('Apple PWA metadata is not impersonation; actual Apple claims remain detected', () => {
     const core = createCore();
     const metadata = '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="/img/logo-app.png">';
