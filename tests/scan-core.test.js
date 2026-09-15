@@ -15,6 +15,39 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
     const { core } = fixtureCore(options);
     return core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(target).hostname, target, ['cht.com.tw']));
 }
+test('165 dashboard is an NPA service even without the asynchronous external whitelist', async () => {
+    const core = createCore();
+    assert.equal(core.isTrustedGovernmentServiceDomain('165dashboard.tw'), true);
+    assert.equal(core.isVerifiedSafeRootDomain('165dashboard.tw', []), true);
+    assert.equal(core.shouldSkipAiBrandAnalysis('165dashboard.tw', []), true);
+    assert.equal(core.isOfficialTaiwanGovDomain('165dashboard.tw'), false);
+    for (const url of ['https://165dashboard.tw/', 'https://165dashboard.tw/fraud-method',
+        'https://165dashboard.tw/fraud-method/334882749754118144?utm_source=test']) {
+        for (const content of ['ok', 'blocked', 'unknown', 'error', 'blank']) {
+            const { core } = fixtureCore({ content });
+            const result = core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(url).hostname, url, []));
+            assert.equal(result.assessment, 'low');
+            assert.equal(result.isTrustedAllowlist, true);
+            assert.equal(result.rootDomainTrust.isTrustedGovernmentServiceRootDomain, true);
+            assert.equal(result.details.siteStatus.status, content);
+            assert.match(result.checks.manualContentReview.details, /不代表本次已完整取得/);
+        }
+    }
+    for (const host of ['fake-165dashboard.tw', '165dashboard.tw.evil.example', '165dashboard-tw.example', 'unrelated.tw']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host, ['165dashboard.tw']), false);
+        assert.equal(core.isTrustedGovernmentServiceDomain(host), false);
+    }
+    assert.equal((await scan({ content: 'blocked' }, 'https://other.165dashboard.tw/')).assessment, 'unknown');
+    assert.equal((await scan({ googleStatus: 'unavailable' }, 'https://165dashboard.tw/')).assessment, 'unknown');
+});
+test('165 dashboard trust does not suppress strong threat evidence', async () => {
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { externalResources: { sensitiveFormActionCount: 1 } } },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } },
+        { trace: { resolvedDestination: true, finalUrl: 'https://evil.example/phishing', isHighRisk: true, chain: [], uaComparisonComplete: true } }]) {
+        assert.equal((await scan({ content: 'blocked', ...options }, 'https://165dashboard.tw/fraud-method')).assessment, 'high', JSON.stringify(options));
+    }
+});
 test('reviewed Dear BB shop suppresses customer-logo false positives but retains threat checks', async () => {
     const core = createCore();
     const url = 'https://dearbb.design/';

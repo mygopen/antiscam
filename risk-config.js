@@ -1,7 +1,7 @@
 window.RISK_CONFIG = {
     trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc', 'dearbb.design'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
-    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org', 'portal.nantou.citycoins.cc'],
+    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org', 'portal.nantou.citycoins.cc', '165dashboard.tw'],
     companyVerificationVersion: '2026-08-27-1',
     organizationVerificationVersion: '2026-09-03-1',
     socialMediaDomains: [
@@ -58,6 +58,8 @@ window.RISK_CONFIG = {
         'cathayrobo.com', 'cathaylife.com.tw'
     ],
     trustedGovernmentServiceDomains: [
+        // NPA-linked official service; docs/165dashboard-review.md
+        '165dashboard.tw',
         'imigrasi.go.id'
     ],
     trustedPublicInterestDomains: [
