@@ -1,3 +1,5 @@
+import { aiUnavailableMessage } from './ai-policy.js';
+
 export const CHAT_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 export const CHAT_MAX_TOKENS = 80;
 
@@ -19,9 +21,7 @@ export function fixedChatReply(text) {
 }
 
 export function chatFallback(reason) {
-  const prefix = reason === 'free_plan_unconfirmed'
-    ? '為避免產生 AI 費用，目前僅提供基本服務。'
-    : 'AI 額度不足或暫時無法使用，已停止呼叫模型。';
+  const prefix = aiUnavailableMessage(reason);
   return `${prefix}你仍可貼上網址進行檢測；請勿提供密碼或驗證碼。`;
 }
 

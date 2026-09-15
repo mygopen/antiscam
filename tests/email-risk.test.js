@@ -70,12 +70,11 @@ test('low-confidence sender evidence and expired reference data abstain', () => 
 });
 
 test('vision parser applies the same rule and official URLs cannot override it', async () => {
-    const { parseVisionResult, buildReport, geminiSignalPayload } = await import('../functions/api/cf-vision.js');
+    const { parseVisionResult, buildReport } = await import('../functions/api/cf-vision.js');
     const result = parseVisionResult(JSON.stringify({ risk: 'none', readable: true, confidence: 0.95,
         analysis: 'No generic threats', advice: 'Check independently', urls: ['https://www.fetc.net.tw/'], primaryUrl: '', signals: ['none'], mailLines: lines(sample) }));
     assert.equal(result.risk, 'high');
     assert.match(buildReport(result), /疑似冒用遠通/);
-    assert.equal(geminiSignalPayload(result), null);
     assert.doesNotMatch(JSON.stringify(result), /redacted@|other@/);
 });
 

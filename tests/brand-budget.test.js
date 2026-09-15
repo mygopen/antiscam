@@ -29,6 +29,15 @@ test('brand request admission is atomic and does not store raw IP', async () => 
     } finally { db.sqlite.close(); }
 });
 
+test('unconfirmed brand AI stops before storage, crawling or inference', async (t) => {
+    const { onRequest } = await import('../functions/api/check-fake-brand.js');
+    t.mock.method(globalThis, 'fetch', () => { assert.fail(); });
+    const response = await onRequest({ request: new Request('https://scanner.test/api?url=https://example.com'),
+        env: { AI_FREE_ONLY_CONFIRMED: 'false', CHAT_AI_FREE_ONLY_CONFIRMED: 'true',
+            AI: { run() { assert.fail(); } }, AI_BUDGET: { prepare() { assert.fail(); } } } });
+    assert.equal((await response.json()).status, 'free_plan_unconfirmed');
+});
+
 test('brand analysis shares the chat/vision budget and preserves Generic_Scam output', async () => {
     const { onRequest } = await import('../functions/api/check-fake-brand.js');
     const db = createD1();
@@ -38,7 +47,7 @@ test('brand analysis shares the chat/vision budget and preserves Generic_Scam ou
     global.fetch = async url => String(url).startsWith('https://cloudflare-dns.com/')
         ? Response.json({ Status: 0, Answer: [{ type: 1, data: '93.184.216.34' }] })
         : new Response('<main>Important account notice: please send your password and OTP to customer service now.</main>');
-    const env = { AI_BUDGET: db, AI_DAILY_NEURONS: '400', AI: { async run() { aiCalls++; return { response: 'Generic_Scam' }; } } };
+    const env = { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db, AI_DAILY_NEURONS: '400', AI: { async run() { aiCalls++; return { response: 'Generic_Scam' }; } } };
     try {
         const request = new Request('https://scanner.test/api?url=https://example.com');
         const first = await (await onRequest({ request, env })).json();

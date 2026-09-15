@@ -1,5 +1,6 @@
 // 檔案路徑：functions/api/check-fake-brand.js
 import { runBudgetedAi } from '../lib/ai-budget.js';
+import { freeAiConfirmed, aiUnavailableMessage } from '../lib/ai-policy.js';
 import { publicUrl, fetchPublicResource } from '../lib/public-fetch.js';
 import { looksCrawlerBlocked } from './site-content.js';
 import { admitBrandRequest } from '../lib/request-guard.js';
@@ -420,7 +421,7 @@ async function analyzeBrand(context) {
                 max_tokens: 30, temperature: 0.1
             })
         });
-        if (!attempt.ok) return Response.json({ status: attempt.reason, isFakeBrand: null, message: 'AI 額度或服務暫時不可用，未完成品牌分析' });
+        if (!attempt.ok) return Response.json({ status: attempt.reason, isFakeBrand: null, message: aiUnavailableMessage(attempt.reason) });
         const detectedBrand = String(attempt.data?.response || attempt.data?.result?.response || '').trim().replace(/[*#`~]/g, '');
         if (!detectedBrand || detectedBrand.length > 80 || /[\r\n]/.test(detectedBrand)) return Response.json({ status: 'unknown', isFakeBrand: null, message: 'AI 回應無法驗證' });
 
@@ -502,6 +503,8 @@ export async function onRequest(context) {
     const target = new URL(context.request.url).searchParams.get('url');
     if (!target || !publicUrl(target) || target.length > 4096) return Response.json({ status: 'invalid', isFakeBrand: null }, { status: 400 });
     if (!context.env.AI || !context.env.AI_BUDGET) return Response.json({ status: 'disabled', isFakeBrand: null });
+    if (!freeAiConfirmed(context.env)) return Response.json({ status: 'free_plan_unconfirmed', isFakeBrand: null,
+        message: aiUnavailableMessage('free_plan_unconfirmed') }, { headers: { 'Cache-Control': 'no-store' } });
     if (!await admitBrandRequest(context.env, context.request)) return Response.json({ status: 'rate_limited', isFakeBrand: null }, { status: 429, headers: { 'Retry-After': '60' } });
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(target));
     const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');

@@ -842,7 +842,8 @@ const { useState, useEffect, useRef } = React;
         const localScreenshotReport = (mail) => mail && window.EmailRisk ? window.EmailRisk.report(mail) :
             '⚠️ 風險：無法判定\n🔍 分析：目前未能取得足夠清楚的內容，不能判定為安全。\n🛡️ 建議：請裁切清楚的寄件資訊與正文，或貼上實際連結；請勿提供密碼或驗證碼。';
 
-        const preserveLocalScreenshotReport = (localReport, aiReport) => {
+        const preserveLocalScreenshotReport = (localReport, aiReport, status = 'ok') => {
+            if (status !== 'ok' && localReport) return localReport;
             if (String(localReport || '').split('\n').some(line => line.trim() === '⚠️ 風險：高風險')) return localReport;
             if (String(localReport || '').includes('不能判定為安全') && !String(aiReport || '').split('\n').some(line => /^⚠️ 風險：(高風險|中風險)$/.test(line.trim()))) return localReport;
             return aiReport;
@@ -923,7 +924,8 @@ const { useState, useEffect, useRef } = React;
                 if (e.target.value !== undefined) e.target.value = '';
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
-                setResult(null); setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在檢查截圖內容與網址...');
+                if (!forceAi) setResult(null);
+                setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在檢查截圖內容與網址...');
                 if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
                 const imagePreviewUrl = URL.createObjectURL(file);
                 setUploadedImageUrl(imagePreviewUrl);
@@ -969,8 +971,14 @@ const { useState, useEffect, useRef } = React;
 
                     setLoadingMessage('正在進行圖片內容複核...');
                     const data = await requestScreenshotAnalysis(file);
-                    const contentReport = preserveLocalScreenshotReport(pendingContentReport, data.report);
+                    const contentReport = preserveLocalScreenshotReport(pendingContentReport, data.report, data.status);
                     setAiReport(contentReport);
+                    if (data.status !== 'ok') {
+                        setError(data.notice || 'AI 未完成辨識，保留原有判讀，無法因此確認安全。');
+                        setScreenshotUrls(pendingScreenshotUrls);
+                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: pendingScreenshotUrls[0] || '', source: 'ocr' });
+                        return;
+                    }
                     setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: data.urls?.[0] || '', source: 'ai' });
                     const detectedUrls = getScreenshotUrls([...(data.urls || []), ...pendingScreenshotUrls]);
                     setScreenshotUrls(detectedUrls);

@@ -4,12 +4,17 @@ Updated: 2026-09-15
 
 ## Production activation gate
 
-Chat inference defaults OFF. FAQ replies and URL scans remain available.
-`CHAT_AI_FREE_ONLY_CONFIRMED=true` may only be configured after an operator
+All inference defaults OFF. FAQ replies and non-AI URL scans remain available.
+The shared gate in `ai-policy.js` covers chat, vision and brand analysis.
+`AI_FREE_ONLY_CONFIRMED=true` may only be configured after an operator
 verifies the serving account uses Workers Free (platform-enforced stop at the
 free allocation) without paid AI Gateway credits/routes. This flag is an
 operator attestation, not an API that verifies billing. Remove it before any
-account plan change. Do not set it on Workers Paid merely because estimated
+account plan change. The existing `CHAT_AI_FREE_ONLY_CONFIRMED` flag is a
+compatibility alias only when the new setting is absent. An explicit false,
+empty or invalid new setting disables every AI entry point even if the legacy
+flag is true. Disable both flags before changing the account plan.
+Do not set it on Workers Paid merely because estimated
 usage is below the allowance; account-wide usage can exhaust the free tier.
 
 On 2026-09-15, the signed-in Cloudflare dashboard showed Workers Free ($0)
@@ -21,9 +26,9 @@ upgrade, downgrade, prepaid credits or paid fallback was enabled. Preview
 environments remain closed unless independently configured after verification.
 The subscription API previously returned an authentication error, so this is
 a dated operator verification, not continuous billing-plan detection.
-This change does not disable the separate vision/brand-analysis endpoints or
-change their provider policies. It guarantees no chat inference while the
-gate is closed, not a zero invoice for every Cloudflare service.
+The closed shared gate prevents chat, vision and brand inference. It does not
+guarantee a zero invoice for unrelated Cloudflare services. Gemini fallback
+has been removed; stale Gemini secrets/flags cannot enable model calls.
 
 ## Quota handling
 

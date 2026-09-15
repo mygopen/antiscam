@@ -1,4 +1,5 @@
 import { runBudgetedAi } from '../lib/ai-budget.js';
+import { freeAiConfirmed } from '../lib/ai-policy.js';
 import { CHAT_MODEL, CHAT_MAX_TOKENS, fixedChatReply, chatFallback, reserveChatNeurons } from '../lib/chat-policy.js';
 
 export async function onRequestPost(context) {
@@ -15,7 +16,7 @@ export async function onRequestPost(context) {
         if (fixed) return Response.json({ reply: fixed, status: 'local', source: 'fixed' }, { headers: { 'Cache-Control': 'no-store' } });
         // An app-side estimate cannot prevent account-wide paid overages.
         // Enable only after verifying platform-enforced Workers Free limits.
-        if (env.CHAT_AI_FREE_ONLY_CONFIRMED !== 'true') {
+        if (!freeAiConfirmed(env)) {
             return Response.json({ reply: chatFallback('free_plan_unconfirmed'), status: 'free_plan_unconfirmed', source: 'fixed' }, { headers: { 'Cache-Control': 'no-store' } });
         }
 

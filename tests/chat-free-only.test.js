@@ -60,7 +60,7 @@ test('quota stops for the rest of the UTC day without retry or provider fallback
   const env = { CHAT_AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db, GEMINI_API_KEY: 'not-used',
     AI: { run() { calls++; throw Object.assign(new Error('neurons quota'), { status: 429 }); } } };
   assert.equal((await chat('這是詐騙嗎', env)).data.status, 'quota');
-  assert.equal((await chat('這是詐騙嗎', env)).data.status, 'budget_or_rate_limit');
+  assert.equal((await chat('這是詐騙嗎', env)).data.status, 'quota');
   assert.equal(calls, 1);
   const expected = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z') + 86400000;
   assert.equal(db.sqlite.prepare('SELECT retry_at FROM ai_circuits').get().retry_at, expected);

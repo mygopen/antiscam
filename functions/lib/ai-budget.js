@@ -1,3 +1,5 @@
+import { freeAiConfirmed } from './ai-policy.js';
+
 export const RESERVE_SQL = `INSERT INTO ai_requests
   (id, provider, model, day, started_at, lease_until, reserved, status)
   SELECT ?, ?, ?, ?, ?, ?, ?, 'running'
@@ -29,27 +31,38 @@ export function classifyAiError(error) {
 
 // Reservations are atomic across isolates. Failed/timeout requests keep their budget.
 export async function runBudgetedAi(env, { provider, model, reserve, run, timeoutMs = 20000 }) {
-  if (!['cloudflare', 'gemini'].includes(provider) || !Number.isSafeInteger(reserve) || reserve <= 0) return { ok: false, reason: 'invalid_budget' };
+  if (provider !== 'cloudflare' || !Number.isSafeInteger(reserve) || reserve <= 0) return { ok: false, reason: 'invalid_budget' };
+  if (!freeAiConfirmed(env)) return { ok: false, reason: 'free_plan_unconfirmed' };
   if (!env.AI_BUDGET) return { ok: false, reason: 'budget_unavailable' };
-  if (provider === 'gemini' && env.GEMINI_FREE_TIER_CONFIRMED !== 'true') return { ok: false, reason: 'free_tier_unconfirmed' };
   const now = Date.now();
   const id = crypto.randomUUID();
   const day = quotaDay(provider, now);
-  const isCf = provider === 'cloudflare';
-  const daily = isCf ? limit(env.AI_DAILY_NEURONS, 8000, 8000) : limit(env.GEMINI_DAILY_REQUESTS, 20, 100);
-  const rpm = isCf ? 10 : limit(env.GEMINI_RPM, 2, 10);
-  const slots = isCf ? 2 : 1;
+  const daily = limit(env.AI_DAILY_NEURONS, 8000, 8000);
+  if (!daily) return { ok: false, reason: 'configuration' };
+  const rpm = 10;
+  const slots = 2;
   let admitted;
   try {
     admitted = await env.AI_BUDGET.prepare(RESERVE_SQL).bind(
       id, provider, model, day, now, now + 300000, reserve,
-      provider, day, reserve, daily, provider, day, isCf ? 500 : daily,
+      provider, day, reserve, daily, provider, day, 500,
       provider, now, slots, provider, now - 60000, rpm, provider, now
     ).first();
   } catch {
     return { ok: false, reason: 'budget_unavailable' };
   }
-  if (!admitted) return { ok: false, reason: 'budget_or_rate_limit' };
+  if (!admitted) {
+    // Diagnostic read only: never retry admission after the atomic denial.
+    try {
+      const usage = await env.AI_BUDGET.prepare(`SELECT COALESCE(SUM(reserved), 0) AS reserved,
+        COUNT(*) AS requests, COALESCE(MAX(CASE WHEN status = 'quota' THEN 1 ELSE 0 END), 0) AS quota
+        FROM ai_requests WHERE provider = ? AND day = ?`).bind(provider, day).first();
+      if (!usage) return { ok: false, reason: 'budget_unavailable' };
+      const reason = usage.quota ? 'quota' : usage.reserved + reserve > daily || usage.requests >= 500
+        ? 'daily_budget_exhausted' : 'busy';
+      return { ok: false, reason };
+    } catch { return { ok: false, reason: 'budget_unavailable' }; }
+  }
 
   const controller = new AbortController();
   let timer;
@@ -82,9 +95,9 @@ export async function runBudgetedAi(env, { provider, model, reserve, run, timeou
     )];
     if (reason !== 'ok') statements.push(env.AI_BUDGET.prepare(`INSERT INTO ai_circuits (provider, retry_at)
       VALUES (?, ?) ON CONFLICT(provider) DO UPDATE SET retry_at = MAX(retry_at, excluded.retry_at)`)
-      .bind(provider, reason === 'quota' && isCf
+      .bind(provider, reason === 'quota'
         ? Date.parse(`${day}T00:00:00Z`) + 86400000
-        : Date.now() + (reason === 'quota' ? 3600000 : 60000)));
+        : Date.now() + 60000));
     statements.push(env.AI_BUDGET.prepare('DELETE FROM ai_requests WHERE started_at < ?').bind(now - 30 * 86400000));
     await env.AI_BUDGET.batch(statements);
   } catch {

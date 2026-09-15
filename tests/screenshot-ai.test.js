@@ -12,6 +12,30 @@ const request = (blob = new Blob([Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 
     return new Request('https://example.com/api/cf-vision', { method: 'POST', body: form });
 };
 
+test('vision stops without verified Free plan and distinguishes quota, busy and recognition failure', async (t) => {
+    const { onRequestPost } = await load();
+    t.mock.method(globalThis, 'fetch', () => { assert.fail('no paid or fallback HTTP requests'); });
+    const db = createD1();
+    const base = { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db,
+        GEMINI_API_KEY: 'unused', GEMINI_FREE_TIER_CONFIRMED: 'true', AI: { run() { assert.fail(); } } };
+    const read = async env => (await onRequestPost({ request: request(), env })).json();
+    const unverified = await read({ ...base, AI_FREE_ONLY_CONFIRMED: 'false' });
+    assert.equal(unverified.status, 'free_plan_unconfirmed');
+    const exhausted = await read({ ...base, AI_DAILY_NEURONS: '649' });
+    assert.equal(exhausted.status, 'daily_budget_exhausted');
+    assert.match(exhausted.notice, /額度不足/);
+    db.sqlite.prepare('INSERT INTO ai_circuits (provider, retry_at) VALUES (?, ?)').run('cloudflare', Date.now() + 60000);
+    const busy = await read(base);
+    assert.equal(busy.status, 'busy'); assert.match(busy.notice, /忙碌/);
+    db.sqlite.exec('DELETE FROM ai_circuits');
+    const invalid = await read({ ...base, AI: { run: async () => ({ response: 'broken json' }) } });
+    assert.equal(invalid.status, 'invalid_output'); assert.match(invalid.notice, /辨識失敗/);
+    for (const result of [unverified, exhausted, busy, invalid]) {
+        assert.equal(result.risk, 'unknown'); assert.equal(result.attempts.length, 1);
+    }
+    db.sqlite.close();
+});
+
 test('malformed, truncated, empty and contradictory vision results are unknown', async () => {
     const { parseVisionResult, buildReport } = await load();
     for (const raw of ['', 'safe', '{"risk":"low"}', valid({ risk: 'none' }), valid({ signals: ['none'] }), valid({ confidence: 0.79 }), valid({ readable: false })]) {
@@ -35,16 +59,9 @@ test('official and suspicious suffixes do not override image evidence', async ()
     assert.equal(parseVisionResult(valid({ risk: 'none', signals: ['none'], urls: ['https://example.eu.cc'] })).risk, 'none');
 });
 
-test('Gemini boundary accepts only fixed enums, never private OCR, images or URLs', async () => {
-    const { geminiSignalPayload } = await load();
-    assert.deepEqual(geminiSignalPayload({ signals: ['otp_request', 'private account 123456'], analysis: 'private text', urls: ['https://private.example'] }), { signals: ['otp_request'] });
-    assert.equal(geminiSignalPayload({ signals: ['private'] }), null);
-    assert.equal(geminiSignalPayload({ signals: ['none'] }), null);
-});
-
 test('vision endpoint fails closed without budget binding and rejects disguised uploads', async () => {
     const { onRequestPost } = await load();
-    const response = await onRequestPost({ request: request(), env: { AI: { run() { assert.fail(); } } } });
+    const response = await onRequestPost({ request: request(), env: { AI_FREE_ONLY_CONFIRMED: 'true', AI: { run() { assert.fail(); } } } });
     const data = await response.json();
     assert.equal(data.risk, 'unknown');
     assert.equal(data.status, 'budget_unavailable');
@@ -57,7 +74,7 @@ test('vision endpoint uses one model and preserves high image risk beside offici
     const { onRequestPost, VISION_MODEL } = await load();
     const db = createD1();
     let calls = 0;
-    const response = await onRequestPost({ request: request(), env: { AI_BUDGET: db, GEMINI_API_KEY: 'unused', AI: {
+    const response = await onRequestPost({ request: request(), env: { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db, GEMINI_API_KEY: 'unused', AI: {
         async run(model, payload) { calls++; assert.equal(model, VISION_MODEL); assert.match(payload.messages[1].content[1].image_url.url, /^data:image\/png;base64,/); return { response: valid({ urls: ['https://hs.kcg.gov.tw'] }) }; }
     } } });
     const data = await response.json();
@@ -68,19 +85,16 @@ test('vision endpoint uses one model and preserves high image risk beside offici
     db.sqlite.close();
 });
 
-test('Gemini fallback transmits anonymized labels only and never uses Pro', async (t) => {
+test('uncertain images never fall back to Gemini even if its legacy settings are enabled', async (t) => {
     const { onRequestPost } = await load();
     const db = createD1();
-    t.mock.method(globalThis, 'fetch', async (url, options) => {
-        assert.match(url, /gemini-2\.5-flash:generateContent$/);
-        assert.doesNotMatch(options.body, /private|123456|inlineData|image|https:/);
-        assert.match(options.body, /otp_request/);
-        return Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ risk: 'high', analysis: '勿提供驗證碼。', advice: '請查證。' }) }] } }] });
-    });
-    const data = await (await onRequestPost({ request: request(), env: { AI_BUDGET: db, GEMINI_API_KEY: 'test-key', GEMINI_FREE_TIER_CONFIRMED: 'true', AI: {
+    t.mock.method(globalThis, 'fetch', () => { assert.fail('no fallback requests'); });
+    const data = await (await onRequestPost({ request: request(), env: { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db, GEMINI_API_KEY: 'test-key', GEMINI_FREE_TIER_CONFIRMED: 'true', AI: {
         run: async () => ({ response: valid({ risk: 'unknown', analysis: 'private 123456', urls: ['https://private.example'] }) })
     } } })).json();
-    assert.equal(data.provider, 'gemini'); assert.equal(data.risk, 'high');
+    assert.equal(data.provider, 'cloudflare'); assert.equal(data.risk, 'unknown');
+    assert.equal(data.attempts.length, 1);
+    assert.match(data.notice, /無法確認安全/);
     db.sqlite.close();
 });
 
@@ -156,6 +170,37 @@ test('manual AI review cannot erase high or unresolved local evidence', () => {
     assert.equal(helpers.preserveLocalScreenshotReport(high, low), high);
     assert.equal(helpers.preserveLocalScreenshotReport(unresolved, low), unresolved);
     assert.equal(helpers.preserveLocalScreenshotReport(unresolved, high), high);
+    for (const status of ['quota', 'daily_budget_exhausted', 'busy', 'invalid_output', 'uncertain', 'timeout', 'free_plan_unconfirmed']) {
+        assert.equal(helpers.preserveLocalScreenshotReport(high, low, status), high);
+        assert.equal(helpers.preserveLocalScreenshotReport(unresolved, low, status), unresolved);
+    }
+});
+
+test('manual review failure retains OCR URLs, report and previous scan with a separate notice', async () => {
+    const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
+    const start = app.indexOf('const handleImageUpload =');
+    const source = app.slice(start, app.indexOf('\n            const [url,', start));
+    const helpers = browserHelpers();
+    for (const status of ['quota', 'daily_budget_exhausted', 'busy', 'invalid_output', 'uncertain']) {
+        const previous = '⚠️ 風險：高風險\n原有郵件證據';
+        let report, urls, notice;
+        const context = {
+            screenshotUrls: ['https://example.com/Original'], aiReport: previous, uploadedImageUrl: null,
+            URL: { createObjectURL: () => 'blob:local' },
+            setResult() { assert.fail('must retain previous URL report'); },
+            setAiReport(value) { report = value; }, setScreenshotUrls(value) { urls = value; },
+            setError(value) { notice = value; }, setScreenshotSource() {}, setScreenshotFile() {},
+            setIsImageAnalyzing() {}, setLoadingMessage() {}, setUploadedImageUrl() {},
+            preserveLocalScreenshotReport: helpers.preserveLocalScreenshotReport,
+            requestScreenshotAnalysis: async () => ({ risk: 'unknown', status, report: '無法判定', notice: `notice:${status}` }),
+            handleScan() { assert.fail('must not rescan after failed review'); }
+        };
+        vm.runInNewContext(source + '\nthis.upload = handleImageUpload;', context);
+        await context.upload({ target: { files: [{ size: 100 }], value: '' } }, true);
+        assert.equal(report, previous);
+        assert.deepEqual(Array.from(urls), ['https://example.com/Original']);
+        assert.equal(notice, `notice:${status}`);
+    }
 });
 
 test('actual chat upload handler keeps high and unknown reports local while scanning URLs', async () => {
