@@ -78,6 +78,42 @@ test('Chinese phrase ranking supports reviewed topics and never returns arbitrar
     assert.deepEqual(search('https://evil.example/財政部/退稅/最終通知'), []);
 });
 
+test('early artwork vote requests recommend the reviewed article without inventing login evidence', () => {
+    // Synthetic OCR wrapping, including an unreadable preview and a split word.
+    const input = rows('麻煩你了\n一天可以投票，請支持\n謝謝\n確定是這個作\n品\npreview\nart\nimage\n創意繪畫比賽');
+    for (const i of [5, 6, 7]) input[i].confidence = 25;
+    const result = RuntimeSearch.search(input, { now });
+    assert.equal(result[0]?.url, 'https://www.mygopen.com/2026/08/vote-scam.html');
+    assert.deepEqual(result[0].reasons, ['投票邀請', '作品或繪畫比賽', '請託幫忙']);
+    assert.equal(EmailRisk.assess(input).risk, 'unknown');
+});
+
+test('early vote recommendation requires all three nearby readable concepts', () => {
+    for (const text of ['投票', '創意繪畫比賽', '麻煩你幫我投票', '投票支持作品', '麻煩你看看我的作品']) {
+        assert.ok(!search(text).some(a => a.id === 'vote-account'));
+    }
+    const input = rows('麻煩你投票\nunreadable\n作品');
+    input[1].confidence = 20;
+    assert.ok(!Search.search(input, { now }).some(a => a.id === 'vote-account'));
+    assert.ok(!search('麻煩你投票\n' + '其他內容\n'.repeat(8) + '作品').some(a => a.id === 'vote-account'));
+    assert.ok(!Search.search(rows('麻煩你投票支持作品').map(r => ({ ...r, confidence: 79 })), { now }).length);
+});
+
+test('normal contest requests can receive related reading but never become high risk from retrieval', () => {
+    const input = rows('學校公開繪畫比賽，麻煩你幫作品投票。無需登入或提供驗證碼。');
+    const before = EmailRisk.assess(input);
+    assert.ok(Search.search(input, { now }).some(a => a.id === 'vote-account'));
+    assert.notEqual(before.risk, 'high');
+    assert.deepEqual(EmailRisk.assess(input), before);
+});
+
+test('early vote alternatives retain source review and publication gates', () => {
+    const article = Search.articles.find(a => a.id === 'vote-account');
+    for (const override of [{ status: 'withdrawn' }, { reviewedAt: '2024-01-01' }, { publishedAt: '2027-01-01' }]) {
+        assert.deepEqual(search('麻煩你投票支持作品', { catalog: [{ ...article, ...override }] }), []);
+    }
+});
+
 test('repetition cannot raise concept scores and old/unreviewed/foreign URLs are excluded', () => {
     assert.equal(search(example)[0].score, search(example.repeat(2))[0].score);
     const article = Search.articles[0];

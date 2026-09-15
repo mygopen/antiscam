@@ -157,6 +157,14 @@ const server = http.createServer((req, res) => {
             assert.equal(await related.getByRole('link', { name: /收到公司高層/ }).count(), 0);
             await edit('無關旅遊照片');
             assert.equal(await related.count(), 0);
+            await page.evaluate(() => { window.__ocrText = '麻煩你了\n一天可以投票\n請支持這個作\n品'; });
+            await upload(); await assertPreview();
+            const voteArticle = 'https://www.mygopen.com/2026/08/vote-scam.html';
+            await related.locator(`a[href="${voteArticle}"]`).waitFor();
+            await related.getByText(/相似手法參考/).waitFor();
+            await page.getByText('⚠️ 風險：無法判定', { exact: true }).waitFor();
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-vote-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
             await page.evaluate(() => { window.__ocrText = '賣貨便實名認證，無法收款，請操作網銀並先匯款認證金。'; });
             await upload(); await assertPreview();
             await methods.getByRole('link', { name: '假買家騙賣家手法' }).waitFor();
@@ -195,6 +203,9 @@ const server = http.createServer((req, res) => {
             await page.evaluate(() => { window.__ocrText = '工作安排，請先建立一個LINE群組，請將QR Code回傳至此Email，先不要邀請其他人加入。'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await page.getByRole('region', { name: 'MyGoPen 相關查核' }).getByRole('link', { name: /收到公司高層/ }).waitFor();
+            await page.evaluate(() => { window.__ocrText = '麻煩你幫我的作品投票'; });
+            await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
+            await page.getByRole('region', { name: 'MyGoPen 相關查核' }).locator(`a[href="${voteArticle}"]`).waitFor();
             await page.evaluate(() => { window.__ocrText = '投資平台無法出金，請先繳納稅金。'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await methods.getByRole('link', { name: '假投資出金受阻手法' }).waitFor();

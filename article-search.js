@@ -54,7 +54,11 @@
                 // Behavior combinations require one contiguous readable segment.
                 for (const scope of isMethod ? segments.map(segment => [segment]) : [segments]) {
                     const matches = article.groups.filter(g => scope.some(text => g.terms.some(term => (isMethod ? affirmative : contains)(text, term))));
-                    if (!article.required.every(id => matches.some(g => g.id === id))) continue;
+                    const primaryMatch = article.required.every(id => matches.some(g => g.id === id));
+                    // Reviewed early-stage alternatives must coexist in one readable segment.
+                    const alternativeMatch = !isMethod && (article.alternativeRequired || []).some(required =>
+                        scope.some(text => required.every(id => article.groups.some(g => g.id === id && g.terms.some(term => contains(text, term))))));
+                    if (!primaryMatch && !alternativeMatch) continue;
                     // Count concepts once: keyword repetition cannot inflate rank.
                     const ruleMatch = !isMethod && article.rules.some(id => ruleIds.includes(id));
                     const score = matches.reduce((n, g) => n + g.weight, 0) + (ruleMatch ? 12 : 0);

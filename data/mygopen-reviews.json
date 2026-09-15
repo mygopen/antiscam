@@ -232,7 +232,28 @@
         "vote",
         "account"
       ],
+      "alternativeRequired": [
+        ["ballot", "artwork", "favor"]
+      ],
       "groups": [
+        {
+          "id": "ballot",
+          "label": "投票邀請",
+          "terms": ["投票", "投個票"],
+          "weight": 1
+        },
+        {
+          "id": "artwork",
+          "label": "作品或繪畫比賽",
+          "terms": ["作品", "繪畫比賽", "畫畫比賽"],
+          "weight": 1
+        },
+        {
+          "id": "favor",
+          "label": "請託幫忙",
+          "terms": ["麻煩你", "麻煩幫", "幫忙", "幫我", "幫他", "幫她", "投個票"],
+          "weight": 1
+        },
         {
           "id": "vote",
           "label": "比賽投票",

@@ -116,6 +116,18 @@ test('catalog validation rejects duplicate or malformed sources and weak concept
     assert.throws(() => compileCatalog({ schemaVersion: 1, articles: [review(), review()] }, { ...empty(), posts: [source()] }), /invalid_review/);
 });
 
+test('alternative concept gates require bounded distinct reviewed groups', () => {
+    assert.ok(validReview({ ...review(), alternativeRequired: [['group', 'qr']] }));
+    for (const alternativeRequired of [null, {}, [[]], [['group']], [['group', 'group']], [['group', 'missing']],
+        Array(5).fill(['group', 'qr'])]) {
+        const item = { ...review(), alternativeRequired };
+        assert.equal(validReview(item), false);
+        assert.throws(() => compileCatalog({ schemaVersion: 1, articles: [item] }, { ...empty(), posts: [source()] }), /invalid_review/);
+    }
+    const item = { ...review(), alternativeRequired: [['group', 'qr']], sourceHash: 'b'.repeat(64) };
+    assert.deepEqual(compileCatalog({ schemaVersion: 1, articles: [item] }, { ...empty(), posts: [source()] }), []);
+});
+
 test('approval requires explicit review and does not copy risk-rule IDs to new topics', () => {
     const r = { schemaVersion: 1, articles: [review()] }, c = { ...empty(), posts: [{ ...parseEntry(entry(2)), missingCount: 0 }] };
     const options = { url: c.posts[0].url, profile: 'sample', kind: 'scam', reviewer: 'editor', confirm: true };

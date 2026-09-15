@@ -35,6 +35,9 @@ function validReview(a) {
         /^[a-f0-9]{64}$/.test(a.sourceHash || '') && Array.isArray(a.required) && new Set(a.required).size >= 2 &&
         Array.isArray(a.rules) && a.rules.every(id => typeof id === 'string') && Array.isArray(a.groups) && a.groups.length <= 20 &&
         a.groups.every(g => g && typeof g === 'object') && new Set(a.groups.map(g => g.id)).size === a.groups.length && a.required.every(id => a.groups.some(g => g.id === id)) &&
+        (a.alternativeRequired === undefined || (Array.isArray(a.alternativeRequired) && a.alternativeRequired.length <= 4 &&
+            a.alternativeRequired.every(ids => Array.isArray(ids) && ids.length >= 2 && ids.length <= 20 && new Set(ids).size === ids.length &&
+                ids.every(id => a.groups.some(g => g.id === id))))) &&
         a.groups.every(g => typeof g.id === 'string' && g.id.length > 0 && typeof g.label === 'string' && g.label.length > 0 && g.label.length <= 80 && Number.isFinite(g.weight) && g.weight > 0 && g.weight <= 10 &&
             Array.isArray(g.terms) && g.terms.length > 0 && g.terms.length <= 40 && g.terms.every(t => typeof t === 'string' && t.length >= 2 && t.length <= 80));
 }
