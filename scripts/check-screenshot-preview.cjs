@@ -27,14 +27,41 @@ const server = http.createServer((req, res) => {
             page.on('pageerror', error => errors.push(error.message));
             await page.addInitScript(() => {
                 window.jsQR = () => null;
-                window.Tesseract = { recognize: async () => ({ data: { text: '', confidence: 95 } }) };
+                window.__scans = [];
+                let library;
+                Object.defineProperty(window, 'ScanCore', {
+                    get: () => library,
+                    set(value) {
+                        const create = value.create;
+                        value.create = options => {
+                            const core = create(options);
+                            return { ...core, runRiskAndBrandScan: async (domain, url, whitelist, scanOptions) => {
+                                window.__scans.push({ url, allowCloudAi: scanOptions.allowCloudAi });
+                                return { scanData: { isInvalid: true, domain, riskScore: 0, checks: {}, details: {} }, skipAiBrandAnalysis: true };
+                            } };
+                        };
+                        library = value;
+                    }
+                });
+                window.__workers = 0;
+                window.Tesseract = { createWorker: async () => {
+                    window.__workers++;
+                    return {
+                        reinitialize: async () => {},
+                        terminate: async () => {},
+                        recognize: async () => {
+                            if (window.__hang) return new Promise(() => {});
+                            if (window.__fail) throw new Error('OCR unavailable');
+                            return { data: { text: window.__ocrText || '', confidence: 95 } };
+                        }
+                    };
+                } };
                 // Reproduce environments where a temporary preview URL is unavailable.
                 URL.createObjectURL = () => { throw new Error('Temporary URLs unavailable'); };
             });
-            await page.route('**/api/cf-vision', route => {
+            await page.route(/\/api\/(cf-vision|check-fake-brand|chat)(\?|$)/, route => {
                 aiCalls++;
-                return route.fulfill({ json: { status: 'quota', risk: 'unknown', urls: [],
-                    notice: '今日 AI 免費使用額度不足，已停止 AI。', report: '⚠️ 風險：無法判定' } });
+                return route.abort();
             });
             await page.goto(`http://127.0.0.1:${server.address().port}/`);
             const input = page.locator('#image-upload');
@@ -65,27 +92,68 @@ const server = http.createServer((req, res) => {
             };
             await upload(); await assertPreview();
             assert.equal(aiCalls, 0);
-            await page.getByRole('button', { name: 'AI 圖片複核', exact: true }).click();
-            await page.getByText('今日 AI 免費使用額度不足，已停止 AI。', { exact: true }).waitFor();
-            await assertPreview(); assert.equal(aiCalls, 1);
+            assert.equal(await page.getByRole('button', { name: 'AI 圖片複核', exact: true }).count(), 0);
+            const high = page.getByText('⚠️ 風險：高風險', { exact: true });
+            const edit = async text => {
+                await page.getByRole('button', { name: '檢視辨識文字', exact: true }).click();
+                await page.getByLabel('辨識文字（可修正）', { exact: true }).fill(text);
+                await page.getByRole('button', { name: '依修正文字重新判讀', exact: true }).click();
+            };
+            await edit('賣貨便賣家認證\n請先匯款新臺幣1000元');
+            await high.waitFor();
+            await edit('');
+            await high.waitFor();
+            await page.getByText('依使用者修正文字判讀', { exact: true }).waitFor();
+            await page.getByRole('button', { name: '裁切重新辨識', exact: true }).click();
+            await page.getByLabel('寬度 %', { exact: true }).fill('50');
+            assert.equal(await page.evaluate(() => document.querySelector('dialog').scrollWidth <= document.querySelector('dialog').clientWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-crop-${viewport.width}.png`), animations: 'disabled' });
+            await page.getByRole('button', { name: '裁切並重新辨識', exact: true }).click();
+            await page.waitForFunction(() => document.querySelector('img[alt="上傳的截圖"]')?.naturalWidth === 120);
+            await high.waitFor();
+            assert.equal(await page.evaluate(() => window.__workers), 1, 'reuse OCR worker');
+            await edit('https://example.com/Visible\nhttps://example.com/Second');
+            await page.getByRole('button', { name: 'https://example.com/Visible', exact: true }).click();
+            await page.waitForFunction(() => window.__scans.length === 1);
+            await high.waitFor();
+            await page.getByRole('button', { name: 'https://example.com/Second', exact: true }).click();
+            await page.waitForFunction(() => window.__scans.length === 2);
+            await page.getByRole('button', { name: '立即檢測', exact: true }).click();
+            await page.waitForFunction(() => window.__scans.length === 3);
+            await high.waitFor();
+            assert.ok((await page.evaluate(() => window.__scans)).every(scan => scan.allowCloudAi === false));
+            await page.evaluate(() => { window.__hang = true; });
+            await upload();
+            await page.getByRole('button', { name: '取消辨識', exact: true }).click();
+            await page.getByText('已取消文字辨識，未完成的內容不能判定為安全。', { exact: true }).waitFor();
+            await page.evaluate(() => { window.__hang = false; });
+            await upload(); await assertPreview();
+            await page.evaluate(() => { window.__fail = true; });
+            await upload(); await assertPreview();
+            await page.getByText('⚠️ 風險：無法判定', { exact: true }).waitFor();
+            await page.evaluate(() => { window.__fail = false; });
             // A missing createImageBitmap must not break the independent preview decoder.
             await page.evaluate(() => { window.createImageBitmap = undefined; });
             await upload(); await assertPreview();
             await input.setInputFiles({ name: 'broken.heic', mimeType: 'image/heic', buffer: Buffer.from('not an image') });
             await page.getByText(/圖片無法顯示，可能是格式不支援/).waitFor();
             await assertPreview(); // Keep the last valid preview on a failed replacement.
-            assert.equal(aiCalls, 1);
+            assert.equal(aiCalls, 0);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
             await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-preview-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
             await page.getByRole('button', { name: '開啟聊天小幫手' }).focus();
             await page.getByRole('button', { name: '開啟聊天小幫手' }).press('Enter');
             await page.getByRole('button', { name: '開始對話' }).click();
+            await page.evaluate(() => { window.__ocrText = 'eTag 帳戶代扣失敗\n寄件者: sender@upcmail.nl\n請登入服務平台\nhttps://example.com/Chat'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             const chatImage = page.locator('img[src^="data:image/png"]');
             await page.waitForFunction(() => document.querySelectorAll('img[src^="data:image/png"]').length === 2);
             assert.ok((await chatImage.evaluateAll(images => images.every(img => img.complete && img.naturalWidth === 240))));
+            await page.waitForFunction(() => window.__scans.some(scan => scan.url === 'https://example.com/Chat'));
+            assert.ok((await page.evaluate(() => window.__scans)).every(scan => scan.allowCloudAi === false));
+            assert.equal(aiCalls, 0);
             assert.deepEqual(errors, []);
-            console.log(`PASS ${viewport.width}px: thumbnail pixels, reupload, manual AI failure, missing bitmap API, corrupt format and chat preview; no extra AI.`);
+            console.log(`PASS ${viewport.width}px: thumbnail pixels, crop, edit, cancellation, unknown on OCR failure, missing bitmap API, corrupt format, main/chat URL scans; zero cloud AI.`);
             await page.close();
         }
     } finally { await browser.close(); server.close(); }

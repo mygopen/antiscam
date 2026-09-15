@@ -3,6 +3,27 @@ const assert = require('node:assert/strict');
 const { DOMParser } = require('linkedom');
 const { fixtureCore, createCore, policy } = require('./helpers/production-core.cjs');
 
+for (const shortLink of [false, true]) {
+    test(`screenshot scans never call brand AI, including resolved destinations: ${shortLink}`, async () => {
+        const { core, requests } = fixtureCore({ trace: {
+            resolvedDestination: true, redirectCount: 1, finalUrl: 'https://ordinary-example.com/Final', chain: []
+        } });
+        const domain = shortLink ? 'myppt.cc' : 'ordinary-example.com';
+        const result = await core.runRiskAndBrandScan(domain, `https://${domain}/example`, [], { allowCloudAi: false });
+        assert.equal(result.skipAiBrandAnalysis, true);
+        assert.equal(result.brandDataRes, null);
+        assert.ok(requests.length > 0, 'non-AI checks still run');
+        assert.equal(requests.some(url => /check-fake-brand|cf-vision|\/api\/chat/.test(url)), false);
+        if (shortLink) assert.equal(result.scanData.primaryDomain, 'ordinary-example.com');
+    });
+}
+
+test('ordinary typed URL scans keep existing brand AI behavior', async () => {
+    const { core, requests } = fixtureCore();
+    await core.runRiskAndBrandScan('ordinary-example.com', 'https://ordinary-example.com/');
+    assert.equal(requests.some(url => url.includes('/api/check-fake-brand')), true);
+});
+
 for (const path of ['/c310jT', '/c310jt', '/other']) {
     test(`MyPPT short code scope: ${path}`, async () => {
         const { core } = fixtureCore();

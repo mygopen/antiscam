@@ -4139,7 +4139,7 @@
                 normalizeHostname(targetDomain) === normalizeHostname(domain) ||
                 normalizeHostname(targetDomain).endsWith('.' + normalizeHostname(domain))
             );
-            const initialSkipBrandAnalysis = shouldSkipAiBrandAnalysis(targetDomain, currentWhitelist);
+            const initialSkipBrandAnalysis = scanOptions.allowCloudAi === false || shouldSkipAiBrandAnalysis(targetDomain, currentWhitelist);
             const fetchBrandAnalysis = (url) => withTimeout(
                 fetchJsonSafely(`/api/check-fake-brand?url=${encodeURIComponent(url)}`, null),
                 7000,
@@ -4172,7 +4172,7 @@
                 primaryHostname === normalizeHostname(domain) ||
                 primaryHostname.endsWith('.' + normalizeHostname(domain))
             );
-            const skipAiBrandAnalysis = scanData.unresolvedShortener === true ||
+            const skipAiBrandAnalysis = scanOptions.allowCloudAi === false || scanData.unresolvedShortener === true ||
                 shouldSkipAiBrandAnalysis(primaryHostname, currentWhitelist);
             const brandDataRes = (!scanData.isInvalid && !isSocialTarget && !skipAiBrandAnalysis)
                 ? await fetchBrandAnalysis(primaryUrl)

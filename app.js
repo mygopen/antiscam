@@ -387,7 +387,7 @@ const { useState, useEffect, useRef } = React;
                 return { content: replyText };
             };
 
-            const scanUrlForBot = async (targetUrl, contextText = '') => {
+            const scanUrlForBot = async (targetUrl, contextText = '', allowCloudAi = true) => {
                 const parsedInput = parseUserUrl(targetUrl);
                 if (!parsedInput.ok) {
                     const error = new Error('Invalid URL');
@@ -399,7 +399,8 @@ const { useState, useEffect, useRef } = React;
                 const sanitizedForRisk = sanitizeUrlForRiskScoring(urlObj.href);
                 const scanOptions = {
                     ...sanitizedForRisk,
-                    inputHadExplicitScheme: parsedInput.hasExplicitScheme
+                    inputHadExplicitScheme: parsedInput.hasExplicitScheme,
+                    allowCloudAi
                 };
                 const riskScoringUrl = sanitizedForRisk.href;
                 const { scanData, brandDataRes, skipAiBrandAnalysis } = await runRiskAndBrandScan(
@@ -416,7 +417,7 @@ const { useState, useEffect, useRef } = React;
 
                 if (scanData.isInvalid) {
                     setMessages(prev => [...prev, {
-                        role: 'assistant',
+                        role: 'assistant', localOnly: !allowCloudAi,
                         content: `【麥擱騙檢測報告】\n\n❌ 無法連結此網站\n\n阿麥查不到這個網址 (NXDOMAIN)，它可能已經失效或被封鎖了。但請注意，許多詐騙網址壽命都很短，請勿隨意點擊！`
                     }]);
                     return;
@@ -424,7 +425,7 @@ const { useState, useEffect, useRef } = React;
 
                 if (scanData.isSocialMedia) {
                     setMessages(prev => [...prev, {
-                        role: 'assistant',
+                        role: 'assistant', localOnly: !allowCloudAi,
                         content: `【麥擱騙檢測報告】\n風險評估：⚠️ 無法判斷內容\n\n這是社群平台，我們無法看到裡面的貼文，要多加小心留意！🦁`
                     }]);
                     return;
@@ -436,7 +437,7 @@ const { useState, useEffect, useRef } = React;
                 }
 
                 const reply = buildBotScanReply(scanData, brandDataRes, contextText);
-                setMessages(prev => [...prev, { role: 'assistant', ...reply }]);
+                setMessages(prev => [...prev, { role: 'assistant', localOnly: !allowCloudAi, ...reply }]);
             };
 
             const handleSend = async (e) => {
@@ -476,7 +477,7 @@ const { useState, useEffect, useRef } = React;
                         const res = await fetch('/api/chat', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ messages: newMessages.slice(-3) })
+                            body: JSON.stringify({ messages: serializeTextChatMessages(newMessages) })
                         });
                         const data = await res.json();
                         
@@ -500,21 +501,21 @@ const { useState, useEffect, useRef } = React;
 
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) {
-                    setMessages(prev => [...prev, { role: 'assistant', content: '❌ 圖片檔案過大 (超過3MB)，請裁切或壓縮後再傳給我喔！' }]);
+                    setMessages(prev => [...prev, { role: 'assistant', localOnly: true, content: '❌ 圖片檔案過大 (超過3MB)，請裁切或壓縮後再傳給我喔！' }]);
                     return;
                 }
 
                 let imagePreviewUrl;
                 try { imagePreviewUrl = await createScreenshotPreview(file); }
                 catch (error) {
-                    setMessages(prev => [...prev, { role: 'assistant', content: error.message }]);
+                    setMessages(prev => [...prev, { role: 'assistant', localOnly: true, content: error.message }]);
                     return;
                 }
-                setMessages(prev => [...prev, { role: 'user', content: '[傳送了一張圖片 📷]', imageUrl: imagePreviewUrl }]);
+                setMessages(prev => [...prev, { role: 'user', localOnly: true, content: '[傳送了一張圖片 📷]', imageUrl: imagePreviewUrl }]);
                 
                 // 👇 新增：截圖上傳時，也會顯示連線檢查中的貼圖
                 setMessages(prev => [...prev, { 
-                    role: 'assistant', 
+                    role: 'assistant', localOnly: true,
                     content: '收到圖片，正在檢查可讀取的內容與網址。',
                     sticker: 'https://ik.imagekit.io/mygopen/sticks/33.png'
                 }]);
@@ -522,12 +523,12 @@ const { useState, useEffect, useRef } = React;
 
                 try {
                     const local = await analyzeLocalScreenshot(file);
-                    setMessages(prev => [...prev, { role: 'assistant', content: localScreenshotReport(local.mail) }]);
+                    setMessages(prev => [...prev, { role: 'assistant', localOnly: true, content: localScreenshotReport(local.mail) }]);
                     for (const target of getScreenshotUrls(local.targets)) {
-                        await scanUrlForBot(target, '此為可見網址檢測，不能取代前面的內容警示，也不代表真正點擊目的地已確認。');
+                        await scanUrlForBot(target, '此為可見網址檢測，不能取代前面的內容警示，也不代表真正點擊目的地已確認。', false);
                     }
                 } catch (err) {
-                    setMessages(prev => [...prev, { role: 'assistant', content: `❌ 阿麥看不太清楚這張圖，分析失敗了：${err.message}` }]);
+                    setMessages(prev => [...prev, { role: 'assistant', localOnly: true, content: `❌ 阿麥看不太清楚這張圖，分析失敗了：${err.message}` }]);
                 } finally {
                     setIsTyping(false);
                 }
@@ -658,6 +659,69 @@ const { useState, useEffect, useRef } = React;
         // =========================================================================
         // 🛡️ 主程式 App 元件
         // =========================================================================
+        const ScreenshotEditor = ({ mode, src, text, onClose, onText, onCrop }) => {
+            const dialog = useRef(null);
+            const drag = useRef(null);
+            const [draft, setDraft] = useState(text);
+            const [crop, setCrop] = useState({ x: 0, y: 0, width: 1, height: 1 });
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+            useEffect(() => { dialog.current.showModal(); }, []);
+            const point = event => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+                    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+            };
+            const move = event => {
+                if (!drag.current) return;
+                const p = point(event), start = drag.current;
+                setCrop({ x: Math.min(p.x, start.x), y: Math.min(p.y, start.y),
+                    width: Math.abs(p.x - start.x), height: Math.abs(p.y - start.y) });
+            };
+            const updateCrop = (key, value) => {
+                const next = { ...crop, [key]: Math.max(0, Math.min(100, Number(value))) / 100 };
+                next.x = Math.min(next.x, 0.99); next.y = Math.min(next.y, 0.99);
+                next.width = Math.min(next.width, 1 - next.x);
+                next.height = Math.min(next.height, 1 - next.y);
+                setCrop(next);
+            };
+            const submitCrop = async () => {
+                setBusy(true); setError('');
+                try { const file = await cropScreenshot(src, crop); onClose(); await onCrop(file); }
+                catch (err) { setError(err.message); }
+                finally { setBusy(false); }
+            };
+            return <dialog ref={dialog} aria-labelledby="screenshot-editor-title" onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
+                className="m-auto w-[calc(100%-2rem)] max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg p-5 shadow-xl backdrop:bg-black/50">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                    <h3 id="screenshot-editor-title" className="text-lg font-bold">{mode === 'crop' ? '裁切截圖' : '辨識文字'}</h3>
+                    <button type="button" disabled={busy} onClick={onClose} title="關閉" aria-label="關閉編輯" className="p-2"><XCircle size={22} /></button>
+                </div>
+                {mode === 'crop' ? <>
+                    <div className="text-center">
+                        <div className="relative inline-block max-w-full touch-none select-none cursor-crosshair" aria-label="裁切範圍"
+                            onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = point(event); }}
+                            onPointerMove={move} onPointerUp={event => { move(event); drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+                            <img src={src} alt="待裁切截圖" draggable="false" className="block max-w-full max-h-[45vh] object-contain" />
+                            <div className="absolute border-2 border-red-600 bg-red-500/10 pointer-events-none" style={{ left: crop.x * 100 + '%', top: crop.y * 100 + '%', width: crop.width * 100 + '%', height: crop.height * 100 + '%' }} />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                        {[['x', '左側 %'], ['y', '上方 %'], ['width', '寬度 %'], ['height', '高度 %']].map(([key, label]) =>
+                            <label key={key} className="text-sm">{label}<input type="number" min={key === 'x' || key === 'y' ? 0 : 1} max={key === 'x' || key === 'y' ? 99 : 100}
+                                value={Math.round(crop[key] * 100)} onChange={event => updateCrop(key, event.target.value)}
+                                className="block w-full border border-gray-300 rounded p-2 mt-1" /></label>)}
+                    </div>
+                    {error && <p role="alert" className="text-red-700 text-sm mt-3">{error}</p>}
+                    <button type="button" disabled={busy || !crop.width || !crop.height} onClick={submitCrop} className="mt-4 flex items-center gap-2 bg-brand-red text-white rounded-lg px-4 py-2 disabled:opacity-50"><ImageIcon size={18} />裁切並重新辨識</button>
+                </> : <>
+                    <label htmlFor="screenshot-ocr-text" className="text-sm">辨識文字（可修正）</label>
+                    <textarea id="screenshot-ocr-text" maxLength={20000} value={draft} onChange={event => setDraft(event.target.value)} className="block w-full h-64 border border-gray-300 rounded p-3 mt-2 text-sm" />
+                    <button type="button" onClick={() => onText(draft)} className="mt-4 flex items-center gap-2 bg-brand-red text-white rounded-lg px-4 py-2"><Check size={18} />依修正文字重新判讀</button>
+                </>}
+            </dialog>;
+        };
+
         const TESSERACT_CDN_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
         let tesseractLoadPromise = null;
 
@@ -672,7 +736,7 @@ const { useState, useEffect, useRef } = React;
                 script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('Tesseract.js 載入失敗'));
                 script.onerror = () => reject(new Error('Tesseract.js 載入失敗'));
                 document.head.appendChild(script);
-            });
+            }).catch(error => { tesseractLoadPromise = null; throw error; });
 
             return tesseractLoadPromise;
         };
@@ -749,7 +813,7 @@ const { useState, useEffect, useRef } = React;
         const readScreenshotQr = async (file) => {
             let bitmap;
             try {
-                bitmap = await createImageBitmap(file);
+                bitmap = await decodeLocalImage(file);
                 if (bitmap.width * bitmap.height > 20000000) return [];
                 if (window.BarcodeDetector) {
                     try {
@@ -817,16 +881,101 @@ const { useState, useEffect, useRef } = React;
             return dataUrl;
         };
 
-        const analyzeLocalScreenshot = async (file, logger) => {
-            const bitmap = await createImageBitmap(file);
+        const decodeLocalImage = async file => {
+            if (typeof createImageBitmap === 'function') {
+                try { return await createImageBitmap(file); } catch { /* Try the browser image decoder. */ }
+            }
+            const src = await createScreenshotPreview(file);
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => { image.close = () => {}; resolve(image); };
+                image.onerror = () => reject(new Error('圖片無法解碼'));
+                image.src = src;
+            });
+        };
+
+        let ocrQueue = Promise.resolve();
+        let ocrWorker = null;
+        let ocrLanguage = '';
+        let ocrProgress = null;
+        const recognizeLocalImage = (input, language, logger, signal) => {
+            const task = ocrQueue.then(async () => {
+                signal?.throwIfAborted();
+                const engine = await loadTesseract();
+                signal?.throwIfAborted();
+                // A single worker and queue bound memory use across main/chat uploads.
+                if (!engine.createWorker) return engine.recognize(input, language, logger ? { logger } : {});
+                ocrProgress = logger;
+                if (!ocrWorker) { ocrWorker = await engine.createWorker(language, 1, { logger: m => ocrProgress?.(m) }); ocrLanguage = language; }
+                const worker = ocrWorker;
+                const stop = () => {
+                    if (ocrWorker === worker) { ocrWorker = null; ocrLanguage = ''; }
+                    void worker.terminate().catch(() => {});
+                };
+                if (signal?.aborted) { stop(); signal.throwIfAborted(); }
+                let abort;
+                const cancelled = new Promise((_, reject) => {
+                    abort = () => { stop(); reject(signal.reason); };
+                    signal?.addEventListener('abort', abort, { once: true });
+                });
+                try {
+                    const operation = (async () => {
+                        if (ocrLanguage !== language) { await worker.reinitialize(language); ocrLanguage = language; }
+                        signal?.throwIfAborted();
+                        return worker.recognize(input, {}, { text: true, blocks: true });
+                    })();
+                    // Terminating a worker need not settle its outstanding recognize promise.
+                    const result = await Promise.race([operation, cancelled]);
+                    signal?.throwIfAborted();
+                    return result;
+                } catch (error) { stop(); throw error; }
+                finally { signal?.removeEventListener('abort', abort); ocrProgress = null; }
+            });
+            ocrQueue = task.catch(() => {});
+            return task;
+        };
+
+        const serializeTextChatMessages = messages => messages
+            .filter(message => !message.localOnly && !message.imageUrl && ['user', 'assistant'].includes(message.role))
+            .slice(-3)
+            .map(({ role, content }) => ({ role, content: String(content || '') }));
+
+        const assessCorrectedScreenshotText = value => {
+            const text = String(value || '').slice(0, 20000);
+            // User-entered content is not verified OCR; the UI labels this provenance.
+            const lines = text.split('\n').map(text => ({ text, confidence: 100 }));
+            return { text, mail: window.EmailRisk?.assess(lines) || null,
+                targets: getScreenshotUrls(extractOcrTargets(text)) };
+        };
+
+        const cropScreenshot = async (src, crop) => {
+            if (![crop.x, crop.y, crop.width, crop.height].every(Number.isFinite) || crop.x < 0 || crop.y < 0 ||
+                crop.x >= 1 || crop.y >= 1 || crop.width <= 0 || crop.height <= 0) throw new Error('請選擇有效裁切範圍。');
+            const image = await new Promise((resolve, reject) => {
+                const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('圖片無法解碼')); img.src = src;
+            });
+            const x = Math.floor(crop.x * image.naturalWidth), y = Math.floor(crop.y * image.naturalHeight);
+            const width = Math.min(image.naturalWidth - x, Math.max(1, Math.round(crop.width * image.naturalWidth)));
+            const height = Math.min(image.naturalHeight - y, Math.max(1, Math.round(crop.height * image.naturalHeight)));
+            const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+            canvas.getContext('2d').drawImage(image, x, y, width, height, 0, 0, width, height);
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (!blob || blob.size > 3 * 1024 * 1024) throw new Error('裁切圖片仍超過 3MB，請縮小範圍。');
+            return new File([blob], 'cropped.png', { type: 'image/png' });
+        };
+
+        const analyzeLocalScreenshot = async (file, logger, signal) => {
+            signal?.throwIfAborted();
+            const bitmap = await decodeLocalImage(file);
             const oversized = bitmap.width * bitmap.height > 20000000;
             bitmap.close();
             if (oversized) throw new Error('圖片尺寸過大，請先裁切。');
             const targets = await readScreenshotQr(file);
             let mail = null;
+            let text = '';
+            let evidenceLines = [];
             try {
-                const engine = await loadTesseract();
-                const result = await engine.recognize(file, 'eng+chi_tra', logger ? { logger } : {});
+                const result = await recognizeLocalImage(file, 'eng+chi_tra', logger, signal);
                 const lines = (result?.data?.lines || String(result?.data?.text || '').split('\n').map(text => ({ text, confidence: result?.data?.confidence }))).map(line => ({ ...line }));
                 let retries = 0;
                 for (const line of lines) {
@@ -835,7 +984,7 @@ const { useState, useEffect, useRef } = React;
                     retries++;
                     let region;
                     try {
-                        region = await createImageBitmap(file);
+                        region = await decodeLocalImage(file);
                         const left = Math.max(0, line.bbox.x0 - 4), top = Math.max(0, line.bbox.y0 - 4);
                         const width = Math.min(region.width - left, line.bbox.x1 - left + 4), height = Math.min(region.height - top, line.bbox.y1 - top + 4);
                         if (width <= 0 || height <= 0 || width * height > 1000000) continue;
@@ -851,7 +1000,7 @@ const { useState, useEffect, useRef } = React;
                             pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value;
                         }
                         context.putImageData(pixels, 0, 0);
-                        const retry = await engine.recognize(canvas, 'eng');
+                        const retry = await recognizeLocalImage(canvas, 'eng', logger, signal);
                         const retryLines = retry?.data?.words?.length ? retry.data.words : retry?.data?.lines || [];
                         const candidates = window.EmailRisk.domainEvidence(retryLines);
                         const domains = [...new Set(candidates.map(item => item.domain))];
@@ -863,10 +1012,13 @@ const { useState, useEffect, useRef } = React;
                     finally { region?.close(); }
                 }
                 const ocrText = lines.map(line => window.EmailRisk?.normalizeOcrText(line.text) || line.text).join('\n');
+                text = ocrText.slice(0, 20000);
+                evidenceLines = lines;
                 if (result?.data?.confidence >= 80) targets.push(...getScreenshotUrls(extractOcrTargets(ocrText)));
                 mail = window.EmailRisk?.assess(lines) || null;
             } catch { /* QR results remain usable when OCR cannot load or recognize text. */ }
-            return { targets: dedupeOcrTargets(targets), mail };
+            signal?.throwIfAborted();
+            return { targets: dedupeOcrTargets(targets), mail, text, lines: evidenceLines };
         };
         const findLocalScreenshotTargets = async (file, logger) => (await analyzeLocalScreenshot(file, logger)).targets;
 
@@ -878,42 +1030,6 @@ const { useState, useEffect, useRef } = React;
             if (String(localReport || '').split('\n').some(line => line.trim() === '⚠️ 風險：高風險')) return localReport;
             if (String(localReport || '').includes('不能判定為安全') && !String(aiReport || '').split('\n').some(line => /^⚠️ 風險：(高風險|中風險)$/.test(line.trim()))) return localReport;
             return aiReport;
-        };
-
-        const screenshotRequests = new Map();
-        const requestScreenshotAnalysis = async (file) => {
-            if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) throw new Error('請使用 3MB 以下的 PNG、JPEG 或 WebP 圖片。');
-            const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
-            const cached = screenshotRequests.get(hash);
-            if (cached && Date.now() - cached.created < 300000) return cached.promise;
-            const promise = (async () => {
-                const bitmap = await createImageBitmap(file);
-                let blob;
-                try {
-                    if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 20000000) throw new Error('圖片尺寸過大，請先裁切。');
-                    const canvas = document.createElement('canvas');
-                    const scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
-                    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-                    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-                    const context = canvas.getContext('2d');
-                    context.fillStyle = '#ffffff';
-                    context.fillRect(0, 0, canvas.width, canvas.height);
-                    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-                    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-                    if (blob?.size > 3 * 1024 * 1024) blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-                    if (!blob || blob.size > 3 * 1024 * 1024) throw new Error('圖片壓縮後仍過大，請裁切後重試。');
-                } finally { bitmap.close(); }
-                const form = new FormData();
-                form.append('image', blob, blob.type === 'image/png' ? 'screenshot.png' : 'screenshot.jpg');
-                const response = await fetch('/api/cf-vision', { method: 'POST', body: form, signal: AbortSignal.timeout(50000) });
-                const data = await response.json();
-                if (!response.ok || typeof data.report !== 'string') throw new Error(data.error || '圖片分析暫時無法使用。');
-                if (data.risk === 'unknown') screenshotRequests.delete(hash);
-                return data;
-            })().catch(error => { screenshotRequests.delete(hash); throw error; });
-            if (screenshotRequests.size >= 16) screenshotRequests.delete(screenshotRequests.keys().next().value);
-            screenshotRequests.set(hash, { created: Date.now(), promise });
-            return promise;
         };
 
         const screenshotRiskStyle = (report) => {
@@ -931,6 +1047,10 @@ const { useState, useEffect, useRef } = React;
             const [screenshotSource, setScreenshotSource] = useState(null);
             const [screenshotUrls, setScreenshotUrls] = useState([]);
             const [screenshotFile, setScreenshotFile] = useState(null);
+            const [screenshotText, setScreenshotText] = useState('');
+            const [screenshotEditor, setScreenshotEditor] = useState(null);
+            const imageJobRef = useRef(null);
+            const screenshotEvidenceRef = useRef(null);
             const [brandAnalysis, setBrandAnalysis] = useState(null);
             const [isBrandAnalyzing, setIsBrandAnalyzing] = useState(false);
             const [loadingMessage, setLoadingMessage] = useState('分析中...');
@@ -947,86 +1067,63 @@ const { useState, useEffect, useRef } = React;
                 catch (err) { alert('複製失敗'); } document.body.removeChild(textArea);
             };
 
-            const handleImageUpload = async (e, forceAi = false) => {
+            const handleImageUpload = async (e, retainEvidence = false) => {
                 const file = e.target.files?.[0];
-                const pendingScreenshotUrls = forceAi ? [...screenshotUrls] : [];
-                const pendingContentReport = forceAi ? aiReport : null;
                 if (!file) return;
                 if (e.target.value !== undefined) e.target.value = '';
-                const MAX_FILE_SIZE = 3 * 1024 * 1024;
-                if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
                 let imagePreviewUrl;
                 try { imagePreviewUrl = await createScreenshotPreview(file); }
                 catch (error) { setError(error.message); return; }
-                if (!forceAi) setResult(null);
-                setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在檢查截圖內容與網址...');
+                imageJobRef.current?.abort();
+                const job = new AbortController();
+                imageJobRef.current = job;
+                if (!retainEvidence) screenshotEvidenceRef.current = null;
+                setResult(null); setAiReport(null); setScreenshotUrls([]); setScreenshotFile(file);
+                setScreenshotText(''); setScreenshotEditor(null); setError(''); setIsImageAnalyzing(true);
+                setLoadingMessage('正在本機辨識截圖...');
                 setUploadedImageUrl(imagePreviewUrl);
+                setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: '', source: 'ocr' });
                 try {
-                    if (!forceAi) try {
-                        const local = await analyzeLocalScreenshot(file, (m) => {
-                                if (m.status === 'recognizing text' && typeof m.progress === 'number') {
-                                    setLoadingMessage(`正在辨識截圖網址... ${Math.round(m.progress * 100)}%`);
-                                }
-                        });
-                        const ocrTargets = local.targets;
-                        const primaryTarget = pickPrimaryOcrTarget(ocrTargets);
-                        const mailReport = localScreenshotReport(local.mail);
-                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: primaryTarget, source: 'ocr' });
-                        if (!primaryTarget) {
-                            setAiReport(mailReport);
-                            if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'not_found' });
-                            return;
+                    const local = await analyzeLocalScreenshot(file, m => {
+                        if (!job.signal.aborted && m.status === 'recognizing text' && typeof m.progress === 'number') {
+                            setLoadingMessage(`正在辨識截圖文字... ${Math.round(m.progress * 100)}%`);
                         }
+                    }, job.signal);
+                    if (job.signal.aborted) return;
+                    setScreenshotText(local.text || '');
+                    const report = preserveLocalScreenshotReport(screenshotEvidenceRef.current, localScreenshotReport(local.mail));
+                    screenshotEvidenceRef.current = report;
+                    setAiReport(report);
+                    const targets = getScreenshotUrls(local.targets);
+                    setScreenshotUrls(targets);
+                    const primaryTarget = pickPrimaryOcrTarget(targets);
+                    if (primaryTarget) {
+                        const source = { imageUrl: imagePreviewUrl, detectedUrl: primaryTarget, source: 'ocr', contentReport: report };
+                        setScreenshotSource(source); setUrl(primaryTarget); setIsImageAnalyzing(false);
+                        await handleScan(null, primaryTarget, source);
+                    }
+                } catch (error) {
+                    if (job.signal.aborted) return;
+                    setAiReport(screenshotEvidenceRef.current || localScreenshotReport(null));
+                    setError('文字辨識未完成，請裁切後重試或修正辨識文字。');
+                } finally {
+                    if (imageJobRef.current === job) { setIsImageAnalyzing(false); setLoadingMessage('分析中...'); }
+                }
+            };
 
-                        if (primaryTarget) {
-                            setLoadingMessage('已從截圖找到網址，正在進行網址風險檢測...');
-                            setUrl(primaryTarget);
-                            const ocrScreenshotSource = {
-                                imageUrl: imagePreviewUrl,
-                                detectedUrl: primaryTarget,
-                                source: 'ocr'
-                            };
-                            setScreenshotSource(ocrScreenshotSource);
-                            if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'success', 'target_type': primaryTarget.includes('@') ? 'email' : 'url' });
-                            setIsImageAnalyzing(false);
-                            setScreenshotUrls(getScreenshotUrls(ocrTargets));
-                            const report = mailReport;
-                            await handleScan(null, primaryTarget, { ...ocrScreenshotSource, contentReport: report });
-                            return;
-                        }
-                    } catch (ocrErr) {
-                        setAiReport(localScreenshotReport(null));
-                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: '', source: 'ocr' });
-                        if (typeof gtag === 'function') gtag('event', 'image_ocr_url_detected', { 'status': 'fallback' });
-                        return;
-                    }
+            const cancelImageRecognition = () => {
+                imageJobRef.current?.abort(); setIsImageAnalyzing(false);
+                setAiReport(screenshotEvidenceRef.current || localScreenshotReport(null));
+                setError('已取消文字辨識，未完成的內容不能判定為安全。');
+            };
 
-                    setLoadingMessage('正在進行圖片內容複核...');
-                    const data = await requestScreenshotAnalysis(file);
-                    const contentReport = preserveLocalScreenshotReport(pendingContentReport, data.report, data.status);
-                    setAiReport(contentReport);
-                    if (data.status !== 'ok') {
-                        setError(data.notice || 'AI 未完成辨識，保留原有判讀，無法因此確認安全。');
-                        setScreenshotUrls(pendingScreenshotUrls);
-                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: pendingScreenshotUrls[0] || '', source: 'ocr' });
-                        return;
-                    }
-                    setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: data.urls?.[0] || '', source: 'ai' });
-                    const detectedUrls = getScreenshotUrls([...(data.urls || []), ...pendingScreenshotUrls]);
-                    setScreenshotUrls(detectedUrls);
-                    if (detectedUrls.length) {
-                        setUrl(detectedUrls[0]);
-                        await handleScan(null, detectedUrls[0], { imageUrl: imagePreviewUrl, detectedUrl: detectedUrls[0], source: 'ai', contentReport });
-                    }
-                    if (typeof gtag === 'function') gtag('event', 'image_analyze', { 'status': 'success', 'file_size': file.size });
-                } catch (err) {
-                    if (pendingContentReport) {
-                        setAiReport(pendingContentReport);
-                        setScreenshotUrls(pendingScreenshotUrls);
-                        setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: pendingScreenshotUrls[0] || '', source: 'ocr' });
-                    }
-                    setError('圖片分析失敗：' + err.message);
-                } finally { setIsImageAnalyzing(false); setLoadingMessage('分析中...'); }
+            const applyScreenshotText = text => {
+                const corrected = assessCorrectedScreenshotText(text);
+                const report = preserveLocalScreenshotReport(screenshotEvidenceRef.current, localScreenshotReport(corrected.mail));
+                screenshotEvidenceRef.current = report;
+                setScreenshotText(corrected.text); setAiReport(report); setScreenshotUrls(corrected.targets);
+                setResult(null); setError(''); setScreenshotEditor(null);
+                setScreenshotSource({ imageUrl: uploadedImageUrl, detectedUrl: '', source: 'ocr', corrected: true });
             };
 
             const [url, setUrl] = useState('');
@@ -1087,7 +1184,9 @@ const { useState, useEffect, useRef } = React;
                 const sanitizedForRisk = sanitizeUrlForRiskScoring(parsedInput.href);
                 const scanOptions = {
                     ...sanitizedForRisk,
-                    inputHadExplicitScheme: parsedInput.hasExplicitScheme
+                    inputHadExplicitScheme: parsedInput.hasExplicitScheme,
+                    allowCloudAi: !(sourceContext || screenshotUrls.includes(parsedInput.href) ||
+                        screenshotSource?.detectedUrl === inputUrl)
                 };
                 const riskScoringUrl = sanitizedForRisk.href;
 
@@ -1098,10 +1197,11 @@ const { useState, useEffect, useRef } = React;
                     setLoading(true);
                     setResult(null);
                     setCopyStatus('idle');
-                    setAiReport(sourceContext?.contentReport || null);
-                    if (!sourceContext) setScreenshotUrls([]);
                     const matchedScreenshotSource = sourceContext ||
-                        (screenshotSource && screenshotSource.detectedUrl === inputUrl ? screenshotSource : null);
+                        (screenshotSource && (screenshotSource.detectedUrl === inputUrl || screenshotUrls.includes(parsedInput.href))
+                            ? { ...screenshotSource, detectedUrl: parsedInput.href, contentReport: aiReport } : null);
+                    setAiReport(matchedScreenshotSource?.contentReport || null);
+                    if (!matchedScreenshotSource) setScreenshotUrls([]);
                     setScreenshotSource(matchedScreenshotSource);
                     setIsImageAnalyzing(false);
                     setBrandAnalysis(null);
@@ -1273,7 +1373,11 @@ const { useState, useEffect, useRef } = React;
                 catch (err) { alert('複製失敗，請手動複製'); } document.body.removeChild(textArea);
             };
 
-            useEffect(() => { if (result && resultRef.current) setTimeout(() => resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }, [result]);
+            useEffect(() => {
+                if (!result) return;
+                const timer = setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+                return () => clearTimeout(timer);
+            }, [result]);
 
             return (
                 <div className="flex flex-col min-h-screen">
@@ -1313,7 +1417,7 @@ const { useState, useEffect, useRef } = React;
                                             id="image-upload"
                                             onChange={handleImageUpload}
                                         />
-                                        <button type="button" aria-label="上傳可疑截圖" disabled={loading || isImageAnalyzing} onClick={() => document.getElementById('image-upload').click()} className="p-2.5 bg-gray-100 hover:bg-brand-light text-gray-500 hover:text-brand-red rounded-lg cursor-pointer transition-all border border-gray-200 shadow-sm active:scale-95" title="上傳截圖讓 AI 幫你判斷">
+                                        <button type="button" aria-label="上傳可疑截圖" disabled={loading || isImageAnalyzing} onClick={() => document.getElementById('image-upload').click()} className="p-2.5 bg-gray-100 hover:bg-brand-light text-gray-500 hover:text-brand-red rounded-lg cursor-pointer transition-all border border-gray-200 shadow-sm active:scale-95" title="上傳截圖進行本機辨識">
                                             <Camera size={22} />
                                         </button>
                                     </div>
@@ -1343,33 +1447,43 @@ const { useState, useEffect, useRef } = React;
                         {!result && !loading && !isImageAnalyzing && !aiReport && <div className="grid grid-cols-4 gap-1 md:gap-4 mt-6 opacity-60"><div className="flex flex-col items-center text-center p-1 md:p-4"><div className="bg-blue-50 p-2 md:p-3 rounded-full text-blue-500 mb-2"><Github size={22} /></div><span className="text-[10px] md:text-xs font-medium text-gray-500">開源黑名單</span></div><div className="flex flex-col items-center text-center p-1 md:p-4"><div className="bg-purple-50 p-2 md:p-3 rounded-full text-purple-500 mb-2"><Server size={22} /></div><span className="text-[10px] md:text-xs font-medium text-gray-500">主機位置</span></div><div className="flex flex-col items-center text-center p-1 md:p-4"><div className="bg-orange-50 p-2 md:p-3 rounded-full text-orange-500 mb-2"><Activity size={22} /></div><span className="text-[10px] md:text-xs font-medium text-gray-500">流量異常</span></div><div className="flex flex-col items-center text-center p-1 md:p-4"><div className="bg-green-50 p-2 md:p-3 rounded-full text-green-500 mb-2"><Layout size={22} /></div><span className="text-[10px] md:text-xs font-medium text-gray-500">偽裝偵測</span></div></div>}
 
 
-                        {/* AI 圖片分析載入中狀態 */}
+                        {screenshotEditor && <ScreenshotEditor mode={screenshotEditor} src={uploadedImageUrl} text={screenshotText}
+                            onClose={() => setScreenshotEditor(null)} onText={applyScreenshotText}
+                            onCrop={file => handleImageUpload({ target: { files: [file] } }, true)} />}
+                        {/* 本機圖片辨識狀態 */}
                         {isImageAnalyzing && (
                             <div className="mt-12 text-center text-gray-500 animate-pulse">
                                 {/* [修改] 將 ImageIcon 改為 Camera */}
                                 <Camera size={48} className="mx-auto mb-3 opacity-50 text-brand-red" />
-                                <p className="font-bold text-lg md:text-xl text-gray-800">AI 正在仔細辨識截圖內容...</p>
-                                <p className="text-sm mt-2">這可能需要幾秒鐘的時間，請稍候</p>
+                                <p className="font-bold text-lg md:text-xl text-gray-800">正在本機辨識截圖內容...</p>
+                                <p className="text-sm mt-2">{loadingMessage}</p>
+                                <button type="button" onClick={cancelImageRecognition} className="mt-3 inline-flex items-center gap-2 px-3 py-2 border rounded-lg"><XCircle size={18} />取消辨識</button>
                             </div>
                         )}
 
-                        {/* AI 圖片分析完成結果 */}
+                        {/* 本機截圖分析結果 */}
                         {aiReport && !isImageAnalyzing && (
                             <div className="mt-8 animate-slide-up bg-white rounded-3xl shadow-soft p-6 md:p-8 border border-red-200 w-full">
                                 <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
                                     <ShieldAlert size={28} className="text-red-600" />
                                     <h3 className="text-xl md:text-2xl font-bold text-gray-800">截圖防詐分析報告</h3>
                                 </div>
-                                {screenshotFile && screenshotSource?.source === 'ocr' && (
-                                    <button type="button" disabled={loading} onClick={() => handleImageUpload({ target: { files: [screenshotFile] } }, true)} className="mb-4 inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50">
-                                        <Camera size={18} /> AI 圖片複核
-                                    </button>
+                                {screenshotFile && (
+                                    <div className="mb-4 flex flex-wrap gap-2">
+                                        <button type="button" disabled={loading} onClick={() => setScreenshotEditor('crop')} className="inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50">
+                                            <ImageIcon size={18} />裁切重新辨識
+                                        </button>
+                                        <button type="button" disabled={loading} onClick={() => setScreenshotEditor('text')} className="inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50">
+                                            <Type size={18} />檢視辨識文字
+                                        </button>
+                                    </div>
                                 )}
-                                {screenshotUrls.length > 1 && (
+                                {screenshotSource?.corrected && <p className="text-sm text-gray-600 mb-3">依使用者修正文字判讀</p>}
+                                {screenshotUrls.length > 0 && (
                                     <div className="mb-4 space-y-2">
                                         <h4 className="text-sm font-bold text-gray-700">截圖中的網址</h4>
                                         {screenshotUrls.map(target => (
-                                            <button type="button" key={target} disabled={loading} onClick={() => { setUrl(target); handleScan(null, target, { imageUrl: uploadedImageUrl, detectedUrl: target, source: screenshotSource?.source || 'ai', contentReport: aiReport }); }} className="w-full flex items-start gap-2 text-left text-sm text-blue-700 break-all border-b border-gray-100 py-2 disabled:opacity-50">
+                                            <button type="button" key={target} disabled={loading} onClick={() => { setUrl(target); handleScan(null, target, { imageUrl: uploadedImageUrl, detectedUrl: target, source: 'ocr', contentReport: aiReport }); }} className="w-full flex items-start gap-2 text-left text-sm text-blue-700 break-all border-b border-gray-100 py-2 disabled:opacity-50">
                                                 <Search size={16} className="flex-shrink-0 mt-1" /><span>{target}</span>
                                             </button>
                                         ))}

@@ -45,17 +45,29 @@ The result is **high risk, suspected impersonation**, not confirmed origin fraud
 
 ## Integration
 
-Main upload and chat execute local assessment and display a report whether high or unknown. **Neither automatically calls vision AI**, including when there is no URL or OCR fails. Main URL scanning still runs for extracted URLs without replacing the content warning. Distinct URLs on consecutive lines are not concatenated as if they were one wrapped URL.
+Main upload and chat execute local assessment and display a report whether high
+or unknown. Images never call cloud AI, automatically or manually. The old vision
+endpoint returns HTTP 410 before reading uploads. Screenshot-derived URLs use
+non-AI scans, including resolved shortlink destinations, without replacing
+content warnings. Distinct URLs on consecutive lines are not concatenated.
 
-Main upload retains an explicit **AI 圖片複核** action under the existing budget controls. No new provider, key, billing plan or paid fallback is enabled. Manual review preserves local high-risk evidence, unresolved action warnings and URL candidates, even if the model omits evidence or returns low risk. A failed manual review restores the local report. The chat screenshot flow stays local; ordinary text chat and URL-scanner behavior are otherwise unchanged.
+Main results support crop/re-OCR and editing recognized text. Original high-risk
+evidence survives either operation. User edits carry a provenance label.
+Image messages and local reports are excluded from later text-chat API history.
+Ordinary text chat retains the existing free-only gate and budget; no provider,
+key, paid fallback or billing change is enabled. See screenshot-ai.md.
 
-The vision prompt asks for at most ten relevant visible `mailLines` with confidence, retaining sender/recipient labels and masking email local parts. The same deterministic evaluator checks them. Model-extracted text/confidence can still be wrong; it is not authenticated evidence. Invalid/illegible model output cannot trigger the rule. The response exposes only the structured assessment, never `mailLines`; Gemini still receives fixed behavior enums only.
+Tests use de-identified text rather than the user's screenshots. Run npm test.
+They cover source roles, delegated senders, stale records, educational context,
+local-only main/chat flows, cancellation and evidence retention after edits.
+Pure legacy vision parsers remain for evidence regression testing, but are not
+used by the disabled endpoint. OCR accuracy still depends on image quality.
 
-The vision output cap is 1024 tokens to accommodate evidence. Its unchanged 650-Neuron reservation covers 128K input plus that output cap at the documented rates. No quota, billing or deployment configuration is changed by this feature.
-
-Tests use manually de-identified text, not the user's original screenshot. Run `npm test`. They cover the no-URL example, normal/legitimate delegated senders, mixed recipient labels, low-confidence lines, educational context, spoofed suffixes and stale records. Real OCR/model accuracy remains dependent on screenshot quality.
-
-Browser regression check (requires an installed Playwright package): `PLAYWRIGHT_MODULE=/absolute/path/to/playwright node scripts/check-screenshot-ui.cjs`. This uses synthetic OCR text, a blank generated image and mocked AI/URL responses. It verifies 1280px/390px rendering, no automatic vision calls for high/unknown/failed OCR, manual review preservation, multiple URL scans and no horizontal overflow. It is not a real-world OCR accuracy benchmark. The test server shuts down on completion.
+Browser regression check after building:
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright node scripts/check-screenshot-preview.cjs.
+It tests the production frontend at desktop/mobile widths with synthetic OCR,
+images and scan results. It asserts zero image-triggered AI calls, local editing,
+crop pixels and no overflow. It is not an OCR accuracy benchmark.
 
 ## Reference Maintenance
 

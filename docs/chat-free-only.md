@@ -5,7 +5,9 @@ Updated: 2026-09-15
 ## Production activation gate
 
 All inference defaults OFF. FAQ replies and non-AI URL scans remain available.
-The shared gate in `ai-policy.js` covers chat, vision and brand analysis.
+The shared gate in `ai-policy.js` covers chat and brand analysis.
+Image inference is independently disabled unconditionally; screenshots use
+local OCR and never reserve AI budget, including screenshot-derived URL scans.
 `AI_FREE_ONLY_CONFIRMED=true` may only be configured after an operator
 verifies the serving account uses Workers Free (platform-enforced stop at the
 free allocation) without paid AI Gateway credits/routes. This flag is an
@@ -26,7 +28,7 @@ upgrade, downgrade, prepaid credits or paid fallback was enabled. Preview
 environments remain closed unless independently configured after verification.
 The subscription API previously returned an authentication error, so this is
 a dated operator verification, not continuous billing-plan detection.
-The closed shared gate prevents chat, vision and brand inference. It does not
+The closed shared gate prevents chat and brand inference. It does not
 guarantee a zero invoice for unrelated Cloudflare services. Gemini fallback
 has been removed; stale Gemini secrets/flags cannot enable model calls.
 

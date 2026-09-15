@@ -3,37 +3,26 @@ const test = require('node:test');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const createD1 = require('./helpers/ai-d1.cjs');
 const load = () => import('../functions/api/cf-vision.js');
 const valid = (overrides = {}) => JSON.stringify({ risk: 'high', readable: true, confidence: 0.95,
     analysis: '要求提供驗證碼。', advice: '請勿提供驗證碼。', urls: [], primaryUrl: '', signals: ['otp_request'], ...overrides });
-const request = (blob = new Blob([Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])], { type: 'image/png' })) => {
-    const form = new FormData(); form.append('image', blob, 'private-name.png');
-    return new Request('https://example.com/api/cf-vision', { method: 'POST', body: form });
-};
-
-test('vision stops without verified Free plan and distinguishes quota, busy and recognition failure', async (t) => {
-    const { onRequestPost } = await load();
-    t.mock.method(globalThis, 'fetch', () => { assert.fail('no paid or fallback HTTP requests'); });
-    const db = createD1();
-    const base = { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db,
-        GEMINI_API_KEY: 'unused', GEMINI_FREE_TIER_CONFIRMED: 'true', AI: { run() { assert.fail(); } } };
-    const read = async env => (await onRequestPost({ request: request(), env })).json();
-    const unverified = await read({ ...base, AI_FREE_ONLY_CONFIRMED: 'false' });
-    assert.equal(unverified.status, 'free_plan_unconfirmed');
-    const exhausted = await read({ ...base, AI_DAILY_NEURONS: '649' });
-    assert.equal(exhausted.status, 'daily_budget_exhausted');
-    assert.match(exhausted.notice, /額度不足/);
-    db.sqlite.prepare('INSERT INTO ai_circuits (provider, retry_at) VALUES (?, ?)').run('cloudflare', Date.now() + 60000);
-    const busy = await read(base);
-    assert.equal(busy.status, 'busy'); assert.match(busy.notice, /忙碌/);
-    db.sqlite.exec('DELETE FROM ai_circuits');
-    const invalid = await read({ ...base, AI: { run: async () => ({ response: 'broken json' }) } });
-    assert.equal(invalid.status, 'invalid_output'); assert.match(invalid.notice, /辨識失敗/);
-    for (const result of [unverified, exhausted, busy, invalid]) {
-        assert.equal(result.risk, 'unknown'); assert.equal(result.attempts.length, 1);
+test('image API is closed for every method before reading uploads, env or calling any provider', async (t) => {
+    const { onRequest } = await load();
+    t.mock.method(globalThis, 'fetch', () => { assert.fail('no cloud request'); });
+    for (const method of ['GET', 'POST', 'PUT', 'OPTIONS']) {
+        const response = await onRequest({
+            request: { method, formData() { assert.fail('must not read image'); }, json() { assert.fail('must not read body'); } },
+            env: new Proxy({}, { get() { assert.fail('must not read any AI binding or secret'); } })
+        });
+        assert.equal(response.status, 410);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        const data = await response.json();
+        assert.equal(data.status, 'image_ai_disabled');
+        assert.equal(data.risk, 'unknown');
+        assert.equal(data.provider, null);
+        assert.deepEqual(data.attempts, []);
+        assert.deepEqual(data.urls, []);
     }
-    db.sqlite.close();
 });
 
 test('malformed, truncated, empty and contradictory vision results are unknown', async () => {
@@ -59,46 +48,7 @@ test('official and suspicious suffixes do not override image evidence', async ()
     assert.equal(parseVisionResult(valid({ risk: 'none', signals: ['none'], urls: ['https://example.eu.cc'] })).risk, 'none');
 });
 
-test('vision endpoint fails closed without budget binding and rejects disguised uploads', async () => {
-    const { onRequestPost } = await load();
-    const response = await onRequestPost({ request: request(), env: { AI_FREE_ONLY_CONFIRMED: 'true', AI: { run() { assert.fail(); } } } });
-    const data = await response.json();
-    assert.equal(data.risk, 'unknown');
-    assert.equal(data.status, 'budget_unavailable');
-    assert.equal(response.headers.get('cache-control'), 'no-store');
-    const invalid = await onRequestPost({ request: request(new Blob(['<script>bad</script>'], { type: 'image/png' })), env: {} });
-    assert.equal(invalid.status, 400);
-});
-
-test('vision endpoint uses one model and preserves high image risk beside official URLs', async () => {
-    const { onRequestPost, VISION_MODEL } = await load();
-    const db = createD1();
-    let calls = 0;
-    const response = await onRequestPost({ request: request(), env: { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db, GEMINI_API_KEY: 'unused', AI: {
-        async run(model, payload) { calls++; assert.equal(model, VISION_MODEL); assert.match(payload.messages[1].content[1].image_url.url, /^data:image\/png;base64,/); return { response: valid({ urls: ['https://hs.kcg.gov.tw'] }) }; }
-    } } });
-    const data = await response.json();
-    assert.equal(calls, 1); assert.equal(data.risk, 'high');
-    assert.equal(data.urlVerification, 'requires-main-scan');
-    assert.deepEqual(data.urls, ['https://hs.kcg.gov.tw/']);
-    assert.doesNotMatch(JSON.stringify(db.sqlite.prepare('SELECT * FROM ai_requests').all()), /private-name|hs.kcg|驗證碼/);
-    db.sqlite.close();
-});
-
-test('uncertain images never fall back to Gemini even if its legacy settings are enabled', async (t) => {
-    const { onRequestPost } = await load();
-    const db = createD1();
-    t.mock.method(globalThis, 'fetch', () => { assert.fail('no fallback requests'); });
-    const data = await (await onRequestPost({ request: request(), env: { AI_FREE_ONLY_CONFIRMED: 'true', AI_BUDGET: db, GEMINI_API_KEY: 'test-key', GEMINI_FREE_TIER_CONFIRMED: 'true', AI: {
-        run: async () => ({ response: valid({ risk: 'unknown', analysis: 'private 123456', urls: ['https://private.example'] }) })
-    } } })).json();
-    assert.equal(data.provider, 'cloudflare'); assert.equal(data.risk, 'unknown');
-    assert.equal(data.attempts.length, 1);
-    assert.match(data.notice, /無法確認安全/);
-    db.sqlite.close();
-});
-
-test('chat shares the vision budget and rejects injected system roles', async () => {
+test('chat retains the free-only budget gate and rejects injected system roles', async () => {
     const { onRequestPost } = await import('../functions/api/chat.js');
     const chatRequest = messages => new Request('https://example.com/api/chat', { method: 'POST', body: JSON.stringify({ messages }) });
     const env = { CHAT_AI_FREE_ONLY_CONFIRMED: 'true', AI: { run() { assert.fail(); } } };
@@ -111,7 +61,7 @@ function browserHelpers(extra = {}) {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const source = app.slice(app.indexOf('const TESSERACT_CDN_URL'), app.indexOf('const App ='));
     const context = { URL, Set, Map, console, ...extra };
-    vm.runInNewContext(`${source}\nthis.helpers = { createScreenshotPreview, getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, requestScreenshotAnalysis, localScreenshotReport, preserveLocalScreenshotReport };`, context);
+    vm.runInNewContext(`${source}\nthis.helpers = { serializeTextChatMessages, createScreenshotPreview, getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, recognizeLocalImage, assessCorrectedScreenshotText, cropScreenshot, localScreenshotReport, preserveLocalScreenshotReport };`, context);
     return context.helpers;
 }
 
@@ -125,6 +75,20 @@ test('preview verifies decoded dimensions and retains local data without object 
     assert.equal(await helpers.createScreenshotPreview({ size: 100, type: 'image/png' }), data);
     await assert.rejects(helpers.createScreenshotPreview({ size: 100, type: 'image/svg+xml' }), /不支援/);
     await assert.rejects(helpers.createScreenshotPreview({ size: 0, type: 'image/png' }), /3MB/);
+});
+
+test('later text chat never transmits screenshots or their local reports', () => {
+    const helpers = browserHelpers();
+    const messages = [
+        { role: 'user', content: '先前一般問題' },
+        { role: 'user', content: 'image', imageUrl: 'data:image/png;base64,private' },
+        { role: 'assistant', content: 'private OCR report', localOnly: true },
+        { role: 'assistant', content: 'private extracted URL report', localOnly: true },
+        { role: 'user', content: '如何預防詐騙', debug: 'excluded' }
+    ];
+    assert.deepEqual(JSON.parse(JSON.stringify(helpers.serializeTextChatMessages(messages))), [
+        { role: 'user', content: '先前一般問題' }, { role: 'user', content: '如何預防詐騙' }
+    ]);
 });
 
 test('unreadable, unsupported and oversized previews show errors instead of broken thumbnails', async () => {
@@ -184,7 +148,7 @@ test('local unknown and failed OCR produce neutral reports without needing an AI
     }
 });
 
-test('manual AI review cannot erase high or unresolved local evidence', () => {
+test('local reanalysis cannot erase high or unresolved original evidence', () => {
     const helpers = browserHelpers();
     const high = '⚠️ 風險：高風險\n請勿回傳OTP';
     const unresolved = '⚠️ 風險：無法判定\n寄件資訊不明，不能判定為安全';
@@ -198,32 +162,72 @@ test('manual AI review cannot erase high or unresolved local evidence', () => {
     }
 });
 
-test('manual review failure retains OCR URLs, report and previous scan with a separate notice', async () => {
+test('actual main upload uses local OCR and forwards only URLs into a non-AI image scan', async () => {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const start = app.indexOf('const handleImageUpload =');
     const source = app.slice(start, app.indexOf('\n            const [url,', start));
-    const helpers = browserHelpers();
-    for (const status of ['quota', 'daily_budget_exhausted', 'busy', 'invalid_output', 'uncertain']) {
-        const previous = '⚠️ 風險：高風險\n原有郵件證據';
-        let report, urls, notice;
-        const context = {
-            screenshotUrls: ['https://example.com/Original'], aiReport: previous, uploadedImageUrl: null,
-            URL: { createObjectURL: () => 'blob:local' },
-            createScreenshotPreview: async () => 'data:image/png;base64,test',
-            setResult() { assert.fail('must retain previous URL report'); },
-            setAiReport(value) { report = value; }, setScreenshotUrls(value) { urls = value; },
-            setError(value) { notice = value; }, setScreenshotSource() {}, setScreenshotFile() {},
-            setIsImageAnalyzing() {}, setLoadingMessage() {}, setUploadedImageUrl() {},
-            preserveLocalScreenshotReport: helpers.preserveLocalScreenshotReport,
-            requestScreenshotAnalysis: async () => ({ risk: 'unknown', status, report: '無法判定', notice: `notice:${status}` }),
-            handleScan() { assert.fail('must not rescan after failed review'); }
-        };
-        vm.runInNewContext(source + '\nthis.upload = handleImageUpload;', context);
-        await context.upload({ target: { files: [{ size: 100 }], value: '' } }, true);
-        assert.equal(report, previous);
-        assert.deepEqual(Array.from(urls), ['https://example.com/Original']);
-        assert.equal(notice, `notice:${status}`);
-    }
+    const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js') } });
+    let report;
+    const scans = [];
+    const context = {
+        ...helpers,
+        AbortController, imageJobRef: { current: null }, screenshotEvidenceRef: { current: null },
+        createScreenshotPreview: async () => 'data:image/png;base64,test',
+        setResult() {}, setAiReport(value) { report = value; }, setScreenshotUrls() {},
+        setError() {}, setScreenshotSource() {}, setScreenshotFile() {}, setScreenshotText() {}, setScreenshotEditor() {},
+        setIsImageAnalyzing() {}, setLoadingMessage() {}, setUploadedImageUrl() {}, setUrl() {},
+        analyzeLocalScreenshot: async () => ({ mail: null, text: '', targets: ['https://example.com/Original'] }),
+        pickPrimaryOcrTarget: values => values[0],
+        handleScan: async (...args) => scans.push(args)
+    };
+    vm.runInNewContext(source + '\nthis.upload = handleImageUpload;', context);
+    await context.upload({ target: { files: [{ size: 100 }], value: '' } });
+    assert.match(report, /不能判定為安全/);
+    assert.equal(scans.length, 1);
+    assert.equal(scans[0][1], 'https://example.com/Original');
+    assert.equal(scans[0][2].source, 'ocr');
+    assert.equal(scans[0][2].contentReport, report);
+    assert.doesNotMatch(app, /requestScreenshotAnalysis|fetch\(['"]\/api\/cf-vision|AI 圖片複核/);
+    assert.match(app, /allowCloudAi: !\(sourceContext/);
+});
+
+test('OCR worker is reused and cancellation releases the queue even when recognize never settles', async () => {
+    let created = 0, terminated = 0, languages = [];
+    const helpers = browserHelpers({ window: { Tesseract: {
+        async createWorker(language) {
+            created++; languages.push(language);
+            return {
+                reinitialize: async lang => languages.push(lang),
+                recognize: async input => input === 'hang' ? new Promise(() => {}) : { data: { text: input } },
+                terminate: async () => { terminated++; }
+            };
+        }
+    } } });
+    await helpers.recognizeLocalImage('first', 'eng+chi_tra');
+    await helpers.recognizeLocalImage('second', 'eng+chi_tra');
+    assert.equal(created, 1);
+    await helpers.recognizeLocalImage('crop', 'eng');
+    assert.deepEqual(languages, ['eng+chi_tra', 'eng']);
+    const controller = new AbortController();
+    const pending = helpers.recognizeLocalImage('hang', 'eng', null, controller.signal);
+    await new Promise(resolve => setImmediate(resolve));
+    controller.abort();
+    await assert.rejects(pending, { name: 'AbortError' });
+    const next = await helpers.recognizeLocalImage('next', 'eng');
+    assert.equal(next.data.text, 'next');
+    assert.equal(created, 2);
+    assert.ok(terminated >= 1);
+});
+
+test('corrected text is analyzed locally, bounded, and cannot clear previous high-risk evidence', () => {
+    const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js') } });
+    const result = helpers.assessCorrectedScreenshotText('eTag 帳戶代扣失敗\n寄件者: 遠通<sender@upcmail.nl>\n請登入服務平台\nhttps://example.com/Visible');
+    assert.equal(result.mail.risk, 'high');
+    assert.deepEqual(Array.from(result.targets), ['https://example.com/Visible']);
+    const high = helpers.localScreenshotReport(result.mail);
+    const empty = helpers.assessCorrectedScreenshotText('');
+    assert.equal(helpers.preserveLocalScreenshotReport(high, helpers.localScreenshotReport(empty.mail)), high);
+    assert.equal(helpers.assessCorrectedScreenshotText('x'.repeat(22000)).text.length, 20000);
 });
 
 test('actual chat upload handler keeps high and unknown reports local while scanning URLs', async () => {
@@ -242,12 +246,13 @@ test('actual chat upload handler keeps high and unknown reports local while scan
             setMessages: update => { messages = update(messages); }, setIsTyping() {},
             analyzeLocalScreenshot: async () => ({ mail, targets: ['https://example.com/Visible'] }),
             localScreenshotReport: helpers.localScreenshotReport, getScreenshotUrls: helpers.getScreenshotUrls,
-            scanUrlForBot: async target => { scans.push(target); },
+            scanUrlForBot: async (target, context, allowCloudAi) => { assert.equal(allowCloudAi, false); scans.push(target); },
             requestScreenshotAnalysis() { assert.fail('chat must not automatically call vision AI'); }
         };
         vm.runInNewContext(source + '\nthis.upload = handleBotImageUpload;', context);
         await context.upload({ target: { files: [{ size: 100 }], value: '' } });
         assert.ok(messages.some(message => message.content === emailRisk.report(mail)));
+        assert.ok(messages.every(message => message.localOnly === true));
         assert.deepEqual(scans, ['https://example.com/Visible']);
     }
 });
