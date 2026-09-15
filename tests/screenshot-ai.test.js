@@ -61,7 +61,7 @@ function browserHelpers(extra = {}) {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const source = app.slice(app.indexOf('const TESSERACT_CDN_URL'), app.indexOf('const App ='));
     const context = { URL, Set, Map, console, ...extra };
-    vm.runInNewContext(`${source}\nthis.helpers = { serializeTextChatMessages, createScreenshotPreview, getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, recognizeLocalImage, assessCorrectedScreenshotText, cropScreenshot, localScreenshotReport, preserveLocalScreenshotReport };`, context);
+    vm.runInNewContext(`${source}\nthis.helpers = { serializeTextChatMessages, screenshotReferencesText, createScreenshotPreview, getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, recognizeLocalImage, assessCorrectedScreenshotText, cropScreenshot, localScreenshotReport, preserveLocalScreenshotReport };`, context);
     return context.helpers;
 }
 
@@ -82,7 +82,7 @@ test('later text chat never transmits screenshots or their local reports', () =>
     const messages = [
         { role: 'user', content: '先前一般問題' },
         { role: 'user', content: 'image', imageUrl: 'data:image/png;base64,private' },
-        { role: 'assistant', content: 'private OCR report', localOnly: true },
+        { role: 'assistant', content: 'private OCR report', localOnly: true, methods: [{ title: 'private matched method', reasons: ['private OCR feature'] }] },
         { role: 'assistant', content: 'private extracted URL report', localOnly: true },
         { role: 'user', content: '如何預防詐騙', debug: 'excluded' }
     ];
@@ -174,7 +174,7 @@ test('actual main upload uses local OCR and forwards only URLs into a non-AI ima
         AbortController, imageJobRef: { current: null }, screenshotEvidenceRef: { current: null },
         createScreenshotPreview: async () => 'data:image/png;base64,test',
         setResult() {}, setAiReport(value) { report = value; }, setScreenshotUrls() {},
-        setError() {}, setScreenshotSource() {}, setScreenshotFile() {}, setScreenshotText() {}, setScreenshotArticles() {}, setScreenshotEditor() {},
+        setError() {}, setScreenshotSource() {}, setScreenshotFile() {}, setScreenshotText() {}, setScreenshotArticles() {}, setScreenshotMethods() {}, setScreenshotEditor() {},
         setIsImageAnalyzing() {}, setLoadingMessage() {}, setUploadedImageUrl() {}, setUrl() {},
         analyzeLocalScreenshot: async () => ({ mail: null, text: '', targets: ['https://example.com/Original'] }),
         pickPrimaryOcrTarget: values => values[0],
@@ -244,7 +244,7 @@ test('actual chat upload handler keeps high and unknown reports local while scan
             URL: { createObjectURL: () => 'blob:local-test' },
             createScreenshotPreview: async () => 'data:image/png;base64,test',
             setMessages: update => { messages = update(messages); }, setIsTyping() {},
-            analyzeLocalScreenshot: async () => ({ mail, targets: ['https://example.com/Visible'] }),
+            analyzeLocalScreenshot: async () => ({ mail, targets: ['https://example.com/Visible'], methods: [{ id: 'local-method' }] }),
             localScreenshotReport: helpers.localScreenshotReport, getScreenshotUrls: helpers.getScreenshotUrls,
             scanUrlForBot: async (target, context, allowCloudAi) => { assert.equal(allowCloudAi, false); scans.push(target); },
             requestScreenshotAnalysis() { assert.fail('chat must not automatically call vision AI'); }
@@ -253,6 +253,23 @@ test('actual chat upload handler keeps high and unknown reports local while scan
         await context.upload({ target: { files: [{ size: 100 }], value: '' } });
         assert.ok(messages.some(message => message.content === emailRisk.report(mail)));
         assert.ok(messages.every(message => message.localOnly === true));
+        assert.ok(messages.some(message => message.methods?.[0]?.id === 'local-method'));
         assert.deepEqual(scans, ['https://example.com/Visible']);
     }
+});
+
+test('local OCR, corrected text and copied references include reviewed methods but keep risk independent', async () => {
+    const search = require('../article-search.js');
+    const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
+        ArticleSearch: { ...search, searchMethods: lines => search.searchMethods(lines, { now: Date.parse('2026-09-15') }) },
+        BarcodeDetector: class { async detect() { return []; } }, jsQR: () => null,
+        Tesseract: { recognize: async () => ({ data: { confidence: 95, text: '家庭代工請寄送金融卡' } }) } },
+        createImageBitmap: async () => ({ width: 100, height: 100, close() {} }) });
+    const result = await helpers.analyzeLocalScreenshot({});
+    assert.equal(result.methods[0]?.id, '165-job-account');
+    const copy = helpers.screenshotReferencesText([], result.methods);
+    assert.match(copy, /不代表 165 已查證/);
+    assert.match(copy, /165dashboard.tw\/fraud-method\/325471681525059584/);
+    assert.match(copy, /索引核對日期/);
+    assert.equal(helpers.assessCorrectedScreenshotText('無關內容').methods.length, 0);
 });

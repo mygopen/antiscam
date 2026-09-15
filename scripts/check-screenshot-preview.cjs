@@ -27,6 +27,11 @@ const server = http.createServer((req, res) => {
             page.on('pageerror', error => errors.push(error.message));
             await page.addInitScript(() => {
                 window.jsQR = () => null;
+                document.execCommand = command => {
+                    if (command !== 'copy') return false;
+                    window.__copied = document.activeElement?.value;
+                    return true;
+                };
                 window.__scans = [];
                 let library;
                 Object.defineProperty(window, 'ScanCore', {
@@ -101,8 +106,14 @@ const server = http.createServer((req, res) => {
             };
             await edit('賣貨便賣家認證\n請先匯款新臺幣1000元');
             await high.waitFor();
+            const methods = page.getByRole('region', { name: '165 防詐手法提醒' });
+            await methods.getByRole('link', { name: '假買家騙賣家手法' }).waitFor();
+            await methods.getByText(/不代表 165 已查證/).waitFor();
+            await page.getByRole('button', { name: '一鍵複製檢測報告 (可貼至 LINE)', exact: true }).click();
+            assert.match(await page.evaluate(() => window.__copied), /165dashboard.tw\/fraud-method\/334882749754118144/);
             await edit('');
             await high.waitFor();
+            assert.equal(await methods.count(), 0, 'edited empty text clears method reminders');
             await page.getByText('依使用者修正文字判讀', { exact: true }).waitFor();
             await page.getByRole('button', { name: '裁切重新辨識', exact: true }).click();
             await page.getByLabel('寬度 %', { exact: true }).fill('50');
@@ -146,6 +157,22 @@ const server = http.createServer((req, res) => {
             assert.equal(await related.getByRole('link', { name: /收到公司高層/ }).count(), 0);
             await edit('無關旅遊照片');
             assert.equal(await related.count(), 0);
+            await page.evaluate(() => { window.__ocrText = '賣貨便實名認證，無法收款，請操作網銀並先匯款認證金。'; });
+            await upload(); await assertPreview();
+            await methods.getByRole('link', { name: '假買家騙賣家手法' }).waitFor();
+            await related.getByRole('link', { name: /賣貨便/ }).waitFor();
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-methods-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
+            await edit('家庭代工請勿寄送金融卡');
+            assert.equal(await methods.count(), 0, 'negative instruction abstains');
+            await edit('家庭代工請寄送金融卡');
+            await methods.getByRole('link', { name: '假求職與騙取金融帳戶手法' }).waitFor();
+            await page.evaluate(() => { window.__fail = true; });
+            await upload();
+            await methods.waitFor({ state: 'hidden' });
+            await page.getByText('⚠️ 風險：無法判定', { exact: true }).waitFor();
+            assert.equal(await methods.count(), 0, 'failed replacement OCR clears method reminders');
+            await page.evaluate(() => { window.__fail = false; });
             await page.evaluate(() => { window.__ocrText = ''; });
             // A missing createImageBitmap must not break the independent preview decoder.
             await page.evaluate(() => { window.createImageBitmap = undefined; });
@@ -168,10 +195,17 @@ const server = http.createServer((req, res) => {
             await page.evaluate(() => { window.__ocrText = '工作安排，請先建立一個LINE群組，請將QR Code回傳至此Email，先不要邀請其他人加入。'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await page.getByRole('region', { name: 'MyGoPen 相關查核' }).getByRole('link', { name: /收到公司高層/ }).waitFor();
+            await page.evaluate(() => { window.__ocrText = '投資平台無法出金，請先繳納稅金。'; });
+            await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
+            await methods.getByRole('link', { name: '假投資出金受阻手法' }).waitFor();
+            await methods.getByRole('link', { name: '假投資出金受阻手法' }).scrollIntoViewIfNeeded();
+            assert.equal(await methods.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-methods-chat-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
             assert.ok((await page.evaluate(() => window.__scans)).every(scan => scan.allowCloudAi === false));
             assert.equal(aiCalls, 0);
             assert.deepEqual(errors, []);
-            console.log(`PASS ${viewport.width}px: preview/crop/edit/cancel, main/chat article links, recommendation replacement/abstention, URL scans; zero cloud AI.`);
+            console.log(`PASS ${viewport.width}px: preview/crop/edit/cancel, main/chat article and 165 links, copy, replacement/abstention, URL scans; zero cloud AI.`);
             await page.close();
         }
     } finally { await browser.close(); server.close(); }

@@ -523,7 +523,7 @@ const { useState, useEffect, useRef } = React;
 
                 try {
                     const local = await analyzeLocalScreenshot(file);
-                    setMessages(prev => [...prev, { role: 'assistant', localOnly: true, content: localScreenshotReport(local.mail), articles: local.articles || [] }]);
+                    setMessages(prev => [...prev, { role: 'assistant', localOnly: true, content: localScreenshotReport(local.mail), articles: local.articles || [], methods: local.methods || [] }]);
                     for (const target of getScreenshotUrls(local.targets)) {
                         await scanUrlForBot(target, '此為可見網址檢測，不能取代前面的內容警示，也不代表真正點擊目的地已確認。', false);
                     }
@@ -590,6 +590,7 @@ const { useState, useEffect, useRef } = React;
                                                     {msg.content}
                                                 </div>
                                                 <RelatedArticles articles={msg.articles || []} />
+                                                <FraudMethodReminders methods={msg.methods || []} />
                                                 
                                                 {/* 👇 新增：如果這則訊息有夾帶貼圖，就會渲染在這裡 👇 */}
                                                 {msg.sticker && (
@@ -669,6 +670,21 @@ const { useState, useEffect, useRef } = React;
                         <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline break-words">{article.title}</a>
                         <p className="text-xs text-gray-600 mt-1 break-words">推薦依據：{article.reasons.join('、')}</p>
                         <p className="text-xs text-gray-500 mt-1">{article.kind === 'clarification' ? '澄清查核' : article.kind === 'scam' ? '詐騙手法' : '參考資料'} · 文章日期：{article.publishedAt}</p>
+                    </li>)}
+                </ul>
+            </section>
+        );
+
+        const FraudMethodReminders = ({ methods }) => !methods.length ? null : (
+            <section aria-label="165 防詐手法提醒" className="border-t border-gray-200 pt-4 mb-5 min-w-0">
+                <h4 className="font-bold text-base text-gray-800">165 防詐手法提醒</h4>
+                <p className="text-xs text-gray-600 mt-1">僅供手法參考，不代表 165 已查證這則訊息。</p>
+                <ul className="divide-y divide-gray-200">
+                    {methods.map(method => <li key={method.id} className="py-3 min-w-0">
+                        <a href={method.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline break-words">{method.title}</a>
+                        <p className="text-xs text-gray-600 mt-1 break-words">相似特徵：{method.reasons.join('、')}</p>
+                        <p className="text-sm text-gray-700 mt-2 break-words">{method.advice}</p>
+                        <p className="text-xs text-gray-500 mt-2 break-words">來源：165 打詐儀錶板 · 索引核對日期：{method.reviewedAt}</p>
                     </li>)}
                 </ul>
             </section>
@@ -960,12 +976,18 @@ const { useState, useEffect, useRef } = React;
             // User-entered content is not verified OCR; the UI labels this provenance.
             const lines = text.split('\n').map(text => ({ text, confidence: 100 }));
             const mail = window.EmailRisk?.assess(lines) || null;
-            return { text, mail, articles: findScreenshotArticles(lines, mail),
+            return { text, mail, articles: findScreenshotArticles(lines, mail), methods: findScreenshotMethods(lines),
                 targets: getScreenshotUrls(extractOcrTargets(text)) };
         };
 
         const findScreenshotArticles = (lines, mail) => window.ArticleSearch?.search(lines,
             { ruleIds: (mail?.ruleMatches || []).map(rule => rule.id) }) || [];
+        const findScreenshotMethods = lines => window.ArticleSearch?.searchMethods?.(lines) || [];
+
+        const screenshotReferencesText = (articles, methods) =>
+            (articles.length ? '\nMyGoPen 相關查核（相似手法，非本訊息驗證）：\n' + articles.map(a => `${a.title}\n${a.url}`).join('\n') : '') +
+            (methods.length ? '\n165 防詐手法提醒（不代表 165 已查證這則訊息）：\n' + methods.map(m =>
+                `${m.title}\n相似特徵：${m.reasons.join('、')}\n${m.advice}\n${m.url}\n索引核對日期：${m.reviewedAt}`).join('\n') : '');
 
         const cropScreenshot = async (src, crop) => {
             if (![crop.x, crop.y, crop.width, crop.height].every(Number.isFinite) || crop.x < 0 || crop.y < 0 ||
@@ -1038,7 +1060,7 @@ const { useState, useEffect, useRef } = React;
             } catch { /* QR results remain usable when OCR cannot load or recognize text. */ }
             signal?.throwIfAborted();
             return { targets: dedupeOcrTargets(targets), mail, text, lines: evidenceLines,
-                articles: findScreenshotArticles(evidenceLines, mail) };
+                articles: findScreenshotArticles(evidenceLines, mail), methods: findScreenshotMethods(evidenceLines) };
         };
         const findLocalScreenshotTargets = async (file, logger) => (await analyzeLocalScreenshot(file, logger)).targets;
 
@@ -1069,6 +1091,7 @@ const { useState, useEffect, useRef } = React;
             const [screenshotFile, setScreenshotFile] = useState(null);
             const [screenshotText, setScreenshotText] = useState('');
             const [screenshotArticles, setScreenshotArticles] = useState([]);
+            const [screenshotMethods, setScreenshotMethods] = useState([]);
             const [screenshotEditor, setScreenshotEditor] = useState(null);
             const imageJobRef = useRef(null);
             const screenshotEvidenceRef = useRef(null);
@@ -1080,7 +1103,7 @@ const { useState, useEffect, useRef } = React;
 
             const handleCopyAiReport = () => {
                 if (!aiReport) return;
-                const related = screenshotArticles.length ? '\nMyGoPen 相關查核（相似手法，非本訊息驗證）：\n' + screenshotArticles.map(article => `${article.title}\n${article.url}`).join('\n') : '';
+                const related = screenshotReferencesText(screenshotArticles, screenshotMethods);
                 const report = `【截圖防詐分析報告】\n----------------------\n${aiReport}${related}\n----------------------\n※ 截圖無法驗證真正寄件來源，請保持警覺，切勿隨意提供個資或匯款。`;
                 const textArea = document.createElement("textarea");
                 textArea.value = report; textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
@@ -1101,7 +1124,7 @@ const { useState, useEffect, useRef } = React;
                 imageJobRef.current = job;
                 if (!retainEvidence) screenshotEvidenceRef.current = null;
                 setResult(null); setAiReport(null); setScreenshotUrls([]); setScreenshotFile(file);
-                setScreenshotText(''); setScreenshotArticles([]); setScreenshotEditor(null); setError(''); setIsImageAnalyzing(true);
+                setScreenshotText(''); setScreenshotArticles([]); setScreenshotMethods([]); setScreenshotEditor(null); setError(''); setIsImageAnalyzing(true);
                 setLoadingMessage('正在本機辨識截圖...');
                 setUploadedImageUrl(imagePreviewUrl);
                 setScreenshotSource({ imageUrl: imagePreviewUrl, detectedUrl: '', source: 'ocr' });
@@ -1114,6 +1137,7 @@ const { useState, useEffect, useRef } = React;
                     if (job.signal.aborted) return;
                     setScreenshotText(local.text || '');
                     setScreenshotArticles(local.articles || []);
+                    setScreenshotMethods(local.methods || []);
                     const report = preserveLocalScreenshotReport(screenshotEvidenceRef.current, localScreenshotReport(local.mail));
                     screenshotEvidenceRef.current = report;
                     setAiReport(report);
@@ -1146,6 +1170,7 @@ const { useState, useEffect, useRef } = React;
                 screenshotEvidenceRef.current = report;
                 setScreenshotText(corrected.text); setAiReport(report); setScreenshotUrls(corrected.targets);
                 setScreenshotArticles(corrected.articles);
+                setScreenshotMethods(corrected.methods);
                 setResult(null); setError(''); setScreenshotEditor(null);
                 setScreenshotSource({ imageUrl: uploadedImageUrl, detectedUrl: '', source: 'ocr', corrected: true });
             };
@@ -1595,6 +1620,7 @@ const { useState, useEffect, useRef } = React;
                                 </div>
 
                                 <RelatedArticles articles={screenshotArticles} />
+                                <FraudMethodReminders methods={screenshotMethods} />
                                 {/* 👇 新增的綠色複製按鈕 */}
                                 <button
                                     onClick={handleCopyAiReport}

@@ -29,6 +29,9 @@ async function build() {
             const catalog = compileCatalog(JSON.parse(fs.readFileSync(path.join(root, 'data/mygopen-reviews.json'))),
                 JSON.parse(fs.readFileSync(path.join(root, 'data/mygopen-candidates.json'))));
             source = 'globalThis.MyGoPenCatalog = ' + JSON.stringify(catalog) + ';\n' + source;
+            const { compileMethods } = require('./lib/fraud-method-catalog.cjs');
+            const methods = compileMethods(JSON.parse(fs.readFileSync(path.join(root, 'data/fraud-method-reviews.json'))));
+            source = 'globalThis.FraudMethodCatalog = ' + JSON.stringify(methods) + ';\n' + source;
         }
         const result = await esbuild.transform(source, {
             loader: name === 'app' ? 'jsx' : 'js', target: 'es2020', minify: true, legalComments: 'inline'

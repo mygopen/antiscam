@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "methods": [
+    {
+      "id": "165-phishing",
+      "title": "釣魚連結手法",
+      "url": "https://165dashboard.tw/fraud-method/320803405264064512",
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "reviewer": "Codex/source-verified",
+      "advice": "請自行開啟原本使用的官方 App 或官網確認，不要透過陌生訊息中的連結提供帳戶、卡號或驗證碼。",
+      "required": ["pretext", "link", "sensitive"],
+      "groups": [
+        { "id": "pretext", "label": "帳戶、配送或款項異常通知", "weight": 3, "terms": ["帳戶凍結", "帳號凍結", "帳戶異常", "帳號異常", "帳戶已被凍結", "配送失敗", "包裹未送達", "退稅", "付款異常", "話費欠款", "電信欠費"] },
+        { "id": "link", "label": "要求透過連結處理", "weight": 3, "terms": ["點擊連結", "點擊以下連結", "點選連結", "點選下方連結", "開啟連結", "點此連結", "掃描QRCode", "掃描二維碼"] },
+        { "id": "sensitive", "label": "要求填入敏感資料", "weight": 4, "terms": ["輸入帳戶資料", "填寫帳戶資料", "確認帳戶資料", "輸入信用卡", "填寫信用卡", "提供卡號", "輸入卡號", "輸入密碼", "提供密碼", "輸入驗證碼", "提供驗證碼"] }
+      ]
+    },
+    {
+      "id": "165-fake-buyer",
+      "title": "假買家騙賣家手法",
+      "url": "https://165dashboard.tw/fraud-method/334882749754118144",
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "reviewer": "Codex/source-verified",
+      "advice": "請從原交易平台自行聯絡客服。不要為了收款、認證或解凍款項，依陌生人的指示轉帳或操作網銀。",
+      "required": ["blocked", "banking"],
+      "groups": [
+        { "id": "blocked", "label": "以收款受阻或賣場認證為由", "weight": 3, "terms": ["無法收款", "不能收款", "收款受阻", "款項凍結", "款項被凍結", "款項暫時被凍結", "賣場未認證", "賣家尚未認證", "賣場尚未簽署", "賣家認證", "賣貨便實名認證", "未完成連結收款帳戶", "開通收款"] },
+        { "id": "banking", "label": "要求操作網銀或付費認證", "weight": 4, "terms": ["操作網銀", "操作網路銀行", "打開網銀", "開啟網銀", "網銀確認餘額", "銀行帳戶做虛擬認證", "匯款認證", "匯款驗證", "認證金", "先匯款", "先轉帳", "轉帳驗證"] }
+      ]
+    },
+    {
+      "id": "165-job-account",
+      "title": "假求職與騙取金融帳戶手法",
+      "url": "https://165dashboard.tw/fraud-method/325471681525059584",
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "reviewer": "Codex/source-verified",
+      "advice": "請透過自行查得的公司聯絡方式核實職缺，不要寄出金融卡、提款卡或交付密碼，也不要代陌生人收轉款項。",
+      "required": ["job", "handover"],
+      "groups": [
+        { "id": "job", "label": "求職或家庭代工情境", "weight": 3, "terms": ["求職", "徵才", "應徵", "招聘", "家庭代工", "工作機會", "徵打字員", "兼職", "購買材料"] },
+        { "id": "handover", "label": "要求交付金融卡或密碼", "weight": 4, "terms": ["寄送金融卡", "寄送提款卡", "寄出金融卡", "寄出提款卡", "提供金融卡及密碼", "提供金融卡與密碼", "交付金融卡", "交付提款卡", "寄出存簿", "寄出存摺", "提供提款卡密碼", "金融卡寄到", "金融卡寄出", "提款卡放置物櫃"] }
+      ]
+    },
+    {
+      "id": "165-investment-fees",
+      "title": "假投資出金受阻手法",
+      "url": "https://165dashboard.tw/fraud-method/327303345054158848",
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "reviewer": "Codex/source-verified",
+      "advice": "請暫停追加款項，保留對話及交易紀錄，透過自行查得的金融機構聯絡方式或 165 專線查證。",
+      "required": ["investment", "withdrawal", "fee"],
+      "groups": [
+        { "id": "investment", "label": "投資或交易獲利情境", "weight": 3, "terms": ["投資", "交易所", "股票", "虛擬貨幣", "操盤", "獲利", "交易平台"] },
+        { "id": "withdrawal", "label": "提領或出金受阻", "weight": 3, "terms": ["無法出金", "不能出金", "出金需", "出金前", "無法提領", "不能提領", "提領前", "才能出金", "才能提領", "出金被凍結"] },
+        { "id": "fee", "label": "要求先繳額外費用", "weight": 4, "terms": ["先繳稅金", "先繳納稅金", "繳納自證金", "繳交擔保金", "繳納風險認證金", "先付保證金", "先繳保證金", "補繳保證金", "先支付解凍金", "先付解凍金", "先繳解凍金"] }
+      ]
+    },
+    {
+      "id": "165-fake-authority",
+      "title": "假冒檢警與公務機關手法",
+      "url": "https://165dashboard.tw/fraud-method/349094585076551680",
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "reviewer": "Codex/source-verified",
+      "advice": "先停止依對方指示交付款項或帳戶，保留訊息，另行撥打 165 或自行查得的機關電話確認，不要使用對方提供的轉接方式。",
+      "required": ["authority", "secrecy", "assets"],
+      "groups": [
+        { "id": "authority", "label": "聲稱司法或警察身分", "weight": 3, "terms": ["檢察官", "檢警", "警察", "法院", "刑事局", "地檢署"] },
+        { "id": "secrecy", "label": "要求保密或隔離求助", "weight": 3, "terms": ["偵查不公開", "不得告知他人", "不得告訴他人", "不能告訴家人", "不要告訴家人", "不得向他人透露", "不可告訴他人", "不能向他人透露", "會再犯洩密罪"] },
+        { "id": "assets", "label": "要求交付或監管資金帳戶", "weight": 4, "terms": ["匯款擔保金", "繳交存款", "交付存款", "交付帳戶", "交付金融卡", "監管帳戶", "帳戶監管", "法院集中保管", "匯入安全帳戶", "轉入安全帳戶", "匯款證明清白"] }
+      ]
+    }
+  ]
+}
