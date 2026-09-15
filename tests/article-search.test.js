@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const EmailRisk = require('../email-risk.js');
-const Search = require('../article-search.js');
+const RuntimeSearch = require('../article-search.js');
+// Retrieval fixtures remain testable when changed live sources are withheld.
+const fixtureCatalog = require('../data/mygopen-reviews.json').articles;
+const Search = { ...RuntimeSearch, articles: fixtureCatalog,
+    search: (rows, options) => RuntimeSearch.search(rows, { catalog: fixtureCatalog, ...options }) };
 const now = Date.parse('2026-09-15');
 const rows = text => text.split('\n').map(text => ({ text, confidence: 95 }));
 const example = '接下來有工作需要與你協調處理，請先建立一個 LINE 群組，並將邀請 QR Code 傳送至此 Email。先不要邀請其他人員加入，待我進群後，再安排相關工作事項，謝謝。';

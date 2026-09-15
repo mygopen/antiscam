@@ -23,7 +23,14 @@ async function build() {
         emit(name + '.js', fs.readFileSync(path.join(root, 'node_modules', name, 'umd', name + '.production.min.js')));
     }
     for (const name of ['app', 'risk-config', 'scan-policy', 'scan-core', 'email-risk', 'article-search']) {
-        const result = await esbuild.transform(fs.readFileSync(path.join(root, name + '.js'), 'utf8'), {
+        let source = fs.readFileSync(path.join(root, name + '.js'), 'utf8');
+        if (name === 'article-search') {
+            const { compileCatalog } = require('./lib/mygopen-catalog.cjs');
+            const catalog = compileCatalog(JSON.parse(fs.readFileSync(path.join(root, 'data/mygopen-reviews.json'))),
+                JSON.parse(fs.readFileSync(path.join(root, 'data/mygopen-candidates.json'))));
+            source = 'globalThis.MyGoPenCatalog = ' + JSON.stringify(catalog) + ';\n' + source;
+        }
+        const result = await esbuild.transform(source, {
             loader: name === 'app' ? 'jsx' : 'js', target: 'es2020', minify: true, legalComments: 'inline'
         });
         if (result.warnings.length) throw new Error(JSON.stringify(result.warnings));

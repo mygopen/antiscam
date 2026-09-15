@@ -10,9 +10,12 @@ phrase ranking with curated synonyms, OCR wrapping, proximity windows and
 deduplication. This is a bounded local catalog search, not a live search of
 all MyGoPen posts, not embedding retrieval, and not generative RAG.
 
-The catalog and matching logic live in article-search.js. Build emits a hashed
-local asset loaded before app.js. No search service, cloud model, vector store,
-login, new database, scheduled workflow or additional paid resource is used.
+The matching logic lives in article-search.js. Reviewed metadata lives in
+data/mygopen-reviews.json and public source snapshots in data/mygopen-candidates.json.
+Build emits only eligible reviewed records in a hashed local asset before app.js.
+No search service, cloud model, vector store, login or new database is used.
+A bounded GitHub Actions workflow discovers public articles for editorial review;
+it does not process user screenshots or auto-approve candidates.
 Do not pass raw OCR, screenshot data, result reports or search phrases to APIs.
 Existing screenshot URL checks remain independent and non-AI.
 
@@ -52,8 +55,9 @@ they are excluded from later text-chat requests by the existing serializer.
 Each entry needs a stable id, editorial display title, canonical article URL,
 publication date, review date, status, topic tags, associated rule IDs, required
 concept IDs and synonym groups with weights. Display titles may be shortened;
-they are not generated from the screenshot. Current records were checked against
-their published pages on the review date, not auto-ingested or user-submitted.
+they are not generated from the screenshot. Current reviewed records were checked
+against their published pages, not approved by ingestion or user submissions.
+See mygopen-article-sync.md for discovery, source fingerprints and review commands.
 
 To add/update a case:
 1. Read the original article and check corrections and factual scope.

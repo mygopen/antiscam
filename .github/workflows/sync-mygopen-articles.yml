@@ -1,0 +1,60 @@
+name: Sync MyGoPen Article Candidates
+
+on:
+  schedule:
+    - cron: '19 19 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: mygopen-article-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Do not consume potentially billable private-repository runner minutes.
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: codex/mygopen-article-sync
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resume candidate branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+            git checkout -b "$BRANCH" "origin/$BRANCH"
+            git merge origin/main --no-edit
+          else
+            git checkout -b "$BRANCH"
+          fi
+      - run: npm ci --ignore-scripts
+      - name: Sync bounded public feeds
+        run: npm run sync:mygopen-articles
+      - run: npm run build:verified
+      - name: Publish candidate changes for review
+        run: |
+          git add data/mygopen-candidates.json docs/mygopen-review-queue.md
+          if git diff --cached --quiet; then
+            echo "No candidate changes." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git commit -m "chore: refresh MyGoPen article review queue"
+          git push origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$BRANCH" --title "Review MyGoPen article candidates" --body "Public-feed candidates only. Review docs/mygopen-review-queue.md. New articles are not auto-approved and risk rules are unchanged. Source changes require renewed approval; merge only after reviewing the catalog diff." || {
+              echo "Candidate branch pushed, but PR creation needs repository permission. Open a PR from $BRANCH manually." >> "$GITHUB_STEP_SUMMARY"
+            }
+          fi
+          echo "Review branch: $BRANCH. No automatic merge or risk-rule changes." >> "$GITHUB_STEP_SUMMARY"

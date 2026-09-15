@@ -668,7 +668,7 @@ const { useState, useEffect, useRef } = React;
                     {articles.map(article => <li key={article.id} className="py-3 min-w-0">
                         <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-700 underline break-words">{article.title}</a>
                         <p className="text-xs text-gray-600 mt-1 break-words">推薦依據：{article.reasons.join('、')}</p>
-                        <p className="text-xs text-gray-500 mt-1">文章日期：{article.publishedAt}</p>
+                        <p className="text-xs text-gray-500 mt-1">{article.kind === 'clarification' ? '澄清查核' : article.kind === 'scam' ? '詐騙手法' : '參考資料'} · 文章日期：{article.publishedAt}</p>
                     </li>)}
                 </ul>
             </section>

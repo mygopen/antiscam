@@ -1,0 +1,351 @@
+{
+  "schemaVersion": 1,
+  "articles": [
+    {
+      "id": "work-group-qr",
+      "title": "收到公司高層 Email？要你建立 LINE 群組？詐團假冒！要求代墊費用騙匯款",
+      "url": "https://www.mygopen.com/2025/12/email-qrcode.html",
+      "publishedAt": "2025-12-13",
+      "tags": [
+        "Email",
+        "LINE",
+        "詐騙",
+        "詐騙集團",
+        "資安",
+        "資訊安全"
+      ],
+      "rules": [
+        "message-work-group-qr-v1"
+      ],
+      "required": [
+        "work",
+        "group",
+        "invite"
+      ],
+      "groups": [
+        {
+          "id": "work",
+          "label": "工作或主管情境",
+          "terms": [
+            "工作",
+            "主管",
+            "長官",
+            "公司",
+            "公務",
+            "老闆"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "group",
+          "label": "LINE 群組",
+          "terms": [
+            "LINE群組",
+            "LINE群聊",
+            "LINE群"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "invite",
+          "label": "邀請碼／QR Code",
+          "terms": [
+            "QRCode",
+            "二維碼",
+            "邀請碼"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "return",
+          "label": "回傳或寄送邀請",
+          "terms": [
+            "回傳",
+            "傳送至",
+            "轉寄",
+            "寄回",
+            "寄給"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "isolation",
+          "label": "暫不邀請其他人",
+          "terms": [
+            "不要邀請其他",
+            "別邀請其他",
+            "只有你",
+            "暫不邀請"
+          ],
+          "weight": 4
+        }
+      ],
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "kind": "scam",
+      "reviewer": "Codex/source-verified-migration",
+      "sourceHash": "1a16066152726dc832d45a370a3e3b6272d8bf744d40a0e01f393ab0cda42cbd"
+    },
+    {
+      "id": "tax-email",
+      "title": "北區國稅局寄來的退稅通知 Email？當心釣魚網站！",
+      "url": "https://www.mygopen.com/2026/06/tax-email.html",
+      "publishedAt": "2026-06-13",
+      "tags": [
+        "國稅局",
+        "詐騙",
+        "詐騙集團",
+        "釣魚網站"
+      ],
+      "rules": [],
+      "required": [
+        "tax",
+        "refund",
+        "action"
+      ],
+      "groups": [
+        {
+          "id": "tax",
+          "label": "稅務機關或所得稅",
+          "terms": [
+            "國稅局",
+            "財政部",
+            "所得稅",
+            "稅務入口網"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "refund",
+          "label": "退稅通知",
+          "terms": [
+            "退稅",
+            "溢繳",
+            "溢收稅款"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "action",
+          "label": "帳戶確認或催告",
+          "terms": [
+            "帳戶確認",
+            "確認帳戶",
+            "金融帳戶",
+            "帳戶資料",
+            "書面催告",
+            "最終通知",
+            "信用卡"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "mail",
+          "label": "電子郵件",
+          "terms": [
+            "Email",
+            "電子郵件",
+            "寄件者",
+            "收件者"
+          ],
+          "weight": 3
+        }
+      ],
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "kind": "scam",
+      "reviewer": "Codex/source-verified-migration",
+      "sourceHash": "9f9ad601efc5fff334c7c78577c34f80711a9f7c0980bf5ba0e917135facbfd1"
+    },
+    {
+      "id": "myship-verification",
+      "title": "收到 7-11 賣貨便先收款後配送的實名認證網址？假客服！釣魚網站手法解析",
+      "url": "https://www.mygopen.com/2025/12/7-11.html",
+      "publishedAt": "2025-12-02",
+      "tags": [
+        "7-ELEVEN",
+        "詐騙",
+        "詐騙集團",
+        "釣魚網站"
+      ],
+      "rules": [
+        "message-seller-advance-payment-v1"
+      ],
+      "required": [
+        "brand",
+        "verification"
+      ],
+      "groups": [
+        {
+          "id": "brand",
+          "label": "賣貨便",
+          "terms": [
+            "賣貨便",
+            "myship"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "verification",
+          "label": "收款或身分認證",
+          "terms": [
+            "實名認證",
+            "賣家認證",
+            "收款認證",
+            "開通收款",
+            "帳戶凍結",
+            "金流服務"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "action",
+          "label": "匯款或客服聯繫",
+          "terms": [
+            "匯款",
+            "轉帳",
+            "LINE客服",
+            "保證金",
+            "QRCode"
+          ],
+          "weight": 3
+        }
+      ],
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "kind": "scam",
+      "reviewer": "Codex/source-verified-migration",
+      "sourceHash": "48e548d9c406c28f50d4afe3bcd4bf42394f5f344fb66ba438c4fc53fce0b999"
+    },
+    {
+      "id": "vote-account",
+      "title": "親戚家小孩參加繪畫比賽幫忙投票？要輸入簡訊驗證碼？當心 LINE 帳號遭盜用",
+      "url": "https://www.mygopen.com/2026/08/vote-scam.html",
+      "publishedAt": "2026-08-24",
+      "tags": [
+        "LINE",
+        "投票",
+        "詐騙"
+      ],
+      "rules": [],
+      "required": [
+        "vote",
+        "account"
+      ],
+      "groups": [
+        {
+          "id": "vote",
+          "label": "比賽投票",
+          "terms": [
+            "繪畫比賽",
+            "繪畫投票",
+            "幫忙投票",
+            "幫我投票",
+            "投個票"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "account",
+          "label": "驗證碼或帳號登入",
+          "terms": [
+            "驗證碼",
+            "OTP",
+            "LINE登入",
+            "登入LINE",
+            "帳號密碼"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "friend",
+          "label": "親友請託",
+          "terms": [
+            "親戚",
+            "小朋友",
+            "小孩",
+            "朋友"
+          ],
+          "weight": 3
+        }
+      ],
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "kind": "scam",
+      "reviewer": "Codex/source-verified-migration",
+      "sourceHash": "6d33c18be31469a19b2cedb33556b92fa7c87d72d590ed16fe69016bc882b894"
+    },
+    {
+      "id": "taipower-refund",
+      "title": "台電帳單計算錯誤通知郵件？點連結申請退款？當心釣魚網站！",
+      "url": "https://www.mygopen.com/2025/11/taipower.html",
+      "publishedAt": "2025-11-18",
+      "tags": [
+        "Email",
+        "台電",
+        "詐騙",
+        "詐騙集團",
+        "資訊安全",
+        "釣魚網站",
+        "電子郵件"
+      ],
+      "rules": [],
+      "required": [
+        "brand",
+        "refund",
+        "action"
+      ],
+      "groups": [
+        {
+          "id": "brand",
+          "label": "台電或電費",
+          "terms": [
+            "台電",
+            "臺電",
+            "台灣電力",
+            "臺灣電力",
+            "電費"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "refund",
+          "label": "退款或帳單錯誤",
+          "terms": [
+            "退款",
+            "退費",
+            "帳單計算錯誤",
+            "溢收"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "action",
+          "label": "連結或卡號",
+          "terms": [
+            "連結",
+            "網址",
+            "信用卡",
+            "卡號"
+          ],
+          "weight": 3
+        },
+        {
+          "id": "mail",
+          "label": "電子郵件",
+          "terms": [
+            "Email",
+            "電子郵件",
+            "寄件者"
+          ],
+          "weight": 3
+        }
+      ],
+      "status": "reviewed",
+      "reviewedAt": "2026-09-15",
+      "kind": "scam",
+      "reviewer": "Codex/source-verified-migration",
+      "sourceHash": "315252565c1a1b00fc3cfdf0a26421bb56036bf8b368c257c82f13a2e73fdea7"
+    }
+  ]
+}
