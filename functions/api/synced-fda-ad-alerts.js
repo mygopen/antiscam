@@ -4,11 +4,11 @@ export const fdaAdSyncMetadata = {
     "schemaVersion": 1,
     "source": "衛生福利部食品藥物管理署",
     "sourceUrl": "https://www.fda.gov.tw/TC/news.aspx?cid=5085",
-    "generatedAt": "2026-09-08T22:04:47.294Z",
+    "generatedAt": "2026-09-15T22:28:34.949Z",
     "maxPages": 20,
     "recordsFetched": 200,
     "detailsFetched": 200,
-    "recordsWithDomains": 165
+    "recordsWithDomains": 164
 };
 
 export const syncedFdaAdAlerts = [
@@ -3947,29 +3947,5 @@ export const syncedFdaAdAlerts = [
         "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=114P0059&type=pmds",
         "syncedFrom": "fda-puffery-ads",
         "recordId": "114P0059"
-    },
-    {
-        "source": "衛生福利部食品藥物管理署",
-        "category": "涉嫌違規廣告產品",
-        "title": "國外網站( https://99i7i7.com/shop)涉嫌違規廣告產品： VIAGRA等藥品",
-        "productName": "VIAGRA等藥品",
-        "productCategory": null,
-        "siteName": null,
-        "rootDomain": "99i7i7.com",
-        "rootDomains": [
-            "99i7i7.com"
-        ],
-        "urls": [
-            "https://99i7i7.com/shop"
-        ],
-        "publishedDate": "2025-01-03",
-        "monitoredDate": "",
-        "issuingUnit": "藥品組",
-        "violationType": "涉嫌違規食藥廣告",
-        "warning": "上述廣告涉嫌違規，提醒消費者勿信勿購買。",
-        "claimSummary": "",
-        "sourceUrl": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=5085&id=30874",
-        "syncedFrom": "fda-puffery-ads",
-        "recordId": "30874"
     }
 ];
