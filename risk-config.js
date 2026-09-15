@@ -1,7 +1,7 @@
 window.RISK_CONFIG = {
-    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc', 'dearbb.design'],
+    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc', 'dearbb.design', 'vote.3housetw.org'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
-    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org', 'portal.nantou.citycoins.cc', '165dashboard.tw'],
+    manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org', 'portal.nantou.citycoins.cc', '165dashboard.tw', 'vote.3housetw.org'],
     companyVerificationVersion: '2026-08-27-1',
     organizationVerificationVersion: '2026-09-03-1',
     socialMediaDomains: [

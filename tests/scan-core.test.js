@@ -15,6 +15,34 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
     const { core } = fixtureCore(options);
     return core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(target).hostname, target, ['cht.com.tw']));
 }
+test('readable numeric affixes alone do not escalate unavailable pages to high risk', async () => {
+    const config = { ...riskConfig,
+        trustedTaiwanServiceHosts: riskConfig.trustedTaiwanServiceHosts.filter(h => h !== 'vote.3housetw.org'),
+        manuallyReviewedContentHosts: riskConfig.manuallyReviewedContentHosts.filter(h => h !== 'vote.3housetw.org') };
+    for (const host of ['vote.3housetw.org', '3garden.org', 'garden2026.org']) {
+        const { core } = fixtureCore({ content: 'blocked', config });
+        const result = core.enforceFinalRiskConsistency(await core.runRiskScanSafely(host, `https://${host}/`, []));
+        assert.equal(result.assessment, 'unknown');
+        assert.notEqual(result.checks.disposableDomain.status, 'danger');
+    }
+    for (const host of ['x7q9z2v8.com', '3xqzk.org']) {
+        assert.equal((await scan({ content: 'blocked' }, `https://${host}/`)).assessment, 'high');
+    }
+});
+test('reviewed treehouse voting host is exact and retains strong threat overrides', async () => {
+    const url = 'https://vote.3housetw.org/';
+    for (const content of ['ok', 'blocked', 'unknown', 'error', 'blank']) {
+        assert.equal((await scan({ content }, url)).assessment, 'low');
+    }
+    for (const host of ['3housetw.org', 'other.3housetw.org', 'child.vote.3housetw.org', 'vote.3housetw.org.evil.example']) {
+        assert.equal(createCore().isVerifiedSafeRootDomain(host), false);
+    }
+    for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+        { pageSignals: { voteAccountSignals: { status: 'danger', details: 'Credential collection' } } }]) {
+        assert.equal((await scan({ content: 'blocked', ...options }, url)).assessment, 'high');
+    }
+    assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+});
 test('165 dashboard is an NPA service even without the asynchronous external whitelist', async () => {
     const core = createCore();
     assert.equal(core.isTrustedGovernmentServiceDomain('165dashboard.tw'), true);

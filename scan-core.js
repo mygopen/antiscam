@@ -725,6 +725,11 @@
             const entropyValue = calculateEntropy(compact);
             const isShortRoot = compact.length >= 5 && compact.length <= 8;
             const hasDigitMix = /[a-z]/.test(compact) && /\d/.test(compact);
+            const letters = compact.replace(/\d/g, '');
+            // A numeric prefix/suffix alone is not evidence of a generated domain.
+            const readableNumericAffix = /^(?:\d+[a-z]+|[a-z]+\d+)$/.test(compact) &&
+                letters.length >= 4 && hasReadableVowelPattern(letters);
+            const suspiciousDigitMix = hasDigitMix && !readableNumericAffix;
             const lacksVowels = !/[aeiou]/.test(compact);
             const qWithoutU = /q(?!u)/.test(compact);
             const consonantTrigrams = compact.match(/[bcdfghjklmnpqrstvwxyz]{3,}/g) || [];
@@ -746,7 +751,7 @@
                 );
             const looksMachineGenerated =
                 (lacksVowels && !isShortAcronymLike) ||
-                hasDigitMix ||
+                suspiciousDigitMix ||
                 hasAwkwardShortFlow ||
                 (qWithoutU && (consonantTrigrams.length > 0 || entropyValue > 3.0)) ||
                 (rareBigrams.length > 0 && entropyValue > 2.8) ||
@@ -756,7 +761,7 @@
             if (qWithoutU) reasons.push('含少見 q 非 qu 組合');
             if (rareBigrams.length > 0) reasons.push(`含少見字母組合 ${[...new Set(rareBigrams)].slice(0, 2).join('、')}`);
             if (consonantTrigrams.length >= 2 || hasAwkwardShortFlow) reasons.push('短網域含不自然字母排列');
-            if (hasDigitMix) reasons.push('英數混合隨機碼');
+            if (suspiciousDigitMix) reasons.push('英數混合隨機碼');
             if (lacksVowels && !isShortAcronymLike) reasons.push('缺少母音');
             if (entropyValue > 3.0) reasons.push('主網域隨機度偏高');
 
