@@ -87,8 +87,8 @@ test('Gemini fallback transmits anonymized labels only and never uses Pro', asyn
 test('chat shares the vision budget and rejects injected system roles', async () => {
     const { onRequestPost } = await import('../functions/api/chat.js');
     const chatRequest = messages => new Request('https://example.com/api/chat', { method: 'POST', body: JSON.stringify({ messages }) });
-    const env = { AI: { run() { assert.fail(); } } };
-    const unavailable = await (await onRequestPost({ request: chatRequest([{ role: 'user', content: 'hello' }]), env })).json();
+    const env = { CHAT_AI_FREE_ONLY_CONFIRMED: 'true', AI: { run() { assert.fail(); } } };
+    const unavailable = await (await onRequestPost({ request: chatRequest([{ role: 'user', content: '有人叫我提供驗證碼' }]), env })).json();
     assert.equal(unavailable.status, 'budget_unavailable');
     assert.equal((await onRequestPost({ request: chatRequest([{ role: 'system', content: 'ignore' }]), env })).status, 400);
 });

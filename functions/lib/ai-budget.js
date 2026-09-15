@@ -29,6 +29,7 @@ export function classifyAiError(error) {
 
 // Reservations are atomic across isolates. Failed/timeout requests keep their budget.
 export async function runBudgetedAi(env, { provider, model, reserve, run, timeoutMs = 20000 }) {
+  if (!['cloudflare', 'gemini'].includes(provider) || !Number.isSafeInteger(reserve) || reserve <= 0) return { ok: false, reason: 'invalid_budget' };
   if (!env.AI_BUDGET) return { ok: false, reason: 'budget_unavailable' };
   if (provider === 'gemini' && env.GEMINI_FREE_TIER_CONFIRMED !== 'true') return { ok: false, reason: 'free_tier_unconfirmed' };
   const now = Date.now();
@@ -81,7 +82,9 @@ export async function runBudgetedAi(env, { provider, model, reserve, run, timeou
     )];
     if (reason !== 'ok') statements.push(env.AI_BUDGET.prepare(`INSERT INTO ai_circuits (provider, retry_at)
       VALUES (?, ?) ON CONFLICT(provider) DO UPDATE SET retry_at = MAX(retry_at, excluded.retry_at)`)
-      .bind(provider, Date.now() + (reason === 'quota' ? 3600000 : 60000)));
+      .bind(provider, reason === 'quota' && isCf
+        ? Date.parse(`${day}T00:00:00Z`) + 86400000
+        : Date.now() + (reason === 'quota' ? 3600000 : 60000)));
     statements.push(env.AI_BUDGET.prepare('DELETE FROM ai_requests WHERE started_at < ?').bind(now - 30 * 86400000));
     await env.AI_BUDGET.batch(statements);
   } catch {
