@@ -132,6 +132,21 @@ const server = http.createServer((req, res) => {
             await upload(); await assertPreview();
             await page.getByText('⚠️ 風險：無法判定', { exact: true }).waitFor();
             await page.evaluate(() => { window.__fail = false; });
+            await page.evaluate(() => { window.__ocrText = '工作安排，請先建立一個LINE群組，請將QR Code回傳至此Email，先不要邀請其他人加入。'; });
+            await upload(); await assertPreview();
+            await high.waitFor();
+            const related = page.getByRole('region', { name: 'MyGoPen 相關查核' });
+            await related.getByRole('link', { name: /收到公司高層/ }).waitFor();
+            assert.equal(await related.getByRole('link').first().getAttribute('href'), 'https://www.mygopen.com/2025/12/email-qrcode.html');
+            await related.getByText(/相似手法參考/).waitFor();
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-articles-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
+            await edit('國稅局所得稅退稅，請確認帳戶資料，最終通知');
+            await related.getByRole('link', { name: /北區國稅局/ }).waitFor();
+            assert.equal(await related.getByRole('link', { name: /收到公司高層/ }).count(), 0);
+            await edit('無關旅遊照片');
+            assert.equal(await related.count(), 0);
+            await page.evaluate(() => { window.__ocrText = ''; });
             // A missing createImageBitmap must not break the independent preview decoder.
             await page.evaluate(() => { window.createImageBitmap = undefined; });
             await upload(); await assertPreview();
@@ -150,10 +165,13 @@ const server = http.createServer((req, res) => {
             await page.waitForFunction(() => document.querySelectorAll('img[src^="data:image/png"]').length === 2);
             assert.ok((await chatImage.evaluateAll(images => images.every(img => img.complete && img.naturalWidth === 240))));
             await page.waitForFunction(() => window.__scans.some(scan => scan.url === 'https://example.com/Chat'));
+            await page.evaluate(() => { window.__ocrText = '工作安排，請先建立一個LINE群組，請將QR Code回傳至此Email，先不要邀請其他人加入。'; });
+            await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
+            await page.getByRole('region', { name: 'MyGoPen 相關查核' }).getByRole('link', { name: /收到公司高層/ }).waitFor();
             assert.ok((await page.evaluate(() => window.__scans)).every(scan => scan.allowCloudAi === false));
             assert.equal(aiCalls, 0);
             assert.deepEqual(errors, []);
-            console.log(`PASS ${viewport.width}px: thumbnail pixels, crop, edit, cancellation, unknown on OCR failure, missing bitmap API, corrupt format, main/chat URL scans; zero cloud AI.`);
+            console.log(`PASS ${viewport.width}px: preview/crop/edit/cancel, main/chat article links, recommendation replacement/abstention, URL scans; zero cloud AI.`);
             await page.close();
         }
     } finally { await browser.close(); server.close(); }

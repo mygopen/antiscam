@@ -13,7 +13,7 @@ test('production build has hashed local assets, no runtime compilers, and no pri
     assert.doesNotMatch(html, /text\/babel|babel.min.js|cdn.tailwindcss|unpkg.com/);
     const { document } = parseHTML(html);
     const scripts = [...document.querySelectorAll('script[src^="/assets/"]')];
-    assert.equal(scripts.length, 7);
+    assert.equal(scripts.length, 8);
     for (const element of [...scripts, ...document.querySelectorAll('link[href^="/assets/"]')]) {
         const url = element.getAttribute('src') || element.getAttribute('href');
         assert.match(url, /\.[a-f0-9]{12}\.(js|css)$/);

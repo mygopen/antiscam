@@ -25,6 +25,10 @@ Updated: 2026-09-15
 
 ## Local recovery controls
 
+Related MyGoPen articles are retrieved locally from a reviewed static catalog,
+independently of risk scoring. See article-recommendations.md for rules,
+phrase ranking, exclusions, privacy and catalog maintenance.
+
 Main screenshot results have crop/re-OCR and editable recognized-text dialogs.
 Cancellation terminates the active OCR worker and releases its queue; a later
 upload can create a fresh worker. If initialization is still loading, cancellation

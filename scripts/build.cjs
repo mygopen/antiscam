@@ -22,7 +22,7 @@ async function build() {
     for (const name of ['react', 'react-dom']) {
         emit(name + '.js', fs.readFileSync(path.join(root, 'node_modules', name, 'umd', name + '.production.min.js')));
     }
-    for (const name of ['app', 'risk-config', 'scan-policy', 'scan-core', 'email-risk']) {
+    for (const name of ['app', 'risk-config', 'scan-policy', 'scan-core', 'email-risk', 'article-search']) {
         const result = await esbuild.transform(fs.readFileSync(path.join(root, name + '.js'), 'utf8'), {
             loader: name === 'app' ? 'jsx' : 'js', target: 'es2020', minify: true, legalComments: 'inline'
         });

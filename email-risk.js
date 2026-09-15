@@ -66,6 +66,10 @@
         return parts;
     });
     const ruleDefinitions = [
+        { id: 'message-work-group-qr-v1', label: '工作邀約要求私建群組並回傳邀請碼',
+            requires: ['work_context', 'group_create', 'qr_return', 'group_isolation'],
+            source: 'https://www.mygopen.com/2025/12/email-qrcode.html',
+            description: '要求因工作建立 LINE 群組、回傳邀請 QR Code，並暫不邀請其他人，高度符合假冒主管建群組手法；尚未驗證寄件者身分，也不代表已發生匯款。' },
         { id: 'message-secret-handoff-v1', label: '要求交付密碼或驗證碼', requires: ['secret_handoff', 'service_context'],
             source: 'https://www.cathaybk.com.tw/cathaybk/Personal/about/news/announcement/announcement/2023/CUBEApp_FP/',
             description: '以服務或帳戶處理為由，要求將密碼或驗證碼交給他人。' },
@@ -119,6 +123,23 @@
             const evidence = positive.filter(row => pattern.test(row.text));
             if (evidence.length) signals.push({ id, lines: [...new Set(evidence.map(row => row.line))] });
         };
+        // Join only nearby, confidently read rows. Isolation instructions are not
+        // safety advice: "不要邀請其他人" must survive the general negation filter.
+        const windows = reliable.flatMap((row, index) => {
+            const nearby = reliable.slice(index, index + 3);
+            const consecutive = nearby.filter((item, i) => item.line === row.line + i);
+            return consecutive.map((_, i) => ({ text: consecutive.slice(0, i + 1).map(item => item.text.trim()).join(''),
+                lines: consecutive.slice(0, i + 1).map(item => item.line) }));
+        });
+        const groupSignal = (id, pattern, allowNegative = false) => {
+            const matches = windows.filter(row => clauses([{ ...row, line: 0 }]).some(part =>
+                (allowNegative || !negated(part.text)) && pattern.test(part.text.trim())));
+            if (matches.length) signals.push({ id, lines: [...new Set(matches.flatMap(row => row.lines))] });
+        };
+        groupSignal('work_context', /工作|主管|長官|董事長|總經理|公司|公務/);
+        groupSignal('group_create', /(?:請|先|麻煩|需要|協助).{0,14}(?:建立|創建|創立|開設|建一個|建個|開一個).{0,16}LINE.{0,8}(?:群組|群聊|群)/i);
+        groupSignal('qr_return', /(?:將|把|請|並).{0,14}(?:QR\s*Code|二維碼|邀請碼).{0,12}(?:回傳|傳送|寄|傳給|轉寄).{0,12}(?:Email|E-mail|信箱|郵箱|郵件)|(?:請|並).{0,8}(?:回傳|傳送|寄回).{0,12}(?:QR\s*Code|二維碼|邀請碼).{0,12}(?:Email|E-mail|信箱|郵箱|郵件)/i);
+        groupSignal('group_isolation', /^(?:(?:請|先|暫時|暫且|目前|暫|只需)\s*)*(?:不要|勿|別|不必|無需).{0,6}邀請.{0,8}(?:其他|別的|其餘).{0,8}(?:加入|進群)|(?:只有|僅有|僅限)你.{0,8}(?:群組|群)/, true);
         add('payment_failure', /(?:代扣|扣款|扣繳|付款|繳費).{0,6}(?:失敗|未成功|異常)|(?:欠費|尚未繳納|補繳通知)/);
         add('account_action', /(?:請|立即|務必|點擊|點選).{0,14}(?:登入|登錄|驗證.{0,3}(?:帳|賬)戶|更新.{0,3}(?:付款|信用卡)|確認.{0,6}(?:帳務|賬務))/);
         add('sensitive_request', /(?:請|提供|輸入|回傳).{0,10}(?:密碼|驗證碼|信用卡卡號)/);
@@ -184,7 +205,9 @@
             authentication: 'not_available_from_screenshot', linkDestination: 'not_verified',
             vehiclePlate: reliable.some(row => /車(?:號|牌)\s*[:：]\s*[A-Z0-9]+-[A-Z0-9]+/i.test(row.text)) ? 'visible_not_verified' : 'not_visible_in_excerpt',
             analysis: high ? ruleMatches.map(rule => rule.description).join(' ') : context === 'education_or_quote' ? '畫面可能是防詐宣導或引用範例，未將引用內容直接判為詐騙；不代表畫面內連結安全。' : needsContentReview ? '畫面具有帳務、服務異常或敏感操作要求，寄件資訊尚未可靠確認或證據不足，不能判定為安全。' : '目前可讀取的證據不足以判定內容風險；寄件名單或官網相符也不代表整則訊息安全。',
-            advice: '請自行開啟官方 App 或官網查詢，勿透過郵件提供密碼或驗證碼。'
+            advice: ruleMatches.some(rule => rule.id === 'message-work-group-qr-v1')
+                ? '請透過原本掌握的電話或內部通訊管道向主管查證，不要直接回信提供群組邀請碼，也不要依陌生群組指示匯款。'
+                : '請自行開啟官方 App 或官網查詢，勿透過郵件提供密碼或驗證碼。'
         };
     }
 

@@ -174,7 +174,7 @@ test('actual main upload uses local OCR and forwards only URLs into a non-AI ima
         AbortController, imageJobRef: { current: null }, screenshotEvidenceRef: { current: null },
         createScreenshotPreview: async () => 'data:image/png;base64,test',
         setResult() {}, setAiReport(value) { report = value; }, setScreenshotUrls() {},
-        setError() {}, setScreenshotSource() {}, setScreenshotFile() {}, setScreenshotText() {}, setScreenshotEditor() {},
+        setError() {}, setScreenshotSource() {}, setScreenshotFile() {}, setScreenshotText() {}, setScreenshotArticles() {}, setScreenshotEditor() {},
         setIsImageAnalyzing() {}, setLoadingMessage() {}, setUploadedImageUrl() {}, setUrl() {},
         analyzeLocalScreenshot: async () => ({ mail: null, text: '', targets: ['https://example.com/Original'] }),
         pickPrimaryOcrTarget: values => values[0],
