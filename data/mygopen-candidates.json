@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "sync": {
-    "cursor": 351,
+    "cursor": 501,
     "verifyCursor": 0,
-    "lastSuccessAt": "2026-09-15T05:10:03.468Z",
+    "lastSuccessAt": "2026-09-15T22:19:24.490Z",
     "fetched": 200,
     "requests": 9
   },
@@ -33,7 +33,7 @@
         "求職"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -56,7 +56,7 @@
         "詐騙"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -79,7 +79,7 @@
         "詐騙"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -97,7 +97,7 @@
         "謠言"
       ],
       "kind": "reference",
-      "hash": "c3d756fb31263550d3fafe5e944abb6616519d5e9b01a236a0d8f390a2dea462",
+      "hash": "1f00516fdfa41f9d0676cdfe58677cd62051d24b3ef586a3f519e018f169ea48",
       "relevant": true,
       "keywords": [
         "詐騙",
@@ -105,7 +105,7 @@
         "信用卡"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -125,14 +125,14 @@
         "謠言"
       ],
       "kind": "clarification",
-      "hash": "386da6d71dfb90cc653b1a9a3c7ee599d85099fa123389f5ceabacc14922292f",
+      "hash": "5a37b31de5a8594e9d1e26e92445cc25cab972577c26108a41b1580ff0eb29ac",
       "relevant": true,
       "keywords": [
         "假冒",
         "盜用"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -159,7 +159,7 @@
         "投票"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -477,7 +477,7 @@
         "國稅局"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -978,6 +978,269 @@
       "reviewState": "pending"
     },
     {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-5337812910910469434",
+      "url": "https://www.mygopen.com/2026/01/mail-fraud.html",
+      "title": "【詐騙】電商平台通知雲端發票中獎的Email?當心釣魚郵件!會盜刷信用卡",
+      "publishedAt": "2026-01-27T10:53:00.000+08:00",
+      "updatedAt": "2026-01-27T10:53:55.487+08:00",
+      "labels": [
+        "詐騙",
+        "詐騙集團",
+        "資訊安全",
+        "釣魚網站"
+      ],
+      "kind": "scam",
+      "hash": "a78abf458b94a3204991f4cca1e5ac28186251e471bd4740ebf54c240ef5b064",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "釣魚",
+        "假冒",
+        "驗證碼",
+        "信用卡"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-7723416963220955211",
+      "url": "https://www.mygopen.com/2026/01/threads-fraud.html",
+      "title": "【詐騙】Threads傳免費領養小動物的貼文?加LINE聯繫?慣用手法!假賣貨便網站騙個資卡號",
+      "publishedAt": "2026-01-05T13:49:00.002+08:00",
+      "updatedAt": "2026-01-05T13:49:39.045+08:00",
+      "labels": [
+        "LINE",
+        "threads",
+        "詐騙",
+        "詐騙集團"
+      ],
+      "kind": "scam",
+      "hash": "f221ee7cc8aaf0f31f67b20437f66fe0d41f086c2876a32f0678141d8b61b6e4",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "釣魚",
+        "LINE",
+        "帳戶",
+        "賣貨便"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-2953379673509755971",
+      "url": "https://www.mygopen.com/2025/12/hpa.html",
+      "title": "【易誤解】健保卡背面藏著黃金密碼?符合3種條件就每年補助幾千元?各項措施之細節有誤",
+      "publishedAt": "2025-12-30T17:00:00.001+08:00",
+      "updatedAt": "2025-12-30T17:00:05.711+08:00",
+      "labels": [
+        "AI",
+        "假影片",
+        "健保",
+        "內容農場",
+        "誤導",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "ecb55148c28c9bdd3babbcf8dc899990df4779b724a88e841a51ff894641bca3",
+      "relevant": true,
+      "keywords": [
+        "釣魚"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-1492277354301890319",
+      "url": "https://www.mygopen.com/2025/12/ai-bank.html",
+      "title": "【錯誤】2026年銀行新規定?定存多領額外利息?過時與不實資訊!內容農場AI假影片",
+      "publishedAt": "2025-12-27T10:07:00.004+08:00",
+      "updatedAt": "2025-12-27T10:07:42.064+08:00",
+      "labels": [
+        "AI",
+        "YouTube",
+        "假影片",
+        "內容農場",
+        "誤導",
+        "謠言",
+        "過期資訊"
+      ],
+      "kind": "clarification",
+      "hash": "f5025914965640939bfea0b845a0cbae229804adeed34f3bd0c632a8e14db166",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "帳戶"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-1588693996849687994",
+      "url": "https://www.mygopen.com/2025/12/fraud.html",
+      "title": "【詐騙】看影片加入李鴻源的LINE交流探討世界趨勢?當心投資詐騙!冒名假帳號",
+      "publishedAt": "2025-12-25T18:30:00.001+08:00",
+      "updatedAt": "2025-12-25T18:31:36.436+08:00",
+      "labels": [
+        "LINE",
+        "TikTok",
+        "投資",
+        "李鴻源",
+        "詐騙",
+        "詐騙集團"
+      ],
+      "kind": "scam",
+      "hash": "a35bf30e5101a85a62e6bc6eaa349e28d09f542cc436823a1751f336a71d72fa",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "LINE",
+        "匯款",
+        "帳戶",
+        "群組"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-7194397183019550372",
+      "url": "https://www.mygopen.com/2025/12/mobile.html",
+      "title": "【錯誤】網傳65歲以上隱藏方案?手機月租只要149?內容農場不實影片!務必檢查資訊來源",
+      "publishedAt": "2025-12-22T20:12:00.004+08:00",
+      "updatedAt": "2025-12-24T10:34:21.196+08:00",
+      "labels": [
+        "AI",
+        "中華電信",
+        "假影片",
+        "內容農場",
+        "補助",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "9af2fbca2cb2cd8307f84560bbfbae7768da8592bc5384d848d8174ce704f151",
+      "relevant": true,
+      "keywords": [
+        "釣魚"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-2101798202164424417",
+      "url": "https://www.mygopen.com/2025/12/mearsheimer.html",
+      "title": "【錯誤】米爾斯海默談中日關係?稱日本將付出代價?冒名AI影片!透過深偽技術置換嘴型",
+      "publishedAt": "2025-12-21T08:54:00.005+08:00",
+      "updatedAt": "2025-12-21T09:08:13.876+08:00",
+      "labels": [
+        "AI",
+        "Deepfake",
+        "中國",
+        "假影片",
+        "日本",
+        "誤導",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "2d658b1d4fc96b74b292a59dec691228fe8098a85fc0106422fd13c11ef11ae9",
+      "relevant": true,
+      "keywords": [],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-6125887311929578425",
+      "url": "https://www.mygopen.com/2025/12/Cambodia.html",
+      "title": "【易誤解】柬埔寨開始拆中文招牌?泰柬衝突影響?無直接關聯影片!違反柬埔寨法規遭移除",
+      "publishedAt": "2025-12-19T15:28:00.004+08:00",
+      "updatedAt": "2025-12-19T15:28:34.799+08:00",
+      "labels": [
+        "中國",
+        "影片",
+        "柬埔寨",
+        "泰國",
+        "誤導",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "edb2b66b80174912a4d7e6ceea9c0777bc8b0b79ab647d9f0eb38819a7ec20d1",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "QR Code"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-5489264779489316129",
+      "url": "https://www.mygopen.com/2025/12/scam.html",
+      "title": "【詐騙】社群出現台大醫院線上減重門診廣告?加醫生LINE?不要點!冒名廣告投放",
+      "publishedAt": "2025-12-17T10:03:00.002+08:00",
+      "updatedAt": "2025-12-17T10:11:29.731+08:00",
+      "labels": [
+        "Facebook",
+        "LINE",
+        "台大",
+        "廣告",
+        "詐騙",
+        "詐騙集團",
+        "醫院"
+      ],
+      "kind": "scam",
+      "hash": "7ccd53a2361bdf3c768575ee679e227b1a4dc968b7f33f9d83d5ba1eb69861df",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "LINE",
+        "帳戶"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-807471269652717100",
+      "url": "https://www.mygopen.com/2025/12/ai-germany.html",
+      "title": "【錯誤】臺灣8分鐘影片讓全德國的長者落淚?創收視奇蹟?AI虛構影片!內容農場不實資訊",
+      "publishedAt": "2025-12-16T11:56:00.001+08:00",
+      "updatedAt": "2025-12-16T11:56:35.220+08:00",
+      "labels": [
+        "AI",
+        "內容農場",
+        "公視",
+        "台灣",
+        "德國",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "7cd661f9cfc6e9d7048037d52177ca4d546e42d82fcaa415caec3d813dc92e59",
+      "relevant": true,
+      "keywords": [
+        "釣魚"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
       "id": "tag:blogger.com,1999:blog-4272037284105697328.post-1280056759792653893",
       "url": "https://www.mygopen.com/2025/12/email-qrcode.html",
       "title": "【詐騙】收到公司高層Email?要你建立LINE群組?詐團假冒!要求代墊費用騙匯款",
@@ -1005,9 +1268,65 @@
         "群組"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-8145782991537644726",
+      "url": "https://www.mygopen.com/2025/12/iq-test.html",
+      "title": "【資安】免費檢測阿茲海默症的社群廣告?付費拿完整報告?當心不當收費、隱性訂閱風險",
+      "publishedAt": "2025-12-11T17:00:00.000+08:00",
+      "updatedAt": "2025-12-11T17:00:04.334+08:00",
+      "labels": [
+        "失智症",
+        "詐騙",
+        "資安",
+        "釣魚網站",
+        "阿茲海默症"
+      ],
+      "kind": "reference",
+      "hash": "9b201b692286dee088895909addb4b24805738ac75782e0685eda08a4ed9563d",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "釣魚",
+        "退款",
+        "帳戶"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-5167528018818128004",
+      "url": "https://www.mygopen.com/2025/12/threads.html",
+      "title": "【詐騙】幫宣傳就送iPhone的Threads貼文?加LINE和簡訊認證?別將驗證碼交給任何人",
+      "publishedAt": "2025-12-09T11:46:00.002+08:00",
+      "updatedAt": "2025-12-11T21:45:31.535+08:00",
+      "labels": [
+        "LINE",
+        "iphone",
+        "threads",
+        "簡訊",
+        "詐騙",
+        "詐騙集團"
+      ],
+      "kind": "scam",
+      "hash": "8c7913058b34d950bdda7974155c8a3c967c4d0711d2d4090f3f0ecdb8413122",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "假冒",
+        "LINE",
+        "驗證碼",
+        "帳戶"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
     },
     {
       "id": "tag:blogger.com,1999:blog-4272037284105697328.post-2370062567728302551",
@@ -1035,9 +1354,146 @@
         "賣貨便"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-3560769817761199213",
+      "url": "https://www.mygopen.com/2025/12/organ-donation.html",
+      "title": "【錯誤】網傳手機可設定「器官捐贈」?系統遭入侵?曲解醫療卡功用!選項無實質效力",
+      "publishedAt": "2025-12-01T22:26:00.005+08:00",
+      "updatedAt": "2025-12-01T22:26:59.725+08:00",
+      "labels": [
+        "中國",
+        "器官",
+        "影片",
+        "手機",
+        "誤導",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "e6f5cc7a00dbba42a6037bb5712589a6388807f3c3da3f951fe3a51282134cb9",
+      "relevant": true,
+      "keywords": [
+        "釣魚"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-3961169324842635177",
+      "url": "https://www.mygopen.com/2025/11/Solar-power.html",
+      "title": "【錯誤】台灣滿山光電板?農田水庫遭大肆破壞?挪用中國貴州大型光電場域畫面",
+      "publishedAt": "2025-11-27T11:13:00.000+08:00",
+      "updatedAt": "2025-11-27T11:13:54.900+08:00",
+      "labels": [
+        "中國",
+        "太陽能",
+        "民進黨",
+        "誤導",
+        "謠言",
+        "貴州"
+      ],
+      "kind": "clarification",
+      "hash": "d4d23da678cba8786b0aa1ee57904535af1b7a26b34e3027ddba92c0f1ac19c5",
+      "relevant": true,
+      "keywords": [
+        "詐騙"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-1683050309898575671",
+      "url": "https://www.mygopen.com/2025/11/Ai-loan.html",
+      "title": "【查證】商場AI騙貸?視訊念卡號就會被偽冒貸款?缺乏背景影片!警:勿輕易給陌生人資料",
+      "publishedAt": "2025-11-26T22:58:00.003+08:00",
+      "updatedAt": "2025-11-26T22:58:52.007+08:00",
+      "labels": [
+        "AI",
+        "中國",
+        "缺乏背景",
+        "詐騙",
+        "誤導",
+        "謠言"
+      ],
+      "kind": "reference",
+      "hash": "0f7f098c9e7bbfd0579d03904dd89a94708c54a55c670e96e1f28f0b2fc86972",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "帳戶"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-3313494835596793455",
+      "url": "https://www.mygopen.com/2025/11/Payoneer.html",
+      "title": "【詐騙】假冒Payoneer金流服務Email通知?加LINE客服處理?當心誘騙轉帳",
+      "publishedAt": "2025-11-26T08:20:00.003+08:00",
+      "updatedAt": "2025-11-26T08:43:07.368+08:00",
+      "labels": [
+        "Email",
+        "LINE",
+        "信用卡",
+        "詐騙",
+        "詐騙集團",
+        "釣魚網站",
+        "電子郵件"
+      ],
+      "kind": "scam",
+      "hash": "68b9811c59623d7d45b6c1267fb3ea8e537b92470e0d5c2772fd07916cc36844",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "釣魚",
+        "假冒",
+        "盜用",
+        "LINE",
+        "驗證碼",
+        "匯款",
+        "信用卡",
+        "帳戶",
+        "群組"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-3195522234523717278",
+      "url": "https://www.mygopen.com/2025/11/wang-ai.html",
+      "title": "【錯誤】網傳王世堅自拍影片稱「我來大陸」?AI偽冒剪輯配音!當事人澄清",
+      "publishedAt": "2025-11-23T14:53:00.001+08:00",
+      "updatedAt": "2025-11-23T14:53:17.723+08:00",
+      "labels": [
+        "AI",
+        "Deepfake",
+        "Facebook",
+        "TikTok",
+        "YouTube",
+        "假影片",
+        "謠言"
+      ],
+      "kind": "clarification",
+      "hash": "3b4564c749458d848ec61a5e10ca1e405ba0fc374c502d6ce7433a41a547ad98",
+      "relevant": true,
+      "keywords": [
+        "盜用"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
     },
     {
       "id": "tag:blogger.com,1999:blog-4272037284105697328.post-8227442929044158616",
@@ -1067,9 +1523,32 @@
         "台電"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
+    },
+    {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-5811636288241682313",
+      "url": "https://www.mygopen.com/2025/11/ipac.html",
+      "title": "【部分錯誤】蕭美琴沒對歐洲議會演說?IPAC是極右組織?無事實依據!左派、右派成員皆有",
+      "publishedAt": "2025-11-11T08:27:00.002+08:00",
+      "updatedAt": "2025-11-11T15:10:33.102+08:00",
+      "labels": [
+        "台灣",
+        "歐洲",
+        "蕭美琴",
+        "謠言"
+      ],
+      "kind": "reference",
+      "hash": "fd6d3d11892b80b4cd089264eccd601aa12087bd30b1621773f79cab3a4ef6ca",
+      "relevant": true,
+      "keywords": [
+        "詐騙"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
     },
     {
       "id": "tag:blogger.com,1999:blog-4272037284105697328.post-3725247134253894864",
@@ -1098,6 +1577,36 @@
       "reviewState": "pending"
     },
     {
+      "id": "tag:blogger.com,1999:blog-4272037284105697328.post-296513326694624847",
+      "url": "https://www.mygopen.com/2019/07/4-Fraud.html",
+      "title": "【教學】貨到付款詐騙如何退貨退款?4招成功把錢拿回來!",
+      "publishedAt": "2019-07-09T15:37:00.008+08:00",
+      "updatedAt": "2026-01-01T22:29:31.262+08:00",
+      "labels": [
+        "Facebook",
+        "LINE",
+        "教學",
+        "詐騙",
+        "詐騙集團",
+        "資訊安全"
+      ],
+      "kind": "reference",
+      "hash": "db7f414915948ab0d00f5c2e2d74ec26fd1664139ddf9594c20ddd2caeae764a",
+      "relevant": true,
+      "keywords": [
+        "詐騙",
+        "LINE",
+        "退款",
+        "信用卡",
+        "帳戶",
+        "包裹"
+      ],
+      "firstSeenAt": "2026-09-15T22:19:24.490Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
+      "missingCount": 0,
+      "reviewState": "pending"
+    },
+    {
       "id": "tag:blogger.com,1999:blog-4272037284105697328.post-6683539813538930359",
       "url": "https://www.mygopen.com/2018/12/blog-post_12.html",
       "title": "【勿恐慌】影片傳皮包信用卡被感應盜刷?沒想像這麼簡單",
@@ -1110,14 +1619,14 @@
         "銀行"
       ],
       "kind": "reference",
-      "hash": "ac9e189cef9489e188b25fff65c645257936dec061b0b7c3978b2519212eb4d2",
+      "hash": "0b480a31565c05bda1400ee6c5bb576659d61b4cec4bcecd2b642570adf02459",
       "relevant": true,
       "keywords": [
         "LINE",
         "信用卡"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     },
@@ -1135,13 +1644,13 @@
         "資訊安全"
       ],
       "kind": "reference",
-      "hash": "3a219269fdf6173b16f65e597e763611f708e5a7b9d190f5b16e709b0957a032",
+      "hash": "a61434a46298e91860ceb1938efc744136d93c6ec84e8bf284daf1273f5de28a",
       "relevant": true,
       "keywords": [
         "信用卡"
       ],
       "firstSeenAt": "2026-09-15T05:05:53.787Z",
-      "lastSeenAt": "2026-09-15T05:10:03.468Z",
+      "lastSeenAt": "2026-09-15T22:19:24.490Z",
       "missingCount": 0,
       "reviewState": "changed"
     }

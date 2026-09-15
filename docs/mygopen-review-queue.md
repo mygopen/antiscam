@@ -2,9 +2,9 @@
 
 此清單由公開 Feed 產生，不是新風險規則。未核准文章不會出現在網站推薦。
 
-最後成功同步：2026-09-15T05:10:03.468Z
+最後成功同步：2026-09-15T22:19:24.490Z
 
-本次讀取 200 篇，9 次請求；歷史游標 351。
+本次讀取 200 篇，9 次請求；歷史游標 501。
 
 | 類型 | 審核狀態 | 文章 |
 | --- | --- | --- |
@@ -45,9 +45,28 @@
 | reference | 待審核 | [【缺乏背景】網傳「高雄愛河拾荒董事長林震堂」故事?網路創作非真人真事](https://www.mygopen.com/2026/02/mind.html) |
 | clarification | 待審核 | [【錯誤】網傳台積電英雄張忠謀的告別信?留給台灣的最後禮物?假借冠名的虛構文章](https://www.mygopen.com/2026/02/tsmc.html) |
 | reference | 待審核 | [【查證】網傳美國狂歡島艾普斯坦客戶名單整理?2022年就流傳的資深謠言](https://www.mygopen.com/2026/02/epstein.html) |
+| scam | 待審核 | [【詐騙】電商平台通知雲端發票中獎的Email?當心釣魚郵件!會盜刷信用卡](https://www.mygopen.com/2026/01/mail-fraud.html) |
+| scam | 待審核 | [【詐騙】Threads傳免費領養小動物的貼文?加LINE聯繫?慣用手法!假賣貨便網站騙個資卡號](https://www.mygopen.com/2026/01/threads-fraud.html) |
+| clarification | 待審核 | [【易誤解】健保卡背面藏著黃金密碼?符合3種條件就每年補助幾千元?各項措施之細節有誤](https://www.mygopen.com/2025/12/hpa.html) |
+| clarification | 待審核 | [【錯誤】2026年銀行新規定?定存多領額外利息?過時與不實資訊!內容農場AI假影片](https://www.mygopen.com/2025/12/ai-bank.html) |
+| scam | 待審核 | [【詐騙】看影片加入李鴻源的LINE交流探討世界趨勢?當心投資詐騙!冒名假帳號](https://www.mygopen.com/2025/12/fraud.html) |
+| clarification | 待審核 | [【錯誤】網傳65歲以上隱藏方案?手機月租只要149?內容農場不實影片!務必檢查資訊來源](https://www.mygopen.com/2025/12/mobile.html) |
+| clarification | 待審核 | [【錯誤】米爾斯海默談中日關係?稱日本將付出代價?冒名AI影片!透過深偽技術置換嘴型](https://www.mygopen.com/2025/12/mearsheimer.html) |
+| clarification | 待審核 | [【易誤解】柬埔寨開始拆中文招牌?泰柬衝突影響?無直接關聯影片!違反柬埔寨法規遭移除](https://www.mygopen.com/2025/12/Cambodia.html) |
+| scam | 待審核 | [【詐騙】社群出現台大醫院線上減重門診廣告?加醫生LINE?不要點!冒名廣告投放](https://www.mygopen.com/2025/12/scam.html) |
+| clarification | 待審核 | [【錯誤】臺灣8分鐘影片讓全德國的長者落淚?創收視奇蹟?AI虛構影片!內容農場不實資訊](https://www.mygopen.com/2025/12/ai-germany.html) |
 | scam | 已審核 | [【詐騙】收到公司高層Email?要你建立LINE群組?詐團假冒!要求代墊費用騙匯款](https://www.mygopen.com/2025/12/email-qrcode.html) |
+| reference | 待審核 | [【資安】免費檢測阿茲海默症的社群廣告?付費拿完整報告?當心不當收費、隱性訂閱風險](https://www.mygopen.com/2025/12/iq-test.html) |
+| scam | 待審核 | [【詐騙】幫宣傳就送iPhone的Threads貼文?加LINE和簡訊認證?別將驗證碼交給任何人](https://www.mygopen.com/2025/12/threads.html) |
 | scam | 已審核 | [【詐騙】收到7-11賣貨便先收款後配送的實名認證網址?假客服!釣魚網站手法解析](https://www.mygopen.com/2025/12/7-11.html) |
+| clarification | 待審核 | [【錯誤】網傳手機可設定「器官捐贈」?系統遭入侵?曲解醫療卡功用!選項無實質效力](https://www.mygopen.com/2025/12/organ-donation.html) |
+| clarification | 待審核 | [【錯誤】台灣滿山光電板?農田水庫遭大肆破壞?挪用中國貴州大型光電場域畫面](https://www.mygopen.com/2025/11/Solar-power.html) |
+| reference | 待審核 | [【查證】商場AI騙貸?視訊念卡號就會被偽冒貸款?缺乏背景影片!警:勿輕易給陌生人資料](https://www.mygopen.com/2025/11/Ai-loan.html) |
+| scam | 待審核 | [【詐騙】假冒Payoneer金流服務Email通知?加LINE客服處理?當心誘騙轉帳](https://www.mygopen.com/2025/11/Payoneer.html) |
+| clarification | 待審核 | [【錯誤】網傳王世堅自拍影片稱「我來大陸」?AI偽冒剪輯配音!當事人澄清](https://www.mygopen.com/2025/11/wang-ai.html) |
 | scam | 已審核 | [【詐騙】台電帳單計算錯誤通知郵件?點連結申請退款?當心釣魚網站!騙取個資卡號](https://www.mygopen.com/2025/11/taipower.html) |
+| reference | 待審核 | [【部分錯誤】蕭美琴沒對歐洲議會演說?IPAC是極右組織?無事實依據!左派、右派成員皆有](https://www.mygopen.com/2025/11/ipac.html) |
 | scam | 待審核 | [【詐騙】收到銀行帳戶異常的簡訊?官方電話發的?釣魚網站!騙信用卡資料](https://www.mygopen.com/2025/05/SMS-Fraud.html) |
+| reference | 待審核 | [【教學】貨到付款詐騙如何退貨退款?4招成功把錢拿回來!](https://www.mygopen.com/2019/07/4-Fraud.html) |
 | reference | 待審核 | [【勿恐慌】影片傳皮包信用卡被感應盜刷?沒想像這麼簡單](https://www.mygopen.com/2018/12/blog-post_12.html) |
 | reference | 待審核 | [【勿恐慌】皮包放在後面,馬上給人家刷你的卡片?沒這麼簡單](https://www.mygopen.com/2018/07/line_31.html) |
