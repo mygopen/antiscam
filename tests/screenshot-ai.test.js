@@ -111,9 +111,31 @@ function browserHelpers(extra = {}) {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const source = app.slice(app.indexOf('const TESSERACT_CDN_URL'), app.indexOf('const App ='));
     const context = { URL, Set, Map, console, ...extra };
-    vm.runInNewContext(`${source}\nthis.helpers = { getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, requestScreenshotAnalysis, localScreenshotReport, preserveLocalScreenshotReport };`, context);
+    vm.runInNewContext(`${source}\nthis.helpers = { createScreenshotPreview, getScreenshotUrls, dedupeOcrTargets, extractOcrTargets, screenshotRiskStyle, findLocalScreenshotTargets, analyzeLocalScreenshot, requestScreenshotAnalysis, localScreenshotReport, preserveLocalScreenshotReport };`, context);
     return context.helpers;
 }
+
+test('preview verifies decoded dimensions and retains local data without object URLs', async () => {
+    const data = 'data:image/png;base64,local';
+    const helpers = browserHelpers({
+        FileReader: class { readAsDataURL() { this.result = data; this.onload(); } },
+        Image: class { set src(value) { assert.equal(value, data); this.naturalWidth = 200; this.naturalHeight = 100; this.onload(); } },
+        URL: { createObjectURL() { assert.fail('no temporary preview URL'); } }
+    });
+    assert.equal(await helpers.createScreenshotPreview({ size: 100, type: 'image/png' }), data);
+    await assert.rejects(helpers.createScreenshotPreview({ size: 100, type: 'image/svg+xml' }), /不支援/);
+    await assert.rejects(helpers.createScreenshotPreview({ size: 0, type: 'image/png' }), /3MB/);
+});
+
+test('unreadable, unsupported and oversized previews show errors instead of broken thumbnails', async () => {
+    const reader = class { readAsDataURL() { this.result = 'data:image/heic;base64,test'; this.onload(); } };
+    const broken = browserHelpers({ FileReader: reader, Image: class { set src(value) { this.onerror(); } } });
+    await assert.rejects(broken.createScreenshotPreview({ size: 100, type: 'image/heic' }), /圖片無法顯示/);
+    const oversized = browserHelpers({ FileReader: reader, Image: class { set src(value) { this.naturalWidth = 5000; this.naturalHeight = 5000; this.onload(); } } });
+    await assert.rejects(oversized.createScreenshotPreview({ size: 100, type: 'image/png' }), /尺寸過大/);
+    const unreadable = browserHelpers({ FileReader: class { readAsDataURL() { this.onerror(); } } });
+    await assert.rejects(unreadable.createScreenshotPreview({ size: 100, type: 'image/png' }), /讀取失敗/);
+});
 
 test('actual frontend helpers preserve URL case and do not color unknown reports green', () => {
     const helpers = browserHelpers();
@@ -187,6 +209,7 @@ test('manual review failure retains OCR URLs, report and previous scan with a se
         const context = {
             screenshotUrls: ['https://example.com/Original'], aiReport: previous, uploadedImageUrl: null,
             URL: { createObjectURL: () => 'blob:local' },
+            createScreenshotPreview: async () => 'data:image/png;base64,test',
             setResult() { assert.fail('must retain previous URL report'); },
             setAiReport(value) { report = value; }, setScreenshotUrls(value) { urls = value; },
             setError(value) { notice = value; }, setScreenshotSource() {}, setScreenshotFile() {},
@@ -215,6 +238,7 @@ test('actual chat upload handler keeps high and unknown reports local while scan
         const scans = [];
         const context = {
             URL: { createObjectURL: () => 'blob:local-test' },
+            createScreenshotPreview: async () => 'data:image/png;base64,test',
             setMessages: update => { messages = update(messages); }, setIsTyping() {},
             analyzeLocalScreenshot: async () => ({ mail, targets: ['https://example.com/Visible'] }),
             localScreenshotReport: helpers.localScreenshotReport, getScreenshotUrls: helpers.getScreenshotUrls,

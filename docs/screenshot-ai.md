@@ -31,6 +31,15 @@ The reservation is one atomic SQLite statement, including the provider/day total
 
 ## Privacy and audit
 
+Screenshot previews use bounded, locally read data URLs after an `Image`
+decode/dimension check, rather than temporary object URLs. This avoids relying
+on blob URL lifetime during OCR and manual review. An unsupported/corrupt image
+shows a format error without replacing the last valid preview. No preview data
+is sent to AI automatically. `scripts/check-screenshot-preview.cjs` tests the
+built frontend at desktop/mobile sizes with synthetic images, unavailable blob
+URLs, missing bitmap APIs and a mocked quota response; it verifies decoded
+image pixels and chat previews without live AI calls.
+
 The application does not persist uploaded screenshots, OCR text, prompts, model reply text or extracted private URLs in the AI database. Only request ID, provider/model, reservation, timestamps, transport outcome, structured assessment outcome/risk, latency and token counts (when returned) are recorded. Logs do not include secrets or raw errors. Existing main URL-scanner audit behavior is separate and unchanged.
 
 Browser requests are coalesced by a SHA-256 image fingerprint. Up to 16 results are kept in page memory with a five-minute eligibility window; errors and unknown results are not cached. This is not a cross-user cache or a persistent image store. The browser already keeps the preview/report while the page remains open.

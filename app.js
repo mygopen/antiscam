@@ -504,7 +504,12 @@ const { useState, useEffect, useRef } = React;
                     return;
                 }
 
-                const imagePreviewUrl = URL.createObjectURL(file);
+                let imagePreviewUrl;
+                try { imagePreviewUrl = await createScreenshotPreview(file); }
+                catch (error) {
+                    setMessages(prev => [...prev, { role: 'assistant', content: error.message }]);
+                    return;
+                }
                 setMessages(prev => [...prev, { role: 'user', content: '[傳送了一張圖片 📷]', imageUrl: imagePreviewUrl }]);
                 
                 // 👇 新增：截圖上傳時，也會顯示連線檢查中的貼圖
@@ -786,6 +791,32 @@ const { useState, useEffect, useRef } = React;
             } catch { return []; } finally { bitmap?.close(); }
         };
 
+        const createScreenshotPreview = async (file) => {
+            if (!file.size || file.size > 3 * 1024 * 1024) throw new Error('請選擇 3MB 以下的圖片。');
+            if (file.type && !/^image\/(png|jpeg|webp|gif|bmp|avif|heic|heif)$/i.test(file.type)) {
+                throw new Error('不支援這個圖片格式，請改用 JPG、PNG 或 WebP。');
+            }
+            // A bounded data URL stays valid across async OCR, rerenders and AI review.
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => typeof reader.result === 'string' && reader.result.startsWith('data:')
+                    ? resolve(reader.result) : reject(new Error('圖片讀取失敗，請重新選擇圖片。'));
+                reader.onerror = reader.onabort = () => reject(new Error('圖片讀取失敗，請重新選擇圖片。'));
+                reader.readAsDataURL(file);
+            });
+            await new Promise((resolve, reject) => {
+                const preview = new Image();
+                preview.onload = () => {
+                    if (!preview.naturalWidth || !preview.naturalHeight) reject(new Error('圖片無法顯示，請重新截圖並上傳。'));
+                    else if (preview.naturalWidth * preview.naturalHeight > 20000000) reject(new Error('圖片尺寸過大，請先裁切。'));
+                    else resolve();
+                };
+                preview.onerror = () => reject(new Error('圖片無法顯示，可能是格式不支援或檔案損壞，請改用 JPG、PNG 或 WebP，或重新截圖。'));
+                preview.src = dataUrl;
+            });
+            return dataUrl;
+        };
+
         const analyzeLocalScreenshot = async (file, logger) => {
             const bitmap = await createImageBitmap(file);
             const oversized = bitmap.width * bitmap.height > 20000000;
@@ -924,10 +955,11 @@ const { useState, useEffect, useRef } = React;
                 if (e.target.value !== undefined) e.target.value = '';
                 const MAX_FILE_SIZE = 3 * 1024 * 1024;
                 if (file.size > MAX_FILE_SIZE) { setError('圖片檔案過大 (超過3MB)，請裁切或壓縮後再上傳。'); if(e.target.value !== undefined) e.target.value = ''; return; }
+                let imagePreviewUrl;
+                try { imagePreviewUrl = await createScreenshotPreview(file); }
+                catch (error) { setError(error.message); return; }
                 if (!forceAi) setResult(null);
                 setAiReport(null); setScreenshotSource(null); setScreenshotUrls([]); setScreenshotFile(file); setError(''); setIsImageAnalyzing(true); setLoadingMessage('正在檢查截圖內容與網址...');
-                if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
-                const imagePreviewUrl = URL.createObjectURL(file);
                 setUploadedImageUrl(imagePreviewUrl);
                 try {
                     if (!forceAi) try {
