@@ -12,9 +12,15 @@ operator attestation, not an API that verifies billing. Remove it before any
 account plan change. Do not set it on Workers Paid merely because estimated
 usage is below the allowance; account-wide usage can exhaust the free tier.
 
-The Cloudflare subscription API returned authentication error during this
-change. No free-plan confirmation was set; production chat stays fixed-only
-until billing configuration is verified. No account downgrade was attempted.
+On 2026-09-15, the signed-in Cloudflare dashboard showed Workers Free ($0)
+as the current account plan and Workers AI daily usage of 178.31 / 10,000
+neurons. Production uses the direct Workers AI binding (`AI`) and the chat
+handler supplies no AI Gateway route. After this verification,
+`CHAT_AI_FREE_ONLY_CONFIRMED=true` was configured for production. No account
+upgrade, downgrade, prepaid credits or paid fallback was enabled. Preview
+environments remain closed unless independently configured after verification.
+The subscription API previously returned an authentication error, so this is
+a dated operator verification, not continuous billing-plan detection.
 This change does not disable the separate vision/brand-analysis endpoints or
 change their provider policies. It guarantees no chat inference while the
 gate is closed, not a zero invoice for every Cloudflare service.
