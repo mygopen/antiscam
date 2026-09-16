@@ -15,6 +15,22 @@ async function scan(options = {}, target = 'https://www.cht.com.tw/') {
     const { core } = fixtureCore(options);
     return core.enforceFinalRiskConsistency(await core.runRiskScanSafely(new URL(target).hostname, target, ['cht.com.tw']));
 }
+test('operator-designated buibot domain remains high risk even with a trusted mapping', async () => {
+    for (const host of ['buibot.tw', 'www.buibot.tw', 'sub.buibot.tw']) {
+        for (const content of ['ok', 'blocked', 'unknown']) {
+            const { core } = fixtureCore({ content });
+            const result = core.enforceFinalRiskConsistency(await core.runRiskScanSafely(host, `https://${host}/`, ['buibot.tw']));
+            assert.equal(result.assessment, 'high');
+            assert.equal(result.checks.manualHighRisk.status, 'danger');
+            assert.equal(result.isTrustedAllowlist, false);
+            assert.notEqual(result.checks.confirmedScam.status, 'danger');
+        }
+    }
+    for (const host of ['notbuibot.tw', 'buibot.tw.example.org']) {
+        const result = await scan({}, `https://${host}/`);
+        assert.notEqual(result.checks.manualHighRisk.status, 'danger');
+    }
+});
 test('readable numeric affixes alone do not escalate unavailable pages to high risk', async () => {
     const config = { ...riskConfig,
         trustedTaiwanServiceHosts: riskConfig.trustedTaiwanServiceHosts.filter(h => h !== 'vote.3housetw.org'),

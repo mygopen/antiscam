@@ -82,7 +82,9 @@ window.RISK_CONFIG = {
         'shopkitchenette.com'
     ],
     manualHighRiskDomains: [
-        'wellnesstalk.online'
+        'wellnesstalk.online',
+        // Operator requested high risk on 2026-09-16; not independently confirmed fraud.
+        'buibot.tw'
     ],
     confirmedScamProfiles: {
         'ioppk.eu.cc': {
