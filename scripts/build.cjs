@@ -22,7 +22,7 @@ async function build() {
     for (const name of ['react', 'react-dom']) {
         emit(name + '.js', fs.readFileSync(path.join(root, 'node_modules', name, 'umd', name + '.production.min.js')));
     }
-    for (const name of ['app', 'risk-config', 'scan-policy', 'scan-core', 'email-risk', 'article-search']) {
+    for (const name of ['app', 'risk-config', 'scan-policy', 'scan-core', 'email-risk', 'website-screenshot', 'article-search']) {
         let source = fs.readFileSync(path.join(root, name + '.js'), 'utf8');
         if (name === 'article-search') {
             const { compileCatalog } = require('./lib/mygopen-catalog.cjs');

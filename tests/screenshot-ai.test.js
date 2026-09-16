@@ -134,6 +134,42 @@ test('local screenshot extracts mail evidence even with no URLs and no cloud cal
     assert.equal(result.targets.length, 0);
 });
 
+test('website region retries, report and targets stay local even when overall OCR is poor', async () => {
+    const WebsiteScreenshot = require('../website-screenshot.js');
+    const address = { text: 'invoice-fake.example', confidence: 55, bbox: { x0: 20, y0: 100, x1: 350, y1: 130 } };
+    const initial = { confidence: 50, lines: [address, ...['手機號碼', '驗證碼（密碼）', '手機條碼'].map(text => ({ text, confidence: 95 }))] };
+    const recognized = { confidence: 96, words: [{ text: 'invoice-fake.example', confidence: 96 }] };
+    // Header is triggered by the initial platform hint, but only the reliable retry establishes the identity.
+    initial.lines.push({ text: 'E-Invoice Platform', confidence: 50 });
+    const results = [initial, recognized, recognized, { lines: [{ text: '電子發票整合服務平台', confidence: 95 }] }];
+    const calls = [];
+    const helpers = browserHelpers({
+        window: { WebsiteScreenshot, EmailRisk: require('../email-risk.js'), BarcodeDetector: class { async detect() { return []; } },
+            Tesseract: { recognize: async (input, language) => { calls.push(language); return { data: results.shift() }; } } },
+        createImageBitmap: async () => ({ width: 500, height: 2000, close() {} }),
+        document: { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData() {} }) }) }
+    });
+    const result = await helpers.analyzeLocalScreenshot({});
+    assert.equal(result.mail.risk, 'high');
+    assert.equal(result.mail.kind, 'website');
+    assert.deepEqual(Array.from(result.targets), ['https://invoice-fake.example/']);
+    assert.deepEqual(calls, ['eng+chi_tra', 'eng', 'eng', 'chi_tra+eng']);
+    assert.doesNotMatch(helpers.localScreenshotReport(result.mail), /寄件線索/);
+    const prior = helpers.localScreenshotReport(result.mail);
+    const corrected = helpers.localScreenshotReport(helpers.assessCorrectedScreenshotText('電子發票整合服務平台\nhttps://www.einvoice.nat.gov.tw/').mail);
+    assert.match(helpers.preserveLocalScreenshotReport(prior, corrected, 'corrected'), /風險：無法判定/);
+    assert.match(helpers.preserveLocalScreenshotReport(prior, corrected, 'cancelled'), /風險：高風險/);
+});
+
+test('per-line URL quality preserves readable URLs without borrowing confidence across gaps', async () => {
+    const helpers = browserHelpers({ window: { BarcodeDetector: class { async detect() { return []; } },
+        Tesseract: { recognize: async () => ({ data: { confidence: 40, lines: [
+            { text: 'https://clear.example/path', confidence: 95 },
+            { text: 'https://unclear.example', confidence: 40 }
+        ] } }) } }, createImageBitmap: async () => ({ width: 100, height: 100, close() {} }) });
+    assert.deepEqual(Array.from((await helpers.analyzeLocalScreenshot({})).targets), ['https://clear.example/path']);
+});
+
 test('local unknown and failed OCR produce neutral reports without needing an AI call', async () => {
     const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
         BarcodeDetector: class { async detect() { return []; } }, jsQR: () => null,

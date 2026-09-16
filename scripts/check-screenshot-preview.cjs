@@ -57,6 +57,7 @@ const server = http.createServer((req, res) => {
                         recognize: async () => {
                             if (window.__hang) return new Promise(() => {});
                             if (window.__fail) throw new Error('OCR unavailable');
+                            if (window.__ocrSequence?.length) return { data: window.__ocrSequence.shift() };
                             return { data: { text: window.__ocrText || '', confidence: 95 } };
                         }
                     };
@@ -165,6 +166,24 @@ const server = http.createServer((req, res) => {
             await page.getByText('⚠️ 風險：無法判定', { exact: true }).waitFor();
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
             await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-vote-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
+            const invoiceSequence = () => page.evaluate(() => {
+                const word = { text: 'invoice-fake.example', confidence: 95 };
+                window.__ocrSequence = [
+                    { confidence: 50, lines: [
+                        { text: 'invoice-fake.example', confidence: 50, bbox: { x0: 10, y0: 2, x1: 200, y1: 15 } },
+                        { text: 'E-Invoice Platform', confidence: 50 },
+                        ...['手機號碼', '驗證碼（密碼）', '手機條碼'].map(text => ({ text, confidence: 95 }))
+                    ] }, { words: [word] }, { words: [word] },
+                    { lines: [{ text: '電子發票整合服務平台', confidence: 95 }] }
+                ];
+            });
+            await invoiceSequence();
+            await upload(); await assertPreview();
+            await high.waitFor();
+            await page.getByText(/畫面類型：網站登入頁截圖/).waitFor();
+            assert.equal(await page.getByText(/寄件線索/).count(), 0);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-invoice-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
             await page.evaluate(() => { window.__ocrText = '賣貨便實名認證，無法收款，請操作網銀並先匯款認證金。'; });
             await upload(); await assertPreview();
             await methods.getByRole('link', { name: '假買家騙賣家手法' }).waitFor();
@@ -206,6 +225,9 @@ const server = http.createServer((req, res) => {
             await page.evaluate(() => { window.__ocrText = '麻煩你幫我的作品投票'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await page.getByRole('region', { name: 'MyGoPen 相關查核' }).locator(`a[href="${voteArticle}"]`).waitFor();
+            await invoiceSequence();
+            await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
+            await page.getByText(/畫面類型：網站登入頁截圖/).waitFor();
             await page.evaluate(() => { window.__ocrText = '投資平台無法出金，請先繳納稅金。'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await methods.getByRole('link', { name: '假投資出金受阻手法' }).waitFor();

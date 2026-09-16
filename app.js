@@ -975,7 +975,9 @@ const { useState, useEffect, useRef } = React;
             const text = String(value || '').slice(0, 20000);
             // User-entered content is not verified OCR; the UI labels this provenance.
             const lines = text.split('\n').map(text => ({ text, confidence: 100 }));
-            const mail = window.EmailRisk?.assess(lines) || null;
+            const email = window.EmailRisk?.assess(lines) || null;
+            const site = window.WebsiteScreenshot?.assess(lines);
+            const mail = site?.risk === 'high' ? site : email?.risk === 'high' ? email : site || email;
             return { text, mail, articles: findScreenshotArticles(lines, mail), methods: findScreenshotMethods(lines),
                 targets: getScreenshotUrls(extractOcrTargets(text)) };
         };
@@ -1009,6 +1011,7 @@ const { useState, useEffect, useRef } = React;
             signal?.throwIfAborted();
             const bitmap = await decodeLocalImage(file);
             const oversized = bitmap.width * bitmap.height > 20000000;
+            const imageHeight = bitmap.height;
             bitmap.close();
             if (oversized) throw new Error('圖片尺寸過大，請先裁切。');
             const targets = await readScreenshotQr(file);
@@ -1055,8 +1058,60 @@ const { useState, useEffect, useRef } = React;
                 const ocrText = lines.map(line => window.EmailRisk?.normalizeOcrText(line.text) || line.text).join('\n');
                 text = ocrText.slice(0, 20000);
                 evidenceLines = lines;
-                if (result?.data?.confidence >= 80) targets.push(...getScreenshotUrls(extractOcrTargets(ocrText)));
-                mail = window.EmailRisk?.assess(lines) || null;
+                const website = window.WebsiteScreenshot;
+                const addresses = [];
+                const candidates = website?.addressRows(lines, imageHeight) || [];
+                // Per-region retries remain local, bounded and on the existing single-worker queue.
+                const retryRegion = async (box, language, contrast = false) => {
+                    let image;
+                    try {
+                        image = await decodeLocalImage(file);
+                        const x = Math.max(0, box.x0 - 6), y = Math.max(0, box.y0 - 6);
+                        const w = Math.min(image.width - x, box.x1 - x + 6), h = Math.min(image.height - y, box.y1 - y + 6);
+                        if (w <= 0 || h <= 0 || w * h > 1500000) return null;
+                        const canvas = document.createElement('canvas'); canvas.width = Math.round(w * 2); canvas.height = Math.round(h * 2);
+                        const context = canvas.getContext('2d');
+                        context.drawImage(image, x, y, w, h, 0, 0, canvas.width, canvas.height);
+                        if (contrast) {
+                            const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+                            for (let i = 0; i < pixels.data.length; i += 4) {
+                                const v = (pixels.data[i] + pixels.data[i + 1] + pixels.data[i + 2]) / 3 > 170 ? 0 : 255;
+                                pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = v;
+                            }
+                            context.putImageData(pixels, 0, 0);
+                        }
+                        return (await recognizeLocalImage(canvas, language, logger, signal))?.data;
+                    } finally { image?.close(); }
+                };
+                for (const row of candidates) {
+                    try {
+                        const word = row.words?.find(word => website.hosts(word.text).length === 1);
+                        const box = word?.bbox || row.bbox;
+                        const first = await retryRegion(box, 'eng');
+                        const second = await retryRegion(box, 'eng', true);
+                        const host = website.consensus(first, second);
+                        // Do not replace a visible path, query or truncated URL with a root-only scan.
+                        const rootOnly = !/[a-z]{2}\/|[?#…]|\.{3}/i.test(row.text);
+                        if (host) addresses.push({ host, verified: true, rootOnly });
+                    } catch { /* Disagreement or failure keeps the address unverified. */ }
+                }
+                if (website && /E[ -]?Invoice|電子發票/i.test(ocrText) && candidates.length) {
+                    try {
+                        const image = await decodeLocalImage(file);
+                        const box = { x0: 0, y0: image.height * 0.12, x1: image.width, y1: image.height * 0.34 };
+                        image.close();
+                        const header = await retryRegion(box, 'chi_tra+eng', true);
+                        evidenceLines = [...lines, ...(header?.lines || [])];
+                    } catch { /* A logo alone never establishes official identity. */ }
+                }
+                const candidateSet = new Set(candidates);
+                const readableBlocks = lines.map(line => !candidateSet.has(line) && Number.isFinite(line.confidence) &&
+                    line.confidence >= 80 && line.confidence <= 100 ? line.text.trim() : '').join('\n').split('\n\n');
+                for (const block of readableBlocks) targets.push(...getScreenshotUrls(extractOcrTargets(block)));
+                targets.push(...addresses.filter(a => a.rootOnly).map(a => `https://${a.host}/`));
+                const email = window.EmailRisk?.assess(lines) || null;
+                const site = website?.assess(evidenceLines, addresses);
+                mail = site?.risk === 'high' ? site : email?.risk === 'high' ? email : site || email;
             } catch { /* QR results remain usable when OCR cannot load or recognize text. */ }
             signal?.throwIfAborted();
             return { targets: dedupeOcrTargets(targets), mail, text, lines: evidenceLines,
@@ -1064,10 +1119,14 @@ const { useState, useEffect, useRef } = React;
         };
         const findLocalScreenshotTargets = async (file, logger) => (await analyzeLocalScreenshot(file, logger)).targets;
 
-        const localScreenshotReport = (mail) => mail && window.EmailRisk ? window.EmailRisk.report(mail) :
+        const localScreenshotReport = (mail) => mail?.kind === 'website' && window.WebsiteScreenshot ? window.WebsiteScreenshot.report(mail) : mail && window.EmailRisk ? window.EmailRisk.report(mail) :
             '⚠️ 風險：無法判定\n🔍 分析：目前未能取得足夠清楚的內容，不能判定為安全。\n🛡️ 建議：請裁切清楚的寄件資訊與正文，或貼上實際連結；請勿提供密碼或驗證碼。';
 
         const preserveLocalScreenshotReport = (localReport, aiReport, status = 'ok') => {
+            if (status === 'corrected') {
+                if (String(localReport || '').includes('畫面類型：網站登入頁截圖')) return aiReport;
+                status = 'ok';
+            }
             if (status !== 'ok' && localReport) return localReport;
             if (String(localReport || '').split('\n').some(line => line.trim() === '⚠️ 風險：高風險')) return localReport;
             if (String(localReport || '').includes('不能判定為安全') && !String(aiReport || '').split('\n').some(line => /^⚠️ 風險：(高風險|中風險)$/.test(line.trim()))) return localReport;
@@ -1166,7 +1225,7 @@ const { useState, useEffect, useRef } = React;
 
             const applyScreenshotText = text => {
                 const corrected = assessCorrectedScreenshotText(text);
-                const report = preserveLocalScreenshotReport(screenshotEvidenceRef.current, localScreenshotReport(corrected.mail));
+                const report = preserveLocalScreenshotReport(screenshotEvidenceRef.current, localScreenshotReport(corrected.mail), 'corrected');
                 screenshotEvidenceRef.current = report;
                 setScreenshotText(corrected.text); setAiReport(report); setScreenshotUrls(corrected.targets);
                 setScreenshotArticles(corrected.articles);
