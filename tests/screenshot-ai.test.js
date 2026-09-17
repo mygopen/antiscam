@@ -170,6 +170,32 @@ test('per-line URL quality preserves readable URLs without borrowing confidence 
     assert.deepEqual(Array.from((await helpers.analyzeLocalScreenshot({})).targets), ['https://clear.example/path']);
 });
 
+test('missed bottom URL is discovered and tightly re-read before FETC assessment', async () => {
+    const W = require('../website-screenshot.js');
+    const word = { text: 'unrelated.example', confidence: 95, bbox: { x0: 60, x1: 350, y0: 30, y1: 60 } };
+    const initial = { confidence: 83, lines: [
+        { text: '登入車號查詢', confidence: 95 },
+        { text: '@ @', confidence: 90, bbox: { x0: 10, x1: 450, y0: 1800, y1: 1850 } }
+    ] };
+    const sequence = [initial, { text: 'toolbar', words: [] }, { text: word.text, words: [word] },
+        { text: word.text, words: [word] }, { text: word.text, words: [word] },
+        { lines: [{ text: '遠通電收', confidence: 95 }] },
+        { lines: [] },
+        { lines: [{ text: '請輸入欲查詢的車號\n車主身分證或統一編號', confidence: 95 }] }];
+    let calls = 0;
+    const helpers = browserHelpers({ window: { WebsiteScreenshot: W, EmailRisk: require('../email-risk.js'),
+        BarcodeDetector: class { async detect() { return []; } },
+        Tesseract: { recognize: async () => { calls++; return { data: sequence.shift() }; } } },
+        createImageBitmap: async () => ({ width: 500, height: 2000, close() {} }),
+        document: { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData() {} }) }) }
+    });
+    const result = await helpers.analyzeLocalScreenshot({});
+    assert.equal(calls, 8, 'no bogus email retry for toolbar glyphs');
+    assert.equal(result.mail.risk, 'high');
+    assert.equal(result.mail.brand, '遠通電收');
+    assert.deepEqual(Array.from(result.targets), ['https://unrelated.example/']);
+});
+
 test('local unknown and failed OCR produce neutral reports without needing an AI call', async () => {
     const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
         BarcodeDetector: class { async detect() { return []; } }, jsQR: () => null,
@@ -228,12 +254,13 @@ test('actual main upload uses local OCR and forwards only URLs into a non-AI ima
 });
 
 test('OCR worker is reused and cancellation releases the queue even when recognize never settles', async () => {
-    let created = 0, terminated = 0, languages = [];
+    let created = 0, terminated = 0, languages = [], modes = [];
     const helpers = browserHelpers({ window: { Tesseract: {
         async createWorker(language) {
             created++; languages.push(language);
             return {
                 reinitialize: async lang => languages.push(lang),
+                setParameters: async params => modes.push(params.tessedit_pageseg_mode),
                 recognize: async input => input === 'hang' ? new Promise(() => {}) : { data: { text: input } },
                 terminate: async () => { terminated++; }
             };
@@ -242,7 +269,7 @@ test('OCR worker is reused and cancellation releases the queue even when recogni
     await helpers.recognizeLocalImage('first', 'eng+chi_tra');
     await helpers.recognizeLocalImage('second', 'eng+chi_tra');
     assert.equal(created, 1);
-    await helpers.recognizeLocalImage('crop', 'eng');
+    await helpers.recognizeLocalImage('crop', 'eng', null, null, 6);
     assert.deepEqual(languages, ['eng+chi_tra', 'eng']);
     const controller = new AbortController();
     const pending = helpers.recognizeLocalImage('hang', 'eng', null, controller.signal);
@@ -250,6 +277,7 @@ test('OCR worker is reused and cancellation releases the queue even when recogni
     controller.abort();
     await assert.rejects(pending, { name: 'AbortError' });
     const next = await helpers.recognizeLocalImage('next', 'eng');
+    assert.deepEqual(modes, [3, 3, 6, 3, 3]);
     assert.equal(next.data.text, 'next');
     assert.equal(created, 2);
     assert.ok(terminated >= 1);

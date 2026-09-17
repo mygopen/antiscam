@@ -44,3 +44,31 @@ Platform 或 .com 網域都不成立。明確防詐範例文字不套用此高�
 
 測試包含正版入口、私人服務、假後綴、低信心與不同結果、上下方網址列、郵件排除、
 到期映射、隱私欄位排除、主畫面與聊天手機/桌面 UI、取消及使用者更正。
+
+## 遠通電收與底部網址列擴充
+
+- 整頁未找到網址時，對直式手機圖片上下方工具列各做一次英文探索；有且僅有
+  一個網域文字區塊時，再映回原圖座標，縮至文字區域做兩次辨識，結果及信心
+  必須一致。最多六次額外網址 OCR；不能只因第一輪得到候選就採用。
+- 單獨 `@` 圖示不再觸發郵件重辨識。工具列附近的信箱修復還需寄件／收件欄位標記。
+- 局部區域用文字塊分段模式，整頁工作恢復自動分段，避免 worker 狀態污染下次上傳。
+- 對已辨識網址且出現車號查詢脈絡者，最多補三個品牌／淡色欄位區域，依然採 80 分
+  證據門檻。重試有限、共用單一 worker，可取消，不用雲端 AI。
+- 高風險組合為遠通電收／eTag 身分脈絡、非官方網址列、車號及身分證／統一編號欄位。
+  不需要密碼，但只有車號、只有標誌、未知品牌或不清楚網址皆不成立。
+- 主站及已查證的 css、epksa、dealer 主機精確匹配。其他 fetc.net.tw、utaggo.com.tw
+  子網域及相關服務保留 unknown，不自動稱為官方或安全，也不只因未列入主站判偽冒。
+
+來源：
+- https://www.fetc.net.tw/ContentFiles_UX/HTMLContent/electronic_bill/index.html
+- https://css.fetc.net.tw/CP/CP00010Account/CorpateLogin
+- https://epksa.fetc.net.tw/epkSA/UserAgreement/UserAgreement
+- https://dealer.fetc.net.tw/
+- https://www.fetci.com/tw/page/parking-as-a-service
+- https://www.fetc.net.tw/ContentFiles_UX/Announcement/856/index.html?t=638295165052388430
+
+實圖結果與限制：使用者的遠通圖片，整頁信心 83 仍漏掉底部網址；改善後緊縮文字
+重辨識兩次皆得到相同網域，信心分別約 91、90，車號與證號欄位約 94。藝術字品牌
+仍未達門檻，因此此張圖片本身維持 unknown 並說明品牌待確認，網址可交給既有
+網址掃描。不將測試替身的網址掃描結果冒稱為線上安全結果，也不為此圖片新增黑名單。
+清楚品牌的合成案例已驗證會顯示高風險；原圖與未去識別 OCR 不加入儲存庫。

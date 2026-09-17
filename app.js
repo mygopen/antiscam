@@ -929,7 +929,7 @@ const { useState, useEffect, useRef } = React;
         let ocrWorker = null;
         let ocrLanguage = '';
         let ocrProgress = null;
-        const recognizeLocalImage = (input, language, logger, signal) => {
+        const recognizeLocalImage = (input, language, logger, signal, pageSegmentation = 3) => {
             const task = ocrQueue.then(async () => {
                 signal?.throwIfAborted();
                 const engine = await loadTesseract();
@@ -953,6 +953,7 @@ const { useState, useEffect, useRef } = React;
                     const operation = (async () => {
                         if (ocrLanguage !== language) { await worker.reinitialize(language); ocrLanguage = language; }
                         signal?.throwIfAborted();
+                        await worker.setParameters?.({ tessedit_pageseg_mode: pageSegmentation });
                         return worker.recognize(input, {}, { text: true, blocks: true });
                     })();
                     // Terminating a worker need not settle its outstanding recognize promise.
@@ -1012,6 +1013,7 @@ const { useState, useEffect, useRef } = React;
             const bitmap = await decodeLocalImage(file);
             const oversized = bitmap.width * bitmap.height > 20000000;
             const imageHeight = bitmap.height;
+            const imageWidth = bitmap.width;
             bitmap.close();
             if (oversized) throw new Error('圖片尺寸過大，請先裁切。');
             const targets = await readScreenshotQr(file);
@@ -1024,6 +1026,7 @@ const { useState, useEffect, useRef } = React;
                 let retries = 0;
                 for (const line of lines) {
                     if (retries >= 2 || !line.text.includes('@') || line.confidence < 80 || !line.bbox || !window.EmailRisk) continue;
+                    if (window.WebsiteScreenshot && !window.WebsiteScreenshot.mailRetryAllowed(line, imageHeight)) continue;
                     if (window.EmailRisk.assess([line]).addresses.length) continue;
                     retries++;
                     let region;
@@ -1057,7 +1060,7 @@ const { useState, useEffect, useRef } = React;
                 }
                 const ocrText = lines.map(line => window.EmailRisk?.normalizeOcrText(line.text) || line.text).join('\n');
                 text = ocrText.slice(0, 20000);
-                evidenceLines = lines;
+                evidenceLines = [...lines];
                 const website = window.WebsiteScreenshot;
                 const addresses = [];
                 const candidates = website?.addressRows(lines, imageHeight) || [];
@@ -1075,12 +1078,14 @@ const { useState, useEffect, useRef } = React;
                         if (contrast) {
                             const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
                             for (let i = 0; i < pixels.data.length; i += 4) {
-                                const v = (pixels.data[i] + pixels.data[i + 1] + pixels.data[i + 2]) / 3 > 170 ? 0 : 255;
+                                const brightness = (pixels.data[i] + pixels.data[i + 1] + pixels.data[i + 2]) / 3;
+                                const v = typeof contrast === 'number' ? (brightness < contrast ? 0 : 255) : (brightness > (contrast === 'dark' ? 110 : 170) ? 0 : 255);
                                 pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = v;
                             }
                             context.putImageData(pixels, 0, 0);
                         }
-                        return (await recognizeLocalImage(canvas, language, logger, signal))?.data;
+                        const data = (await recognizeLocalImage(canvas, language, logger, signal, 6))?.data;
+                        return data ? { ...data, regionTransform: { x, y, scale: 2 } } : null;
                     } finally { image?.close(); }
                 };
                 for (const row of candidates) {
@@ -1095,6 +1100,26 @@ const { useState, useEffect, useRef } = React;
                         if (host) addresses.push({ host, verified: true, rootOnly });
                     } catch { /* Disagreement or failure keeps the address unverified. */ }
                 }
+                // Search both browser-toolbar bands even when full-page OCR missed the URL.
+                if (website && !candidates.length) {
+                    for (const box of website.fallbackRegions(imageWidth, imageHeight)) {
+                        try {
+                            const discovery = await retryRegion(box, 'eng');
+                            const words = discovery?.words || discovery?.lines?.flatMap(line => line.words || []) || [];
+                            const domains = words.filter(word => website.hosts(word.text).length === 1 && !word.text.includes('@'));
+                            if (domains.length !== 1 || !domains[0].bbox) continue;
+                            const word = domains[0], transform = discovery.regionTransform;
+                            const tight = { x0: transform.x + word.bbox.x0 / 2, x1: transform.x + word.bbox.x1 / 2,
+                                y0: transform.y + word.bbox.y0 / 2, y1: transform.y + word.bbox.y1 / 2 };
+                            const first = await retryRegion(tight, 'eng');
+                            const second = await retryRegion(tight, 'eng', 'dark');
+                            const host = website.consensus(first, second);
+                            const visible = `${word.text} ${first?.text || ''} ${second?.text || ''}`;
+                            const rootOnly = !/[a-z]{2}\/|[?#…]|\.{3}/i.test(visible);
+                            if (host) addresses.push({ host, verified: true, rootOnly });
+                        } catch { /* Missing or conflicting toolbar evidence remains unknown. */ }
+                    }
+                }
                 if (website && /E[ -]?Invoice|電子發票/i.test(ocrText) && candidates.length) {
                     try {
                         const image = await decodeLocalImage(file);
@@ -1103,6 +1128,16 @@ const { useState, useEffect, useRef } = React;
                         const header = await retryRegion(box, 'chi_tra+eng', true);
                         evidenceLines = [...lines, ...(header?.lines || [])];
                     } catch { /* A logo alone never establishes official identity. */ }
+                }
+                if (website && addresses.length && /車\s*號|遠\s*通|eTag/i.test(ocrText)) {
+                    // Logos and pale form hints need separate crops; never lower their confidence gates.
+                    for (const [top, bottom, contrast, language] of [[0.055, 0.16, 80, 'chi_tra+eng'], [0.17, 0.22, 80, 'eng'], [0.43, 0.59, 235, 'chi_tra+eng']]) {
+                        try {
+                            const data = await retryRegion({ x0: imageWidth * 0.03, x1: imageWidth * 0.97,
+                                y0: imageHeight * top, y1: imageHeight * bottom }, language, contrast);
+                            evidenceLines.push(...(data?.lines || []));
+                        } catch { /* Partial fields do not establish collection of personal data. */ }
+                    }
                 }
                 const candidateSet = new Set(candidates);
                 const readableBlocks = lines.map(line => !candidateSet.has(line) && Number.isFinite(line.confidence) &&

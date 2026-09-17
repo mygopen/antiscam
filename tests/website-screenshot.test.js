@@ -61,3 +61,46 @@ test('telephone and captcha values are not included in structured website eviden
     const result = W.assess(rows(login + '\n0912345678\n45678'), address('fake.example'), { now });
     assert.doesNotMatch(JSON.stringify(result) + W.report(result), /0912345678|45678/);
 });
+
+const fetcForm = '遠通電收\n車號查詢\n請輸入欲查詢的車號\n車主身分證或統一編號\n查詢';
+test('FETC identity mismatch with plate and identity fields is high risk without any password', () => {
+    const r = W.assess(rows(fetcForm), address('unrelated.example'), { now });
+    assert.equal(r.risk, 'high');
+    assert.equal(r.brand, '遠通電收');
+    assert.equal(r.credentials, true);
+    assert.match(W.report(r), /https:\/\/www.fetc.net.tw\//);
+    assert.doesNotMatch(W.report(r), /財政部|寄件線索/);
+    assert.equal(W.assess(rows(fetcForm.replace('遠通電收', '申辦eTag銀行自動儲值')), address('unrelated.example'), { now }).risk, 'high');
+});
+test('FETC official services and related domains are not impersonation proof or blanket safe', () => {
+    for (const host of [...W.fetc.hosts, ...W.fetc.relatedHosts, 'other.fetc.net.tw', 'new.utaggo.com.tw']) {
+        const r = W.assess(rows(fetcForm), address(host), { now });
+        assert.equal(r.risk, 'unknown');
+        assert.equal(r.officialMatched, W.fetc.hosts.includes(host));
+    }
+    for (const host of ['www.fetc.net.tw.evil.example', 'notfetc.net.tw', 'utaggo.com.tw.evil.example']) {
+        assert.equal(W.assess(rows(fetcForm), address(host), { now }).risk, 'high');
+    }
+});
+test('FETC screenshot rule requires all evidence and fresh mapping', () => {
+    for (const text of ['遠通電收\n車號查詢', '車號查詢\n身分證', '遠通電收', '防詐宣導\n' + fetcForm]) {
+        assert.notEqual(W.assess(rows(text), address('unrelated.example'), { now })?.risk, 'high');
+    }
+    assert.equal(W.assess(rows(fetcForm), [], { now }).risk, 'unknown');
+    assert.equal(W.assess(rows(fetcForm), address('unrelated.example'), { now: Date.parse('2028-01-01') }).risk, 'unknown');
+    assert.equal(W.assess(rows(fetcForm).map(r => ({ ...r, confidence: 50 })), address('unrelated.example'), { now }).risk, 'unknown');
+});
+test('toolbar @ glyphs cannot trigger mail correction, real labelled senders can', () => {
+    const bbox = { x0: 10, x1: 900, y0: 2200, y1: 2300 };
+    assert.equal(W.mailRetryAllowed({ text: '@ @', bbox }, 2400), false);
+    assert.equal(W.mailRetryAllowed({ text: 'x@foo.com', bbox }, 2400), false);
+    assert.equal(W.mailRetryAllowed({ text: '寄件者: x@foo.com', bbox }, 2400), true);
+    assert.equal(W.mailRetryAllowed({ text: 'x @ foo.com', bbox: { ...bbox, y0: 500, y1: 600 } }, 2400), true);
+});
+test('fallback searches bounded top and bottom bands without an initial OCR URL', () => {
+    const regions = W.fallbackRegions(1125, 2436);
+    assert.equal(regions.length, 2);
+    assert.ok(regions[0].y1 < 2436 * 0.22);
+    assert.ok(regions[1].y0 > 2436 * 0.82);
+    for (const [w, h] of [[0, 0], [100, 200], [2000, 1000], [NaN, 1000]]) assert.deepEqual(W.fallbackRegions(w, h), []);
+});

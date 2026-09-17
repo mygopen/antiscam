@@ -184,6 +184,23 @@ const server = http.createServer((req, res) => {
             assert.equal(await page.getByText(/寄件線索/).count(), 0);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
             await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-invoice-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
+            const fetcSequence = () => page.evaluate(() => {
+                const word = { text: 'toll-fake.example', confidence: 95 };
+                window.__ocrSequence = [
+                    { confidence: 50, lines: [
+                        { text: word.text, confidence: 50, bbox: { x0: 10, y0: 2, x1: 200, y1: 15 } },
+                        { text: '車號查詢', confidence: 95 }
+                    ] }, { words: [word] }, { words: [word] },
+                    { lines: [{ text: '遠通電收', confidence: 95 }] }, { lines: [] },
+                    { lines: [{ text: '車主身分證或統一編號', confidence: 95 }] }
+                ];
+            });
+            await fetcSequence(); await upload(); await assertPreview();
+            await high.waitFor();
+            await page.getByText(/畫面使用遠通電收品牌/).waitFor();
+            assert.equal(await page.getByText(/寄件線索/).count(), 0);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            await page.screenshot({ path: path.join(os.tmpdir(), `antiscam-fetc-${viewport.width}.png`), fullPage: true, animations: 'disabled' });
             await page.evaluate(() => { window.__ocrText = '賣貨便實名認證，無法收款，請操作網銀並先匯款認證金。'; });
             await upload(); await assertPreview();
             await methods.getByRole('link', { name: '假買家騙賣家手法' }).waitFor();
@@ -228,6 +245,9 @@ const server = http.createServer((req, res) => {
             await invoiceSequence();
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await page.getByText(/畫面類型：網站登入頁截圖/).waitFor();
+            await fetcSequence();
+            await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
+            await page.getByText(/畫面使用遠通電收品牌/).waitFor();
             await page.evaluate(() => { window.__ocrText = '投資平台無法出金，請先繳納稅金。'; });
             await page.locator('#bot-image-upload').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: png });
             await methods.getByRole('link', { name: '假投資出金受阻手法' }).waitFor();
