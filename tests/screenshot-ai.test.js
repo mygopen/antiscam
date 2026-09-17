@@ -134,6 +134,28 @@ test('local screenshot extracts mail evidence even with no URLs and no cloud cal
     assert.equal(result.targets.length, 0);
 });
 
+test('partial notice retries a low-confidence subject locally and only accepts reliable complete text', async () => {
+    for (const retry of [{ text: '代扣失敗', confidence: 95 }, { text: '代扣失敗', confidence: 79 },
+        { text: '不會因代扣失敗要求操作', confidence: 95 }]) {
+        const box = { x0: 10, y0: 50, x1: 150, y1: 80 };
+        const initial = { lines: [{ text: 'eTag', confidence: 95 }, { text: '寄件者 redacted@home.nl', confidence: 95 },
+            { text: '代扣失敗 ?', confidence: 64, bbox: box, words: [{ text: '代扣失敗', bbox: box }] }] };
+        const results = [initial, { lines: [retry] }];
+        const calls = [];
+        const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
+            BarcodeDetector: class { async detect() { return []; } },
+            Tesseract: { recognize: async (input, language) => { calls.push(language); return { data: results.shift() }; } } },
+            createImageBitmap: async () => ({ width: 500, height: 2000, close() {} }),
+            document: { createElement: () => ({ getContext: () => ({ drawImage() {},
+                getImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData() {} }) }) } });
+        const result = await helpers.analyzeLocalScreenshot({});
+        assert.equal(result.mail.risk, 'unknown');
+        assert.equal(!!result.mail.senderWarning, retry.confidence >= 80 && !retry.text.startsWith('不會'));
+        assert.deepEqual(calls, ['eng+chi_tra', 'chi_tra']);
+        assert.equal(result.targets.length, 0);
+    }
+});
+
 test('website region retries, report and targets stay local even when overall OCR is poor', async () => {
     const WebsiteScreenshot = require('../website-screenshot.js');
     const address = { text: 'invoice-fake.example', confidence: 55, bbox: { x0: 20, y0: 100, x1: 350, y1: 130 } };
@@ -294,13 +316,22 @@ test('corrected text is analyzed locally, bounded, and cannot clear previous hig
     assert.equal(helpers.assessCorrectedScreenshotText('x'.repeat(22000)).text.length, 20000);
 });
 
+test('partial sender warning survives website fallback in local corrected text', () => {
+    const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
+        WebsiteScreenshot: { assess: () => ({ kind: 'website', risk: 'unknown' }) } } });
+    const result = helpers.assessCorrectedScreenshotText('遠通 eTag 帳戶代扣失敗\n寄件者 redacted@home.nl');
+    assert.equal(result.mail.risk, 'unknown');
+    assert.ok(result.mail.senderWarning);
+    assert.match(helpers.localScreenshotReport(result.mail), /疑似冒用遠通電收/);
+});
+
 test('actual chat upload handler keeps high and unknown reports local while scanning URLs', async () => {
     const app = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
     const start = app.indexOf('const handleBotImageUpload =');
     const source = app.slice(start, app.indexOf('\n            return (', start));
     const emailRisk = require('../email-risk.js');
     const helpers = browserHelpers({ window: { EmailRisk: emailRisk } });
-    for (const text of ['未知平台開通收款\n請先匯款', '中華電信電子帳單已寄出']) {
+    for (const text of ['未知平台開通收款\n請先匯款', '中華電信電子帳單已寄出', '遠通 eTag 帳戶代扣失敗\n寄件者 redacted@home.nl']) {
         const mail = emailRisk.assess(text.split('\n').map(text => ({ text, confidence: 95 })));
         let messages = [];
         const scans = [];

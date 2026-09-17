@@ -12,6 +12,48 @@ other@hotmail.com
 停車費用：新臺幣120元整`;
 const assess = (text, registry = EmailRisk.brands) => EmailRisk.assess(lines(text), registry, now);
 
+const partialNotice = '遠通服務郵件 FETC Digital Support\neTag 帳戶代扣失敗\n寄件者 遠通電收 eTag 通知中心 redacted@home.nl\n收件者 recipient@gmail.com\n標準型加密 (TLS)';
+
+test('partial billing notice warns about brand impersonation without declaring high risk', () => {
+    const result = assess(partialNotice);
+    assert.equal(result.risk, 'unknown');
+    assert.equal(result.needsContentReview, true);
+    assert.equal(result.senderWarning.id, 'mail-brand-unlisted-payment-warning-v1');
+    assert.deepEqual(result.senderWarning.lines, [3, 2]);
+    assert.equal(result.ruleMatches.length, 0);
+    const report = EmailRisk.report(result);
+    assert.match(report, /疑似冒用遠通電收/);
+    assert.match(report, /home\.nl/);
+    assert.match(report, /TLS 僅表示傳輸加密/);
+    assert.doesNotMatch(report, /recipient|redacted|高風險/);
+    assert.equal(assess(partialNotice + '\n請登入服務平台').risk, 'high');
+});
+
+test('warning uses brand mismatch, not country suffix', () => {
+    for (const domain of ['home.nl', 'unlisted.com.tw', 'fetc.net.tw.evil.example']) {
+        const result = assess(partialNotice.replace('home.nl', domain));
+        assert.ok(result.senderWarning);
+        assert.equal(result.risk, 'unknown');
+    }
+    const registry = structuredClone(EmailRisk.brands);
+    registry[0].delegatedSenderDomains.push({ domain: 'home.nl', includeSubdomains: false });
+    assert.equal(assess(partialNotice, registry).senderWarning, null);
+    assert.equal(assess(partialNotice.replace('home.nl', 'fetc.net.tw')).senderWarning, null);
+    assert.equal(assess('寄件者 redacted@home.nl\n您好').senderWarning, null);
+});
+
+test('warning abstains for recipient, truncated, unconfident, stale, ambiguous and educational evidence', () => {
+    for (const text of [partialNotice.replace('寄件者', '收件者'),
+        partialNotice.replace('home.nl', 'home.nl…'), partialNotice.replace('home.nl', 'home.nl...'),
+        partialNotice.replace('代扣失敗', '服務通知'), '防詐宣導\n' + partialNotice,
+        '中華電信\n' + partialNotice]) assert.equal(assess(text).senderWarning, null);
+    const low = lines(partialNotice);
+    low[2].confidence = 79;
+    assert.equal(EmailRisk.assess(low, EmailRisk.brands, now).senderWarning, null);
+    assert.equal(EmailRisk.assess(lines(partialNotice), EmailRisk.brands, now + 367 * 86400000).senderWarning, null);
+    assert.equal(assess(partialNotice.replace('home.nl', 'home.nl…')).addresses.some(a => a.role === 'sender'), false);
+});
+
 test('de-identified eTag example triggers a combination without any URL', () => {
     const result = assess(sample);
     assert.equal(result.risk, 'high');

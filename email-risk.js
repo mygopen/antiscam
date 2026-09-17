@@ -104,6 +104,8 @@
             const mixedLabels = /(?:寄件者|寄件人|發件人|from\s*:)/i.test(value) && /(?:收件者|收件人|to\s*:)/i.test(value);
             const emails = [...value.matchAll(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})\b/gi)];
             for (const match of emails) {
+                // A truncated address is not a complete sender identity.
+                if (/^(?:\.{2,}|…)/.test(value.slice(match.index + match[0].length))) continue;
                 const role = mixedLabels ? 'unknown' : label || (previousLine === row.line - 1 ? previousLabel : '') || (matchedBrands.some(item => hasBrand(value, item)) && /[<〈]/.test(value) ? 'claimed_sender' : 'body');
                 addresses.push({ domain: match[1].toLowerCase(), role, line: row.line, confidence: row.confidence });
             }
@@ -195,25 +197,33 @@
         }
         ruleMatches.forEach(rule => { rule.lines = [...new Set(rule.lines)].sort((a, b) => a - b); });
         const high = ruleMatches.length > 0;
+        const senderWarning = !high && context === 'message' && fresh && entries.length > 0 &&
+            unlisted.length > 0 && has('payment_failure') ? {
+                id: 'mail-brand-unlisted-payment-warning-v1',
+                label: `疑似冒用${brand.name}`,
+                lines: [...new Set([...unlisted.map(item => item.line), ...signals.find(s => s.id === 'payment_failure').lines])],
+                description: `畫面中的寄件網域 ${[...new Set(unlisted.map(item => item.domain))].join('、')} 未符合已查證的${brand.name}寄件資料，並出現扣款或繳費異常通知。建議先停止操作；寄件資料並非完整名單，尚不能僅據此確認詐騙。`
+            } : null;
         const needsContentReview = !high && context === 'message' &&
-            ((scenario && (has('link_action') || has('account_action') || has('sensitive_request'))) || has('secret_handoff') || has('remote_control') || has('advance_payment'));
+            (!!senderWarning || (scenario && (has('link_action') || has('account_action') || has('sensitive_request'))) || has('secret_handoff') || has('remote_control') || has('advance_payment'));
         return {
             risk: high ? 'high' : 'unknown', ruleId: ruleMatches[0]?.id || null, ruleMatches,
-            needsContentReview, context, brand: brand ? brandSummary(brand) : null, brands: matchedBrands.map(brandSummary),
+            needsContentReview, senderWarning, context, brand: brand ? brandSummary(brand) : null, brands: matchedBrands.map(brandSummary),
             addresses, senderStatus, signals, amounts, links,
             subjectLines: reliable.filter(row => /^(?:主旨|subject\s*:)/i.test(row.text) || (row.line === 1 && brand && hasBrand(row.text, brand))).map(row => row.line),
             authentication: 'not_available_from_screenshot', linkDestination: 'not_verified',
             vehiclePlate: reliable.some(row => /車(?:號|牌)\s*[:：]\s*[A-Z0-9]+-[A-Z0-9]+/i.test(row.text)) ? 'visible_not_verified' : 'not_visible_in_excerpt',
-            analysis: high ? ruleMatches.map(rule => rule.description).join(' ') : context === 'education_or_quote' ? '畫面可能是防詐宣導或引用範例，未將引用內容直接判為詐騙；不代表畫面內連結安全。' : needsContentReview ? '畫面具有帳務、服務異常或敏感操作要求，寄件資訊尚未可靠確認或證據不足，不能判定為安全。' : '目前可讀取的證據不足以判定內容風險；寄件名單或官網相符也不代表整則訊息安全。',
+            analysis: high ? ruleMatches.map(rule => rule.description).join(' ') : senderWarning ? `${senderWarning.label}：${senderWarning.description}` : context === 'education_or_quote' ? '畫面可能是防詐宣導或引用範例，未將引用內容直接判為詐騙；不代表畫面內連結安全。' : needsContentReview ? '畫面具有帳務、服務異常或敏感操作要求，寄件資訊尚未可靠確認或證據不足，不能判定為安全。請展開寄件資訊並裁切清楚後重新辨識。' : '目前可讀取的證據不足以判定內容風險；寄件名單或官網相符也不代表整則訊息安全。',
             advice: ruleMatches.some(rule => rule.id === 'message-work-group-qr-v1')
                 ? '請透過原本掌握的電話或內部通訊管道向主管查證，不要直接回信提供群組邀請碼，也不要依陌生群組指示匯款。'
+                : senderWarning ? '請先勿回信或操作信內連結，改由官方 App 或官網確認。TLS 僅表示傳輸加密，不代表寄件者身分真實；網域國別本身不是詐騙證據。'
                 : '請自行開啟官方 App 或官網查詢，勿透過郵件提供密碼或驗證碼。'
         };
     }
 
     function report(result) {
         const domains = [...new Set(result.addresses.filter(a => ['sender', 'claimed_sender'].includes(a.role)).map(a => a.domain))];
-        const evidence = (result.ruleMatches || []).map(rule => `${rule.label}（第 ${rule.lines.join('、')} 行）`).join('；');
+        const evidence = [...(result.ruleMatches || []), ...(result.senderWarning ? [result.senderWarning] : [])].map(rule => `${rule.label}（第 ${rule.lines.join('、')} 行）`).join('；');
         const sources = [...new Set([...(result.brands || []).flatMap(brand => brand.sources), ...(result.ruleMatches || []).flatMap(rule => rule.sources)])];
         return `⚠️ 風險：${result.risk === 'high' ? '高風險' : '無法判定'}\n🔍 分析：${result.analysis}\n寄件線索：${domains.join('、') || '未確認'}（僅為畫面資訊）${evidence ? '\n判斷依據：' + evidence : ''}\n真正寄件來源與連結目的地：未確認\n🛡️ 建議：${result.advice}${sources.length ? '\n查證參考（非本信件驗證）：\n' + sources.join('\n') : ''}`;
     }

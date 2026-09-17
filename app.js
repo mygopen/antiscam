@@ -978,7 +978,7 @@ const { useState, useEffect, useRef } = React;
             const lines = text.split('\n').map(text => ({ text, confidence: 100 }));
             const email = window.EmailRisk?.assess(lines) || null;
             const site = window.WebsiteScreenshot?.assess(lines);
-            const mail = site?.risk === 'high' ? site : email?.risk === 'high' ? email : site || email;
+            const mail = site?.risk === 'high' ? site : email?.risk === 'high' || email?.senderWarning ? email : site || email;
             return { text, mail, articles: findScreenshotArticles(lines, mail), methods: findScreenshotMethods(lines),
                 targets: getScreenshotUrls(extractOcrTargets(text)) };
         };
@@ -1024,8 +1024,12 @@ const { useState, useEffect, useRef } = React;
                 const result = await recognizeLocalImage(file, 'eng+chi_tra', logger, signal);
                 const lines = (result?.data?.lines || String(result?.data?.text || '').split('\n').map(text => ({ text, confidence: result?.data?.confidence }))).map(line => ({ ...line }));
                 let retries = 0;
-                for (const line of lines) {
+                const senderRow = line => /^(?:寄件(?:者|人)|發件(?:者|人)|from\s*:)/i.test(window.EmailRisk?.normalizeOcrText(line.text).trim() || line.text.trim());
+                // Spend the bounded retries on sender fields first, without reordering evidence.
+                const retryLinesByPriority = [...lines].sort((a, b) => Number(senderRow(b)) - Number(senderRow(a)));
+                for (const line of retryLinesByPriority) {
                     if (retries >= 2 || !line.text.includes('@') || line.confidence < 80 || !line.bbox || !window.EmailRisk) continue;
+                    if (/@[^\s<>]*(?:…|\.{2,})/.test(line.text)) continue;
                     if (window.WebsiteScreenshot && !window.WebsiteScreenshot.mailRetryAllowed(line, imageHeight)) continue;
                     if (window.EmailRisk.assess([line]).addresses.length) continue;
                     retries++;
@@ -1088,6 +1092,27 @@ const { useState, useEffect, useRef } = React;
                         return data ? { ...data, regionTransform: { x, y, scale: 2 } } : null;
                     } finally { image?.close(); }
                 };
+                // A subject-line UI badge can depress the entire line's confidence.
+                // Re-read the text region, retaining its left edge (including negations).
+                if (window.EmailRisk?.assess(lines).senderStatus === 'not_in_verified_records') {
+                    const subjectRows = lines.filter(line => Number.isFinite(line.confidence) && line.confidence < 80 && line.bbox &&
+                        /(?:代扣|扣款|扣繳|付款|繳費).{0,6}(?:失敗|未成功|異常)/.test(window.EmailRisk.normalizeOcrText(line.text))).slice(0, 2);
+                    for (const row of subjectRows) {
+                        const words = row.words?.filter(word => /[\u3400-\u9fff]/.test(word.text) && word.bbox);
+                        if (!words?.length) continue;
+                        const box = { ...row.bbox, x1: Math.max(...words.map(word => word.bbox.x1)) };
+                        try {
+                            const reread = await retryRegion(box, 'chi_tra', true);
+                            const confirmed = reread?.lines?.filter(line => line.confidence >= 80 && line.confidence <= 100);
+                            // Only replace a single complete, reliably read line; do not join fragments.
+                            if (reread?.lines?.length === 1 && confirmed?.length === 1) {
+                                row.text = confirmed[0].text;
+                                row.confidence = confirmed[0].confidence;
+                            }
+                        } catch { /* Low-confidence subject text remains unverified. */ }
+                    }
+                    text = lines.map(line => window.EmailRisk.normalizeOcrText(line.text)).join('\n').slice(0, 20000);
+                }
                 for (const row of candidates) {
                     try {
                         const word = row.words?.find(word => website.hosts(word.text).length === 1);
@@ -1146,7 +1171,7 @@ const { useState, useEffect, useRef } = React;
                 targets.push(...addresses.filter(a => a.rootOnly).map(a => `https://${a.host}/`));
                 const email = window.EmailRisk?.assess(lines) || null;
                 const site = website?.assess(evidenceLines, addresses);
-                mail = site?.risk === 'high' ? site : email?.risk === 'high' ? email : site || email;
+                mail = site?.risk === 'high' ? site : email?.risk === 'high' || email?.senderWarning ? email : site || email;
             } catch { /* QR results remain usable when OCR cannot load or recognize text. */ }
             signal?.throwIfAborted();
             return { targets: dedupeOcrTargets(targets), mail, text, lines: evidenceLines,

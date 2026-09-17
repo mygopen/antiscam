@@ -45,6 +45,36 @@ The result is **high risk, suspected impersonation**, not confirmed origin fraud
 
 ## Integration
 
+### Partial Billing Notice Warning
+
+`mail-brand-unlisted-payment-warning-v1` records a separate `senderWarning`
+when a current brand sender reference, reliable unlisted sender and payment
+failure are visible but no high-risk combination is established. It keeps
+`risk: unknown`, sets `needsContentReview`, and explains suspected brand
+impersonation and how to verify independently. A login request can still
+activate the existing high-risk rule. The warning never creates a blacklist.
+
+Country-code suffixes do not affect this rule: an unlisted `.com.tw` is treated
+the same as `.nl`; a verified delegated `.nl` sender does not trigger it.
+TLS is explained as transport encryption, not authentication. Recipient/body
+addresses, truncated addresses, ambiguous brands and stale references abstain.
+Only domains, rule IDs and evidence line numbers appear in structured warnings.
+
+Sender-labelled rows take priority within the existing two email OCR retries.
+For an unlisted sender, at most two low-confidence payment-failure lines can be
+cropped and reread locally with Chinese OCR, preserving the left edge and any
+negation. Only a single complete reread line at confidence >=80 is accepted.
+No cloud AI or image upload is used. Main and chat reports preserve this warning
+over an unknown website assessment, while high-risk evidence retains priority.
+
+On 2026-09-17 the supplied dark-mode FETC email screenshot was tested with real
+local Tesseract in mobile Chromium. The sender field recovered `home.nl`; the
+payment-failure line initially had confidence 64.8 because of adjacent UI, and
+the contrast-adjusted Chinese crop reached 85.9. The visible report showed the
+suspected-impersonation warning, not high risk. OCR still inserted an extra
+character, tolerated by the existing bounded phrase matcher. This single sample
+is not a general accuracy claim. No private image or raw email was committed.
+
 Main upload and chat execute local assessment and display a report whether high
 or unknown. Images never call cloud AI, automatically or manually. The old vision
 endpoint returns HTTP 410 before reading uploads. Screenshot-derived URLs use
