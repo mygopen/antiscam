@@ -1,5 +1,7 @@
 window.RISK_CONFIG = {
-    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc', 'dearbb.design', 'vote.3housetw.org'],
+    trustedTaiwanServiceHosts: ['rocbirthday.kktix.cc', 'portal.nantou.citycoins.cc', 'dearbb.design', 'vote.3housetw.org',
+        // Exact storefront hosts reviewed in docs/premiumwater-review.md.
+        'premiumwater.com.tw', 'www.premiumwater.com.tw'],
     // Exact hosts only. Operator-confirmed content baseline, not a threat bypass.
     manuallyReviewedContentHosts: ['taipeispeaksup.org', 'www.taipeispeaksup.org', 'idf.bot.com.tw', 'www.hsinchucitygoods.com', 'donate.wfp.org', 'portal.nantou.citycoins.cc', '165dashboard.tw', 'vote.3housetw.org'],
     companyVerificationVersion: '2026-08-27-1',
@@ -167,7 +169,7 @@ window.RISK_CONFIG = {
         'smtp', 'webmail', 'tw', 'en', 'zh', 'www2'
     ],
     fakeServiceKeywords: [
-        'einvoice', 'invoicenat', 'einvoicenat', 'taipower', '台電', '台灣電力', 'water', 'fetc'
+        'einvoice', 'invoicenat', 'einvoicenat', 'taipower', '台電', '台灣電力', 'fetc'
     ],
     publicUtilityScamKeywords: [
         '台電', '台灣電力', 'taipower', '節電', '節電獎勵', '獎勵金',

@@ -92,6 +92,33 @@ test('165 dashboard trust does not suppress strong threat evidence', async () =>
         assert.equal((await scan({ content: 'blocked', ...options }, 'https://165dashboard.tw/fraud-method')).assessment, 'high', JSON.stringify(options));
     }
 });
+test('generic water names are not public-utility impersonation evidence', async () => {
+    const config = { ...riskConfig, trustedTaiwanServiceHosts: riskConfig.trustedTaiwanServiceHosts.filter(h => !h.includes('premiumwater')) };
+    for (const host of ['premiumwater.com.tw', 'waterfilter.example', 'watergarden.example']) {
+        const { core } = fixtureCore({ config });
+        const result = core.enforceFinalRiskConsistency(await core.runRiskScanSafely(host, `https://${host}/`, []));
+        assert.doesNotMatch(result.checks.domainAnalysis.details, /偽裝成公共事業/);
+    }
+    assert.equal((await scan({ pageSignals: { externalResources: { sensitiveFormActionCount: 1 } } }, 'https://water-billing.example/')).assessment, 'high');
+    assert.equal((await scan({}, 'https://taipower-fake.example/')).assessment, 'high');
+});
+test('Premium Water trust is exact-host and cannot override strong threats or unavailable checks', async () => {
+    const core = createCore();
+    for (const host of ['premiumwater.com.tw', 'www.premiumwater.com.tw']) {
+        const url = `https://${host}/`;
+        assert.equal(core.isVerifiedSafeRootDomain(host), true);
+        assert.equal((await scan({}, url)).assessment, 'low');
+        for (const options of [{ unsafe: true }, { blacklist: true }, { officialAlert: true },
+            { pageSignals: { externalResources: { sensitiveFormActionCount: 1 } } }]) {
+            assert.equal((await scan(options, url)).assessment, 'high');
+        }
+        assert.equal((await scan({ content: 'unknown' }, url)).assessment, 'unknown');
+        assert.equal((await scan({ googleStatus: 'unavailable' }, url)).assessment, 'unknown');
+    }
+    for (const host of ['test.premiumwater.com.tw', 'premiumwater.com.tw.evil.example', 'fake-premiumwater.com.tw']) {
+        assert.equal(core.isVerifiedSafeRootDomain(host), false);
+    }
+});
 test('reviewed Dear BB shop suppresses customer-logo false positives but retains threat checks', async () => {
     const core = createCore();
     const url = 'https://dearbb.design/';
