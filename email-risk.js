@@ -66,6 +66,10 @@
         return parts;
     });
     const ruleDefinitions = [
+        { id: 'message-prize-card-verification-v1', label: '以發票領獎引導信用卡驗證',
+            requires: ['invoice_prize', 'prize_card_action'],
+            source: 'https://www.cpc.com.tw/News_Content.aspx?n=30&s=112090',
+            description: '以發票中獎或獎金入帳為由，要求透過信內連結或指定系統確認信用卡有效性，高度疑似領獎釣魚。畫面只能確認操作要求，尚未驗證真正寄件者或連結目的地。' },
         { id: 'message-work-group-qr-v1', label: '工作邀約要求私建群組並回傳邀請碼',
             requires: ['work_context', 'group_create', 'qr_return', 'group_isolation'],
             source: 'https://www.mygopen.com/2025/12/email-qrcode.html',
@@ -139,6 +143,8 @@
             if (matches.length) signals.push({ id, lines: [...new Set(matches.flatMap(row => row.lines))] });
         };
         groupSignal('work_context', /工作|主管|長官|董事長|總經理|公司|公務/);
+        groupSignal('invoice_prize', /(?:雲端|電子)?發票.{0,18}中獎|(?:該筆)?獎金.{0,12}(?:尚未|未能|未完成).{0,8}(?:入帳|入賬|匯入)/);
+        groupSignal('prize_card_action', /(?:請|務必|需要).{0,8}(?:透過|通過|點擊|點選).{0,45}(?:連結|網址|系統|平台).{0,12}(?:查詢|確認|驗證|更新).{0,24}信用卡.{0,12}(?:有效|狀態|驗證|啟用)|(?:請|務必|需要).{0,8}(?:透過|通過|點擊|點選).{0,45}(?:連結|網址|系統|平台).{0,12}(?:輸入|填寫|提供).{0,8}(?:信用卡|卡號|安全碼)/);
         groupSignal('group_create', /(?:請|先|麻煩|需要|協助).{0,14}(?:建立|創建|創立|開設|建一個|建個|開一個).{0,16}LINE.{0,8}(?:群組|群聊|群)/i);
         groupSignal('qr_return', /(?:將|把|請|並).{0,14}(?:QR\s*Code|二維碼|邀請碼).{0,12}(?:回傳|傳送|寄|傳給|轉寄).{0,12}(?:Email|E-mail|信箱|郵箱|郵件)|(?:請|並).{0,8}(?:回傳|傳送|寄回).{0,12}(?:QR\s*Code|二維碼|邀請碼).{0,12}(?:Email|E-mail|信箱|郵箱|郵件)/i);
         groupSignal('group_isolation', /^(?:(?:請|先|暫時|暫且|目前|暫|只需)\s*)*(?:不要|勿|別|不必|無需).{0,6}邀請.{0,8}(?:其他|別的|其餘).{0,8}(?:加入|進群)|(?:只有|僅有|僅限)你.{0,8}(?:群組|群)/, true);
@@ -216,6 +222,8 @@
             analysis: high ? ruleMatches.map(rule => rule.description).join(' ') : senderWarning ? `${senderWarning.label}：${senderWarning.description}` : context === 'education_or_quote' ? '畫面可能是防詐宣導或引用範例，未將引用內容直接判為詐騙；不代表畫面內連結安全。' : needsContentReview ? '畫面具有帳務、服務異常或敏感操作要求，寄件資訊尚未可靠確認或證據不足，不能判定為安全。請展開寄件資訊並裁切清楚後重新辨識。' : '目前可讀取的證據不足以判定內容風險；寄件名單或官網相符也不代表整則訊息安全。',
             advice: ruleMatches.some(rule => rule.id === 'message-work-group-qr-v1')
                 ? '請透過原本掌握的電話或內部通訊管道向主管查證，不要直接回信提供群組邀請碼，也不要依陌生群組指示匯款。'
+                : ruleMatches.some(rule => rule.id === 'message-prize-card-verification-v1')
+                ? '請勿依信內連結驗證信用卡或提供卡號、安全碼、簡訊驗證碼。請自行開啟財政部電子發票平台或原本使用的官方 App 查詢中獎及領獎資訊。'
                 : senderWarning ? '請先勿回信或操作信內連結，改由官方 App 或官網確認。TLS 僅表示傳輸加密，不代表寄件者身分真實；網域國別本身不是詐騙證據。'
                 : '請自行開啟官方 App 或官網查詢，勿透過郵件提供密碼或驗證碼。'
         };

@@ -1113,6 +1113,24 @@ const { useState, useEffect, useRef } = React;
                     }
                     text = lines.map(line => window.EmailRisk.normalizeOcrText(line.text)).join('\n').slice(0, 20000);
                 }
+                // Colored mail links can weaken a line that connects prize and card evidence.
+                const prizeEvidence = window.EmailRisk?.assess(lines);
+                if (prizeEvidence?.context === 'message' && prizeEvidence.signals.some(s => s.id === 'invoice_prize') &&
+                    lines.some(line => line.confidence >= 80 && line.confidence <= 100 && /信用卡/.test(window.EmailRisk.normalizeOcrText(line.text)))) {
+                    const actionRows = lines.filter(line => Number.isFinite(line.confidence) && line.confidence < 80 && line.bbox &&
+                        /(?:請|務必|需要).{0,8}(?:透過|通過|點擊|點選)/.test(window.EmailRisk.normalizeOcrText(line.text))).slice(0, 2);
+                    for (const row of actionRows) {
+                        try {
+                            const reread = await retryRegion(row.bbox, 'chi_tra', 200);
+                            const single = reread?.lines?.length === 1 ? reread.lines[0] : null;
+                            if (single && single.confidence >= 80 && single.confidence <= 100) {
+                                row.text = single.text;
+                                row.confidence = single.confidence;
+                            }
+                        } catch { /* Uncertain link instructions cannot establish prize phishing. */ }
+                    }
+                    text = lines.map(line => window.EmailRisk.normalizeOcrText(line.text)).join('\n').slice(0, 20000);
+                }
                 for (const row of candidates) {
                     try {
                         const word = row.words?.find(word => website.hosts(word.text).length === 1);

@@ -12,6 +12,40 @@ other@hotmail.com
 停車費用：新臺幣120元整`;
 const assess = (text, registry = EmailRisk.brands) => EmailRisk.assess(lines(text), registry, now);
 
+const prizeNotice = `寄件者 台灣中油 redacted@ziggo.nl
+您有一筆雲端發票中獎，獎項為四獎新臺幣4,000元。
+台灣中油電子帳務進度跟進郵件
+該筆獎金尚未完成入帳程序。
+請透過「台灣中油電子發票系統」查詢確認已綁
+定之付款方式（信用卡）為有效狀態，且可正常
+使用。`;
+
+test('invoice prize plus linked card verification is high risk without knowing hidden URL or sender', () => {
+    for (const domain of ['ziggo.nl', 'example.com.tw', 'example.com']) {
+        const result = assess(prizeNotice.replace('ziggo.nl', domain));
+        assert.equal(result.risk, 'high');
+        assert.equal(result.ruleId, 'message-prize-card-verification-v1');
+        assert.equal(result.linkDestination, 'not_verified');
+        assert.equal(result.authentication, 'not_available_from_screenshot');
+        assert.match(EmailRisk.report(result), /領獎釣魚/);
+        assert.doesNotMatch(JSON.stringify(result), /redacted@/);
+    }
+    assert.equal(assess(prizeNotice.replace('台灣中油', '其他商店')).risk, 'high');
+    assert.equal(assess('電子發票中獎\n請透過領獎連結填寫信用卡卡號').ruleId, 'message-prize-card-verification-v1');
+});
+
+test('prize rule abstains for ordinary notices, negation, education and low confidence', () => {
+    for (const text of ['寄件者 redacted@ziggo.nl\n您好，這是繁體中文信件。',
+        '電子發票中獎通知\n請自行開啟官方 App 查詢。',
+        '信用卡帳單\n請透過會員平台確認信用卡有效狀態。',
+        '雲端發票中獎\n請勿透過信內連結驗證信用卡有效狀態。',
+        '防詐宣導\n' + prizeNotice]) assert.equal(assess(text).risk, 'unknown');
+    const low = lines(prizeNotice);
+    low[4].confidence = 79;
+    assert.equal(EmailRisk.assess(low, EmailRisk.brands, now).risk, 'unknown');
+    assert.equal(assess('發票中獎\n' + '無關文字\n'.repeat(10) + '請透過連結確認信用卡有效狀態').risk, 'unknown');
+});
+
 const partialNotice = '遠通服務郵件 FETC Digital Support\neTag 帳戶代扣失敗\n寄件者 遠通電收 eTag 通知中心 redacted@home.nl\n收件者 recipient@gmail.com\n標準型加密 (TLS)';
 
 test('partial billing notice warns about brand impersonation without declaring high risk', () => {

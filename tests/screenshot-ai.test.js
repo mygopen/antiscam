@@ -156,6 +156,28 @@ test('partial notice retries a low-confidence subject locally and only accepts r
     }
 });
 
+test('prize-card instruction crop keeps confidence and negation safeguards', async () => {
+    for (const retry of [{ text: '請透過「電子發票系統」查詢確認已綁', confidence: 95 },
+        { text: '請透過「電子發票系統」查詢確認已綁', confidence: 79 },
+        { text: '請勿透過「電子發票系統」查詢確認已綁', confidence: 95 }]) {
+        const initial = { lines: [{ text: '該筆獎金尚未完成入帳程序', confidence: 95 },
+            { text: '請透過「電子發票系統」查詢確認已綁', confidence: 78, bbox: { x0: 10, y0: 50, x1: 400, y1: 80 } },
+            { text: '定之付款方式（信用卡）為有效狀態', confidence: 95 }] };
+        const results = [initial, { lines: [retry] }];
+        const calls = [];
+        const helpers = browserHelpers({ window: { EmailRisk: require('../email-risk.js'),
+            BarcodeDetector: class { async detect() { return []; } },
+            Tesseract: { recognize: async (input, language) => { calls.push(language); return { data: results.shift() }; } } },
+            createImageBitmap: async () => ({ width: 500, height: 2000, close() {} }),
+            document: { createElement: () => ({ getContext: () => ({ drawImage() {},
+                getImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData() {} }) }) } });
+        const result = await helpers.analyzeLocalScreenshot({});
+        assert.equal(result.mail.risk, retry.confidence >= 80 && !retry.text.includes('勿') ? 'high' : 'unknown');
+        assert.deepEqual(calls, ['eng+chi_tra', 'chi_tra']);
+        assert.equal(result.targets.length, 0);
+    }
+});
+
 test('website region retries, report and targets stay local even when overall OCR is poor', async () => {
     const WebsiteScreenshot = require('../website-screenshot.js');
     const address = { text: 'invoice-fake.example', confidence: 55, bbox: { x0: 20, y0: 100, x1: 350, y1: 130 } };

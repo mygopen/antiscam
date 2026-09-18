@@ -45,6 +45,36 @@ The result is **high risk, suspected impersonation**, not confirmed origin fraud
 
 ## Integration
 
+### Prize And Credit-Card Verification
+
+`message-prize-card-verification-v1` flags invoice-prize or pending prize-payment
+claims combined with an instruction to use a linked/named system to verify a
+credit card's validity or supply card details. The two signals must be nearby;
+each may span up to three consecutive reliable OCR rows. Negative advice,
+opening education headings, isolated prizes, isolated card notices and
+low-confidence text do not establish this combination.
+
+This is a high-risk phishing heuristic supported by CPC's public warning:
+https://www.cpc.com.tw/News_Content.aspx?n=30&s=112090
+It does not infer an official sender whitelist, authenticate the sender, or
+claim the hidden hyperlink destination has been extracted. Neither `.nl` nor
+Traditional Chinese alone affects risk. Brand names and sender domains can
+change without bypassing this behavior rule.
+
+When reliable prize and card evidence already exist, at most two low-confidence
+instruction lines receive local contrast-adjusted Chinese OCR retries. A single
+complete line with confidence >=80 is required; no cloud AI is called. The
+report recommends independently checking official invoice services rather than
+following the email or supplying card details.
+
+On 2026-09-18, real local Tesseract testing of the supplied CPC screenshot in a
+mobile Chromium viewport produced a visible high-risk prize-phishing report.
+The blue instruction line initially fell below the threshold; the contrast
+retry exceeded 80. OCR still misread one character in the system name, but the
+rule depends on the reliably read instruction and adjacent card/prize context,
+not an exact brand match. This is a single-image regression, not an accuracy
+benchmark. Neither the image nor private email addresses are committed.
+
 ### Partial Billing Notice Warning
 
 `mail-brand-unlisted-payment-warning-v1` records a separate `senderWarning`
